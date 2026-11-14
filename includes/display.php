@@ -55,7 +55,7 @@ final class BSC_TV_Display {
 			if ( $video && $video === $job_video ) {
 				return $job;
 			}
-			if ( ! $matching_channel && $job['resolved_channel_id'] === $event['channel_id'] && $event['platform'] === $job['platform'] && ! $job_video && abs( $event['start'] - $job['start'] ) <= 15 * MINUTE_IN_SECONDS ) {
+			if ( ! $matching_channel && $job['resolved_channel_id'] === $event['channel_id'] && ( $event['platform'] === $job['platform'] || ! empty( $job['origin_channel'] ) ) && ! $job_video && abs( $event['start'] - $job['start'] ) <= 15 * MINUTE_IN_SECONDS ) {
 				$matching_channel = $job;
 			}
 		}
@@ -99,13 +99,14 @@ final class BSC_TV_Display {
 
 	private static function events( $config ) {
 		$now = time();
+		$live_enabled = ! empty( BSC_TV_Sync::settings()['live_enabled'] );
 		$live = array();
 		$upcoming = array();
 		$manual = array();
 		list( $channels, $identities ) = self::channels();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::SHOW ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
-			if ( empty( $data['url'] ) ) {
+			if ( empty( $data['url'] ) || ( ! empty( $data['origin_channel'] ) && ! isset( $channels[ $data['origin_channel'] ] ) ) ) {
 				continue;
 			}
 			$thumbnail = get_the_post_thumbnail_url( $post, 'large' ) ?: '';
@@ -118,13 +119,13 @@ final class BSC_TV_Display {
 			$data['creator'] = $data['creator'] ?: ( $channel['creator'] ?? '' );
 			if ( isset( $state['video'] ) && 'upcoming' === $data['status'] ) {
 				$video = $state['video'];
-				if ( 'ended' === $video['status'] ) {
+				if ( in_array( $video['status'], array( 'ended', 'cancelled' ), true ) ) {
 					continue;
 				}
-				if ( 'upcoming' === $video['status'] || $now - $state['live_at'] < BSC_TV_Sync::MAX_LIVE_AGE ) {
+				if ( 'upcoming' === $video['status'] || ( $live_enabled && $now - $state['live_at'] < BSC_TV_Sync::MAX_LIVE_AGE ) ) {
 					$data['status'] = $video['status'];
 					$data['start'] = $video['start'];
-					$data['end'] = 0;
+					$data['end'] = $video['end'] ?? 0;
 					$data['image'] = $data['image'] ?: $video['image'];
 				}
 			}
@@ -139,15 +140,26 @@ final class BSC_TV_Display {
 		foreach ( $channels as $channel_id => $data ) {
 			$platform = $data['platform'];
 			$key = BSC_TV_Content::channel_key( $platform, $data['url'] );
-			if ( ! $key || ( $config['platform'] && $platform !== $config['platform'] ) ) {
+			if ( ! $key ) {
 				continue;
 			}
 			$state = BSC_TV_Sync::state( $channel_id, $key );
-			$current = $now - ( $state['live_at'] ?? 0 ) < BSC_TV_Sync::MAX_LIVE_AGE ? ( $state['live'] ?? array() ) : array();
+			$current = $live_enabled && $now - ( $state['live_at'] ?? 0 ) < BSC_TV_Sync::MAX_LIVE_AGE ? ( $state['live'] ?? array() ) : array();
+			$current_ids = array_fill_keys( array_column( $current, 'id' ), true );
+			$broadcasts = array();
+			foreach ( $current as $event ) {
+				$broadcasts[] = $event['start'];
+			}
 			foreach ( array( 'live' => $current, 'upcoming' => $state['schedule'] ?? array() ) as $status => $events ) {
 				foreach ( $events as $event ) {
+					if ( 'upcoming' === $status && ( isset( $current_ids[ $event['id'] ] ) || 'live' === ( $event['status'] ?? '' ) ) ) {
+						continue;
+					}
+					if ( 'upcoming' === $status && 'twitch' === $platform && self::overlaps_live( $event, $broadcasts ) ) {
+						continue;
+					}
 					$event += array( 'platform' => $platform, 'creator' => $data['creator'], 'bdd_id' => $data['bdd_id'], 'channel_id' => $channel_id );
-					$identity = $platform . ':' . $status . ':' . $event['id'] . ':' . $event['start'];
+					$identity = $platform . ':' . $status . ':' . $event['id'];
 					if ( isset( $seen[ $identity ] ) ) {
 						continue;
 					}
@@ -162,6 +174,10 @@ final class BSC_TV_Display {
 						$event['image'] = $editorial['image'] ?: $event['image'];
 						$event['creator'] = $editorial['creator'] ?: $event['creator'];
 						$event['bdd_id'] = $editorial['bdd_id'] ?: $event['bdd_id'];
+						if ( 'upcoming' === $status && $editorial['platform'] !== $platform && $config['platform'] === $editorial['platform'] ) {
+							$event['platform'] = $editorial['platform'];
+							$event['url'] = $editorial['url'];
+						}
 					}
 					if ( 'live' === $status ) {
 						$live[] = $event;
@@ -181,6 +197,15 @@ final class BSC_TV_Display {
 		usort( $live, static function ( $left, $right ) { return $right['start'] <=> $left['start']; } );
 		usort( $upcoming, static function ( $left, $right ) { return $left['start'] <=> $right['start']; } );
 		return array( array_slice( $live, 0, $config['limit'] ), array_slice( $upcoming, 0, $config['limit'] ) );
+	}
+
+	private static function overlaps_live( $event, $starts ) {
+		foreach ( $starts as $start ) {
+			if ( $start >= $event['start'] - 15 * MINUTE_IN_SECONDS && $start <= ( $event['end'] ?: $event['start'] + 15 * MINUTE_IN_SECONDS ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static function card( $event, $config, $live = false, $featured = false ) {

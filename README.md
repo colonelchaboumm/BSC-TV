@@ -7,7 +7,7 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.
 2. Dans **BSC TV → Réglages et imports**, choisissez **Catalogue inclus · créateurs**. Le catalogue contient des sources vérifiées et des pistes signalées. Dans **Chaînes**, publiez les comptes que vous souhaitez suivre. Recherchez et associez leur fiche BSC BDD publiée dans le champ prévu.
 3. Importez **Catalogue inclus · émissions annoncées** pour récupérer les dates sourcées. Les dates et les liens peuvent évoluer. Les événements en brouillon sont modifiables avant publication. Ajoutez une image WordPress ou une URL de visuel si nécessaire.
-4. Renseignez les clés des plateformes utilisées, puis lancez un passage de synchronisation. Le dernier passage WP-Cron figure dans les réglages et les éventuelles erreurs d’API figurent dans la fiche chaîne.
+4. Renseignez les clés des plateformes utilisées, puis lancez **Collecter le programme maintenant**. Le dernier passage et les chaînes en attente figurent dans les réglages. Les erreurs d’API ou de flux figurent dans la fiche chaîne.
 
 ## Associer une fiche créateur BSC BDD
 
@@ -25,20 +25,28 @@ Une modification du rattachement sur une chaîne est répercutée sur les deux w
 
 Les horaires s’affichent dans le fuseau réglé dans **Réglages → Général**. La période par défaut est de 45 jours pour la page et de 7 jours pour le méga-menu. Une page ouverte rafraîchit les cartes chaque minute à partir de WordPress. La fréquence de collecte et le délai de découverte sur la plateforme déterminent la rapidité réelle du badge.
 
-## Plateformes
+## Collecte et vérification des directs
 
 | Plateforme | Programme à venir | Direct en cours |
 | --- | --- | --- |
-| Twitch | API Helix, créneaux publiés sur les chaînes suivies, sur 30 jours | API Helix, vérification toutes les 5 minutes via WP-Cron |
-| YouTube | Data API, recherche par chaîne ou ajout d’une URL vidéo précise | Statut des vidéos connues vérifié toutes les 5 minutes. Détection des nouveaux directs via la recherche périodique |
-| Kick | Ajout manuel ou CSV | API publique, vérification toutes les 5 minutes via WP-Cron |
-| Facebook, Instagram, TikTok, Dailymotion, Vimeo, BeerTube, Zoom et autres | Ajout manuel ou CSV avec un lien public ou d’inscription | État éditorial « En direct » avec une heure de fin obligatoire |
+| Twitch | Calendrier Helix des chaînes suivies, collecté quotidiennement sur 45 jours | API Helix sur les chaînes dont une émission approche ou déjà en direct |
+| YouTube | Recherche `upcoming` quotidienne, détails et actualisation par identifiant vidéo, sur 45 jours | `videos.list` pour les vidéos connues dont la diffusion approche ou est en cours |
+| Kick | Agenda public compatible, saisie ou CSV | API des chaînes pour un lien Kick suivi, à proximité d’une émission |
+| Facebook, Instagram, TikTok, Dailymotion, Vimeo, BeerTube, Zoom et autres | Agenda public compatible, saisie ou CSV | État éditorial « En direct » avec une heure de fin obligatoire |
 
 Twitch et Kick nécessitent un Client ID et un secret d’application. YouTube utilise une clé Data API v3. Les champs de réglages peuvent être remplacés par les constantes `BSC_TV_YOUTUBE_KEY`, `BSC_TV_TWITCH_ID`, `BSC_TV_TWITCH_SECRET`, `BSC_TV_KICK_ID`, `BSC_TV_KICK_SECRET` dans `wp-config.php`.
 
-YouTube réserve par défaut 90 appels `search.list` par jour de quota, à raison de deux recherches par chaîne. La découverte parcourt les chaînes par rotation et peut prendre plusieurs heures si elles sont nombreuses. Pour garantir le suivi d’une vidéo précise, saisissez son URL `watch?v=…`, `youtu.be/…` ou `live/…` dans une émission. Certaines premières YouTube sont présentées par l’API comme des diffusions programmées. Les canaux Twitch ou Kick généralistes peuvent filtrer les titres ou catégories avec les mots-clés de la fiche chaîne. Pour YouTube, le filtre porte sur le titre. Les clés et les réponses brutes des fournisseurs restent côté WordPress.
+La collecte quotidienne se poursuit par lots. Les calendriers YouTube et Twitch des chaînes suivies alimentent directement le programme. YouTube réserve jusqu’à 90 appels `search.list` par jour par défaut, généralement un par chaîne et un par page supplémentaire. Les chaînes les moins récemment examinées sont prioritaires lorsque le quota limite la collecte. Les premières YouTube peuvent aussi apparaître comme des diffusions programmées. Un lien vidéo YouTube saisi dans une émission permet également de suivre son statut précis.
 
-Les créneaux Twitch sont rafraîchis par lots. Un état automatique « En direct » expire si la dernière confirmation date de plus de 20 minutes. WP-Cron dépend du trafic quand il est déclenché par les visites. Un hébergeur qui pilote WP-Cron séparément doit également exécuter les tâches de WordPress à la fréquence souhaitée.
+Activez **Vérifier le statut des directs toutes les cinq minutes** pour interroger les émissions à partir de 30 minutes avant leur début et suivre les directs déjà détectés. Sur une nouvelle installation, cette option est désactivée. Une mise à jour depuis une installation qui avait déjà synchronisé conserve le contrôle automatique. Les directs spontanés sans émission connue peuvent échapper à cette vérification. Une confirmation du direct expire côté public après 20 minutes. Une erreur de collecte conserve le dernier programme connu. Une annulation confirmée est retirée et les émissions terminées sont conservées dans **BSC TV → Émissions → Archives BSC TV**. Pour une émission à heure de fin inconnue, l’archivage utilise un délai de six heures après l’heure de début, sauf indication du fournisseur.
+
+WP-Cron dépend du trafic lorsque les visites le déclenchent. Pour des passages réguliers, faites exécuter par votre hébergeur les événements WordPress arrivés à échéance chaque minute, par exemple avec `wp cron event run --due-now` depuis la racine WordPress. [Configuration du cron système](https://developer.wordpress.org/plugins/cron/hooking-wp-cron-into-the-system-task-scheduler/)
+
+## Agendas et flux publics
+
+Dans une chaîne publiée, renseignez **URL de l’agenda ou du flux public**. Pour un agenda iCalendar avec horaires flottants, indiquez le fuseau de l’organisateur. Les mots-clés de la chaîne permettent de filtrer les titres d’un agenda généraliste. Les formats pris en charge sont les entrées iCalendar `VEVENT` datées avec `URL` et `UID`, le RSS avec dates explicites du module événement, et les pages HTML contenant des événements en ligne structurés en JSON-LD. Les agendas iCalendar doivent déjà détailler les occurrences. Les règles `RRULE` et `RDATE` ne sont pas développées. Une date de publication RSS seule ne suffit pas.
+
+Par défaut, les annonces issues d’un flux sont enregistrées en brouillon. Un administrateur peut autoriser la publication automatique des annonces confirmées d’une source officielle. Les annonces provisoires restent à valider, même pour une source officielle. Une annulation explicite retire l’annonce connue. La disparition d’une entrée d’un flux ne suffit pas à annuler une émission, car les flux peuvent ne contenir qu’une liste partielle. Pour les chaînes déjà importées, renseignez le flux dans leur fiche. L’[agenda officiel Störtebeker](https://www.stoertebeker.com/fileadmin/CDE/Bilder_SBS/Verkostung/Abenteuerreise/S-LIVE_2026-2027.ics) est compatible avec le fuseau `Europe/Berlin`. Son [programme prévisionnel](https://www.stoertebeker.com/verkostung/stoertebeker-abenteurreise/programm) doit être validé avant publication.
 
 ## Import CSV
 
@@ -46,7 +54,7 @@ Le formulaire accepte un fichier ou un tableau collé, en UTF-8. Séparateurs pr
 
 | Type | En-têtes requis | En-têtes facultatifs |
 | --- | --- | --- |
-| Chaînes | `name,url` | `platform,bdd_id,source,country,language,activity,notes,keywords` |
+| Chaînes | `name,url` | `platform,bdd_id,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official` |
 | Émissions | `title,url,starts_at` | `ends_at,platform,creator,channel_id,bdd_id,image,status,source` |
 
 Pour `starts_at` et `ends_at`, utilisez `2026-12-03T21:00:00+01:00` ou `2026-12-03T21:00` dans le fuseau du site. Pour `status`, utilisez `upcoming`, `live` ou `cancelled`. Pour `channel_id`, utilisez l’identifiant d’une chaîne publiée dans BSC TV. Pour `bdd_id`, utilisez l’identifiant d’une fiche publique de votre installation. Les imports ignorent les doublons repérables et indiquent les lignes invalides. Les fiches existantes se modifient dans WordPress.

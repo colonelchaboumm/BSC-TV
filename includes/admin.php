@@ -93,6 +93,16 @@ final class BSC_TV_Admin {
 			self::field( 'activity', 'Activité observée', $data['activity'] ?? '' );
 			self::field( 'notes', 'Notes de vérification', $data['notes'] ?? '' );
 			self::field( 'keywords', 'Filtre facultatif, mots-clés séparés par des virgules', $data['keywords'] ?? '' );
+			self::field( 'feed_url', 'URL de l’agenda ou du flux public', $data['feed_url'] ?? '', 'url' );
+			echo '<p class="description">Formats compatibles : iCalendar (.ics), RSS avec dates d’événement ou page d’agenda structurée en JSON-LD.</p>';
+			self::field( 'feed_timezone', 'Fuseau de l’agenda pour les horaires sans indication (ex. Europe/Berlin)', $data['feed_timezone'] ?? '' );
+			if ( current_user_can( 'manage_options' ) ) {
+				printf( '<p><label><input type="checkbox" name="bsc_tv[feed_official]" value="1" %s> Publier automatiquement les annonces confirmées de cette source officielle</label></p>', checked( 1, $data['feed_official'] ?? 0, false ) );
+			}
+			$report = get_post_meta( $post->ID, '_bsc_tv_feed_report', true );
+			if ( $report ) {
+				printf( '<p>Dernière lecture de l’agenda : %s</p>', esc_html( $report ) );
+			}
 			$key = BSC_TV_Content::channel_key( $data['platform'] ?? '', $data['url'] ?? '' );
 			$state = BSC_TV_Sync::state( $post->ID, $key );
 			echo '<p>' . esc_html( $key ? 'Publiez cette chaîne pour l’inclure dans la synchronisation de sa plateforme.' : 'Les émissions de cette chaîne peuvent être ajoutées manuellement.' ) . '</p>';
@@ -106,7 +116,11 @@ final class BSC_TV_Admin {
 			self::field( 'starts_at', 'Début', empty( $data['start'] ) ? '' : wp_date( 'Y-m-d\TH:i', $data['start'] ), 'datetime-local' );
 			self::field( 'ends_at', 'Fin', empty( $data['end'] ) ? '' : wp_date( 'Y-m-d\TH:i', $data['end'] ), 'datetime-local' );
 			echo '<p class="description">Fuseau du site ' . esc_html( wp_timezone_string() ) . '.</p>';
-			self::choice( 'status', 'État éditorial', $data['status'] ?? 'upcoming', array( 'upcoming' => 'À venir', 'live' => 'En direct (jusqu’à l’heure de fin)', 'cancelled' => 'Annulée' ) );
+			$statuses = array( 'upcoming' => 'À venir', 'live' => 'En direct (jusqu’à l’heure de fin)', 'cancelled' => 'Annulée' );
+			if ( BSC_TV_Content::ARCHIVED === $post->post_status ) {
+				$statuses['ended'] = 'Terminée';
+			}
+			self::choice( 'status', 'État éditorial', $data['status'] ?? 'upcoming', $statuses );
 			self::field( 'image', 'URL de l’image si aucun visuel WordPress n’est sélectionné', $data['image'] ?? '', 'url' );
 		}
 		self::profile_field( $data['bdd_id'] ?? 0, $channel );
@@ -192,6 +206,9 @@ final class BSC_TV_Admin {
 			return;
 		}
 		$previous = BSC_TV_Content::data( $post_id );
+		if ( BSC_TV_Content::CHANNEL === $post->post_type && ! current_user_can( 'manage_options' ) ) {
+			$data['feed_official'] = $data['feed_url'] === ( $previous['feed_url'] ?? '' ) ? ( $previous['feed_official'] ?? 0 ) : 0;
+		}
 		$channel_id = $data['channel_id'] ?? 0;
 		if ( $channel_id && $channel_id !== ( $previous['channel_id'] ?? 0 ) && ! BSC_TV_Content::public_channel( $channel_id ) ) {
 			self::message( 'Sélectionnez une chaîne BSC TV publiée.', 'error' );
@@ -202,7 +219,13 @@ final class BSC_TV_Admin {
 			self::message( 'Sélectionnez une fiche BSC BDD publique.', 'error' );
 			return;
 		}
+		if ( isset( $previous['origin_channel'] ) ) {
+			$data['origin_channel'] = $previous['origin_channel'];
+		}
 		update_post_meta( $post_id, BSC_TV_Content::DATA, wp_slash( $data ) );
+		if ( 'publish' === $post->post_status && get_post_meta( $post_id, BSC_TV_Library::FEED, true ) ) {
+			update_post_meta( $post_id, BSC_TV_Library::AUTO, 0 );
+		}
 	}
 
 	private static function authorize( $action ) {
@@ -252,19 +275,22 @@ final class BSC_TV_Admin {
 				$current[ $key ] = sanitize_text_field( $input[ $key ] );
 			}
 		}
-		$current['youtube_search_limit'] = min( 10000, max( 2, absint( $input['youtube_search_limit'] ?? 90 ) ) );
+		$current['youtube_search_limit'] = min( 10000, max( 1, absint( $input['youtube_search_limit'] ?? 90 ) ) );
+		$current['live_enabled'] = empty( $input['live_enabled'] ) ? 0 : 1;
 		update_option( BSC_TV_Sync::SETTINGS, $current, false );
+		BSC_TV_Sync::schedule();
 		self::message( 'Réglages enregistrés.' );
 		self::redirect();
 	}
 
 	public static function sync_now() {
 		self::authorize( 'bsc_tv_sync_now' );
-		if ( wp_next_scheduled( 'bsc_tv_sync', array( true ) ) ) {
-			self::message( 'Une synchronisation est déjà en attente.' );
-		} elseif ( wp_schedule_single_event( time(), 'bsc_tv_sync', array( true ) ) ) {
+		$live = 'live' === ( $_POST['sync_mode'] ?? '' );
+		if ( $live && empty( BSC_TV_Sync::settings()['live_enabled'] ) ) {
+			self::message( 'Activez d’abord la vérification des directs.', 'error' );
+		} elseif ( BSC_TV_Sync::queue( $live ? BSC_TV_Sync::LIVE_NOW : BSC_TV_Sync::DAILY_NOW, 0 ) ) {
 			spawn_cron();
-			self::message( 'Synchronisation mise en file d’attente dans WP-Cron.' );
+			self::message( $live ? 'Vérification des directs mise en file d’attente.' : 'Collecte du programme mise en file d’attente.' );
 		} else {
 			self::message( 'WP-Cron n’a pas pu planifier la synchronisation.', 'error' );
 		}
@@ -275,8 +301,7 @@ final class BSC_TV_Admin {
 		if ( BSC_TV_Content::CHANNEL === $type ) {
 			return BSC_TV_Content::channel_identity( $data['platform'], $data['url'] );
 		}
-		$video = BSC_TV_Content::youtube_video_id( $data['url'] );
-		return $video ? 'youtube:' . $video : untrailingslashit( $data['url'] ) . ':' . $data['start'];
+		return BSC_TV_Library::show_identity( $data );
 	}
 
 	public static function import_csv( $contents, $kind, $publish ) {
@@ -325,7 +350,7 @@ final class BSC_TV_Admin {
 
 	private static function insert_rows( $rows, $headers, $title_field, $type, $publish ) {
 		$seen = array();
-		foreach ( BSC_TV_Content::posts( $type, array( 'publish', 'draft', 'pending', 'private', 'future' ) ) as $post ) {
+		foreach ( BSC_TV_Content::posts( $type, array( 'publish', 'draft', 'pending', 'private', 'future', BSC_TV_Content::ARCHIVED ) ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
 			if ( ! empty( $data['url'] ) ) {
 				$seen[ self::identity( $type, $data ) ] = true;
@@ -397,15 +422,19 @@ final class BSC_TV_Admin {
 
 	public static function page() {
 		$settings = BSC_TV_Sync::settings();
-		$last = (int) get_option( 'bsc_tv_last_sync' );
+		$last = (int) get_option( BSC_TV_Sync::LAST_DAILY );
+		$last_live = (int) get_option( BSC_TV_Sync::LAST_LIVE );
+		$remaining = count( (array) get_option( BSC_TV_Sync::QUEUE, array() ) );
 		$quota = (array) get_option( BSC_TV_Sync::QUOTA, array() );
 		?>
 		<div class="wrap">
 			<h1>BSC TV</h1>
 			<p>Dans Elementor, ajoutez <strong>BSC TV – Programme</strong> à la page et <strong>BSC TV – Méga-menu</strong> au conteneur de votre menu.</p>
 			<h2>Synchronisation</h2>
-			<p>Twitch importe les programmes et les directs, YouTube découvre les émissions et suit les vidéos connues, Kick détecte les directs. Les autres plateformes utilisent les émissions éditoriales.</p>
-			<p><?php echo $last ? esc_html( 'Dernier passage WP-Cron ' . wp_date( 'j F Y · H:i', $last ) . '.' ) : 'Synchronisation en attente.'; ?></p>
+			<p>Collecte quotidienne sur 45 jours pour YouTube, Twitch et les agendas publics configurés. Les annonces à vérifier apparaissent dans les brouillons des émissions.</p>
+			<p><?php echo $last ? esc_html( 'Dernière collecte terminée ' . wp_date( 'j F Y · H:i', $last ) . '.' ) : 'Première collecte en attente.'; ?>
+			<?php if ( $remaining ) : echo esc_html( sprintf( ' Chaînes restant à traiter : %d.', $remaining ) ); endif; ?></p>
+			<?php if ( $last_live ) : ?><p><?php echo esc_html( 'Dernier contrôle des directs ' . wp_date( 'j F Y · H:i', $last_live ) . '.' ); ?></p><?php endif; ?>
 			<?php if ( $quota ) : ?><p><?php echo esc_html( sprintf( 'YouTube, recherches réservées au %s (heure du Pacifique) %d.', $quota['date'], $quota['count'] ) ); ?></p><?php endif; ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="bsc_tv_settings">
@@ -420,12 +449,14 @@ final class BSC_TV_Admin {
 					<?php endif; ?>
 				<?php endforeach; ?>
 				<?php self::field( 'youtube_search_limit', 'Budget quotidien de requêtes search.list YouTube', $settings['youtube_search_limit'] ?? 90, 'number' ); ?>
+				<p><label><input type="checkbox" name="bsc_tv[live_enabled]" value="1" <?php checked( ! empty( $settings['live_enabled'] ) ); ?>> Vérifier le statut des directs toutes les cinq minutes</label></p>
 				<?php submit_button( 'Enregistrer les réglages' ); ?>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="bsc_tv_sync_now">
 				<?php wp_nonce_field( 'bsc_tv_sync_now' ); ?>
-				<?php submit_button( 'Lancer un passage de synchronisation', 'secondary', 'submit', false ); ?>
+				<button type="submit" class="button" name="sync_mode" value="daily">Collecter le programme maintenant</button>
+				<?php if ( ! empty( $settings['live_enabled'] ) ) : ?><button type="submit" class="button" name="sync_mode" value="live">Vérifier les directs maintenant</button><?php endif; ?>
 			</form>
 			<hr>
 			<h2>Catalogue et import CSV</h2>
@@ -439,7 +470,7 @@ final class BSC_TV_Admin {
 				</select></p>
 				<p><label for="bsc-tv-file">Fichier CSV ou TSV</label><br><input type="file" id="bsc-tv-file" name="csv" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"></p>
 				<p><label for="bsc-tv-csv">Ou coller le tableau avec ses en-têtes</label><br><textarea class="large-text code" id="bsc-tv-csv" name="csv_text" rows="5"></textarea></p>
-				<p class="description">Chaînes <code>name,url,platform,bdd_id,source,country,language,activity,notes,keywords</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,channel_id,bdd_id,image,status,source</code></p>
+				<p class="description">Chaînes <code>name,url,platform,bdd_id,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,channel_id,bdd_id,image,status,source</code></p>
 				<p><label><input type="checkbox" name="publish" value="1"> Publier les entrées de mon CSV au lieu de les enregistrer en brouillon</label></p>
 				<?php submit_button( 'Importer' ); ?>
 			</form>

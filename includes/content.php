@@ -7,6 +7,7 @@ final class BSC_TV_Content {
 	const SHOW = 'bsc_tv_show';
 	const DATA = '_bsc_tv_data';
 	const STATE = '_bsc_tv_state';
+	const ARCHIVED = 'bsc_tv_archived';
 
 	public static function platforms() {
 		return array(
@@ -25,6 +26,11 @@ final class BSC_TV_Content {
 	}
 
 	public static function register() {
+		register_post_status( self::ARCHIVED, array(
+			'label' => 'Archives BSC TV', 'public' => false, 'protected' => true,
+			'show_in_admin_all_list' => false, 'show_in_admin_status_list' => true,
+			'label_count' => _n_noop( 'Archive BSC TV <span class="count">(%s)</span>', 'Archives BSC TV <span class="count">(%s)</span>' ),
+		) );
 		register_post_type( self::CHANNEL, array(
 			'labels' => array( 'name' => 'Chaînes', 'singular_name' => 'Chaîne', 'add_new_item' => 'Ajouter une chaîne' ),
 			'public' => false, 'show_ui' => true, 'show_in_menu' => 'bsc-tv',
@@ -179,12 +185,15 @@ final class BSC_TV_Content {
 		$url = self::url( $input['url'] ?? '' );
 		$platform = sanitize_key( $input['platform'] ?? '' );
 		$detected = self::platform_for_url( $url );
+		$official = strtolower( trim( (string) ( $input['feed_official'] ?? '' ) ) );
 		return array(
 			'url' => $url, 'platform' => isset( self::platforms()[ $platform ] ) ? $platform : $detected,
 			'bdd_id' => absint( $input['bdd_id'] ?? 0 ), 'source' => self::url( $input['source'] ?? '' ),
 			'country' => sanitize_text_field( $input['country'] ?? '' ), 'language' => sanitize_text_field( $input['language'] ?? '' ),
 			'activity' => sanitize_text_field( $input['activity'] ?? '' ), 'notes' => sanitize_textarea_field( $input['notes'] ?? '' ),
 			'keywords' => sanitize_text_field( $input['keywords'] ?? '' ),
+			'feed_url' => self::url( $input['feed_url'] ?? '' ), 'feed_official' => in_array( $official, array( '1', 'yes', 'oui', 'true' ), true ) ? 1 : 0,
+			'feed_timezone' => sanitize_text_field( $input['feed_timezone'] ?? '' ),
 		);
 	}
 
@@ -199,7 +208,7 @@ final class BSC_TV_Content {
 		}
 		return array(
 			'url' => $url, 'platform' => isset( self::platforms()[ $platform ] ) ? $platform : self::platform_for_url( $url ),
-			'start' => $start, 'end' => $end, 'status' => in_array( $status, array( 'live', 'cancelled' ), true ) ? $status : 'upcoming',
+			'start' => $start, 'end' => $end, 'status' => in_array( $status, array( 'live', 'cancelled', 'ended' ), true ) ? $status : 'upcoming',
 			'channel_id' => absint( $input['channel_id'] ?? 0 ),
 			'bdd_id' => absint( $input['bdd_id'] ?? 0 ), 'creator' => sanitize_text_field( $input['creator'] ?? '' ),
 			'image' => self::url( $input['image'] ?? '' ),

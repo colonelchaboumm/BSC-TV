@@ -5,8 +5,15 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Sync {
 	const SETTINGS = 'bsc_tv_settings';
 	const MAX_LIVE_AGE = 20 * MINUTE_IN_SECONDS;
-	const SCHEDULE_WINDOW = 30 * DAY_IN_SECONDS;
-	const DISCOVERY_INTERVAL = 6 * HOUR_IN_SECONDS;
+	const SCHEDULE_WINDOW = 45 * DAY_IN_SECONDS;
+	const DAILY = 'bsc_tv_discover_daily';
+	const CONTINUE_DAILY = 'bsc_tv_discover_batch';
+	const LIVE = 'bsc_tv_check_live';
+	const DAILY_NOW = 'bsc_tv_discover_now';
+	const LIVE_NOW = 'bsc_tv_live_now';
+	const QUEUE = 'bsc_tv_discovery_queue';
+	const LAST_DAILY = 'bsc_tv_last_discovery';
+	const LAST_LIVE = 'bsc_tv_last_live_check';
 	const LOCK = 'bsc_tv_sync_lock';
 	const QUOTA = 'bsc_tv_youtube_search_quota';
 
@@ -15,6 +22,9 @@ final class BSC_TV_Sync {
 		foreach ( array( 'youtube_key', 'twitch_id', 'twitch_secret', 'kick_id', 'kick_secret' ) as $key ) {
 			$constant = 'BSC_TV_' . strtoupper( $key );
 			$values[ $key ] = defined( $constant ) ? (string) constant( $constant ) : (string) ( $values[ $key ] ?? '' );
+		}
+		if ( ! array_key_exists( 'live_enabled', $values ) ) {
+			$values['live_enabled'] = (bool) get_option( 'bsc_tv_last_sync' );
 		}
 		return $values;
 	}
@@ -25,19 +35,56 @@ final class BSC_TV_Sync {
 	}
 
 	public static function activate() {
-		if ( ! wp_next_scheduled( 'bsc_tv_sync' ) ) {
-			wp_schedule_event( time() + 30, 'bsc_tv_five_minutes', 'bsc_tv_sync' );
-		}
+		wp_unschedule_hook( 'bsc_tv_sync' );
+		self::schedule();
+		update_option( 'bsc_tv_cron_version', 2, false );
 	}
 
 	public static function deactivate() {
-		wp_clear_scheduled_hook( 'bsc_tv_sync' );
+		foreach ( array( 'bsc_tv_sync', self::DAILY, self::CONTINUE_DAILY, self::LIVE, self::DAILY_NOW, self::LIVE_NOW ) as $hook ) {
+			wp_unschedule_hook( $hook );
+		}
 	}
 
-	public static function run( $manual = false ) {
+	public static function upgrade() {
+		if ( 2 !== (int) get_option( 'bsc_tv_cron_version' ) ) {
+			self::activate();
+		}
+	}
+
+	public static function schedule() {
+		if ( ! wp_next_scheduled( self::DAILY ) ) {
+			wp_schedule_event( time() + 30, 'daily', self::DAILY );
+		}
+		if ( empty( self::settings()['live_enabled'] ) ) {
+			wp_unschedule_hook( self::LIVE );
+			wp_unschedule_hook( self::LIVE_NOW );
+		} elseif ( ! wp_next_scheduled( self::LIVE ) ) {
+			wp_schedule_event( time() + 45, 'bsc_tv_five_minutes', self::LIVE );
+		}
+		if ( get_option( self::QUEUE ) ) {
+			self::queue( self::CONTINUE_DAILY );
+		}
+	}
+
+	public static function queue( $hook, $delay = 15 ) {
+		$next = wp_next_scheduled( $hook );
+		return ( $next && $next <= time() + $delay + 60 ) || wp_schedule_single_event( time() + $delay, $hook );
+	}
+
+	public static function daily() {
+		self::discover( true );
+	}
+
+	public static function continue_daily() {
+		self::discover( false );
+	}
+
+	private static function discover( $begin ) {
 		$lock = BSC_TV_Content::lock( self::LOCK );
 		if ( ! $lock ) {
-			return false;
+			self::queue( $begin ? self::DAILY_NOW : self::CONTINUE_DAILY, 60 );
+			return;
 		}
 
 		try {
@@ -47,21 +94,108 @@ final class BSC_TV_Sync {
 			foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
 				$data = BSC_TV_Content::data( $post->ID );
 				$key = BSC_TV_Content::channel_key( $data['platform'] ?? '', $data['url'] ?? '' );
-				if ( $key ) {
-					$state = self::state( $post->ID, $key );
-					$channels[ $data['platform'] ][ $post->ID ] = array( 'id' => $post->ID, 'key' => $key, 'data' => $data, 'state' => $state );
+				if ( $key || ! empty( $data['feed_url'] ) ) {
+					$channels[ $post->ID ] = array( 'id' => $post->ID, 'key' => $key, 'data' => $data, 'state' => self::state( $post->ID, $key ) );
+				}
+			}
+			$queue = (array) get_option( self::QUEUE, array() );
+			if ( ! $queue && ! $begin ) {
+				return;
+			}
+			if ( ! $queue ) {
+				uasort( $channels, static function ( $a, $b ) { return ( $a['state']['schedule_attempt'] ?? 0 ) <=> ( $b['state']['schedule_attempt'] ?? 0 ); } );
+				$queue = array_keys( $channels );
+				update_option( self::QUEUE, $queue, false );
+				if ( $settings['youtube_key'] ) {
+					self::manual_youtube( $settings['youtube_key'], $now, false );
+				}
+			}
+			$deadline = microtime( true ) + 15;
+			for ( $count = 0; $queue && $count < 4 && microtime( true ) < $deadline; ++$count ) {
+				$id = reset( $queue );
+				if ( count( $queue ) > 1 ) {
+					self::queue( self::CONTINUE_DAILY, 30 );
+				}
+				if ( isset( $channels[ $id ] ) ) {
+					self::discover_channel( $channels[ $id ], $settings, $now );
+				}
+				array_shift( $queue );
+				update_option( self::QUEUE, $queue, false );
+			}
+			if ( $queue ) {
+				self::queue( self::CONTINUE_DAILY );
+			} else {
+				BSC_TV_Library::archive_shows( $now );
+				delete_option( self::QUEUE );
+				wp_unschedule_hook( self::CONTINUE_DAILY );
+				update_option( self::LAST_DAILY, $now, false );
+			}
+		} finally {
+			BSC_TV_Content::unlock( self::LOCK, $lock );
+		}
+	}
+
+	private static function discover_channel( $channel, $settings, $now ) {
+		$data = $channel['data'];
+		if ( $channel['key'] && 'twitch' === $data['platform'] && $settings['twitch_id'] && $settings['twitch_secret'] ) {
+			self::discover_twitch( $channel, $settings, $now );
+		}
+		if ( $channel['key'] && 'youtube' === $data['platform'] && $settings['youtube_key'] ) {
+			self::discover_youtube( $channel, $settings['youtube_key'], $now );
+		}
+		if ( ! empty( $data['feed_url'] ) ) {
+			$result = BSC_TV_Feeds::fetch( $channel, $now );
+			update_post_meta( $channel['id'], '_bsc_tv_feed_report', is_wp_error( $result ) ? $result->get_error_message() : sprintf( '%d annonce(s) lue(s).', $result ) );
+		}
+	}
+
+	public static function live() {
+		$settings = self::settings();
+		if ( empty( $settings['live_enabled'] ) ) {
+			return;
+		}
+		$lock = BSC_TV_Content::lock( self::LOCK );
+		if ( ! $lock ) {
+			return;
+		}
+		try {
+			$now = time();
+			$channels = array();
+			$near = array();
+			foreach ( BSC_TV_Content::posts( BSC_TV_Content::SHOW ) as $show ) {
+				$data = BSC_TV_Content::data( $show->ID );
+				if ( ! empty( $data['url'] ) && 'cancelled' !== $data['status'] && ( empty( $data['origin_channel'] ) || BSC_TV_Content::public_channel( $data['origin_channel'] ) ) && BSC_TV_Library::near( $data, $now ) ) {
+					$key = BSC_TV_Content::channel_key( $data['platform'], $data['url'] );
+					if ( $key && in_array( $data['platform'], array( 'kick', 'twitch' ), true ) ) {
+						$near[ $data['platform'] ][ $key ] = true;
+					}
+				}
+			}
+			foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
+				$data = BSC_TV_Content::data( $post->ID );
+				$platform = $data['platform'] ?? '';
+				$key = BSC_TV_Content::channel_key( $platform, $data['url'] ?? '' );
+				if ( ! $key ) {
+					continue;
+				}
+				$state = self::state( $post->ID, $key );
+				$due = ! empty( $state['live'] ) || isset( $near[ $platform ][ $key ] );
+				foreach ( $state['schedule'] ?? array() as $event ) {
+					$due = $due || 'live' === ( $event['status'] ?? '' ) || BSC_TV_Library::near( $event, $now );
+				}
+				if ( $due ) {
+					$channels[ $platform ][ $post->ID ] = array( 'id' => $post->ID, 'key' => $key, 'data' => $data, 'state' => $state );
 				}
 			}
 			foreach ( array( 'twitch', 'kick' ) as $platform ) {
 				if ( ! empty( $channels[ $platform ] ) && $settings[ $platform . '_id' ] && $settings[ $platform . '_secret' ] ) {
-					self::$platform( $channels[ $platform ], $settings, $now, $manual );
+					self::$platform( $channels[ $platform ], $settings, $now );
 				}
 			}
 			if ( $settings['youtube_key'] ) {
-				self::youtube( $channels['youtube'] ?? array(), $settings['youtube_key'], $now, $manual );
+				self::live_youtube( $channels['youtube'] ?? array(), $settings['youtube_key'], $now );
 			}
-			update_option( 'bsc_tv_last_sync', $now, false );
-			return true;
+			update_option( self::LAST_LIVE, $now, false );
 		} finally {
 			BSC_TV_Content::unlock( self::LOCK, $lock );
 		}
@@ -93,6 +227,13 @@ final class BSC_TV_Sync {
 			return new WP_Error( 'bsc_tv_api', sprintf( 'Réponse API HTTP %d.', $code ), $code );
 		}
 		return $json;
+	}
+
+	private static function require_items( $result, $field ) {
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return isset( $result[ $field ] ) && is_array( $result[ $field ] ) ? $result : new WP_Error( 'bsc_tv_api_shape', 'Réponse API incomplète.' );
 	}
 
 	private static function oauth( $platform, $settings ) {
@@ -148,7 +289,7 @@ final class BSC_TV_Sync {
 		);
 	}
 
-	private static function matches( $channel, $text ) {
+	public static function matches( $channel, $text ) {
 		$keywords = array_filter( array_map( 'trim', explode( ',', remove_accents( $channel['data']['keywords'] ?? '' ) ) ) );
 		foreach ( $keywords as $keyword ) {
 			if ( false !== stripos( remove_accents( $text ), $keyword ) ) {
@@ -158,7 +299,7 @@ final class BSC_TV_Sync {
 		return ! $keywords;
 	}
 
-	private static function twitch( $channels, $settings, $now, $manual ) {
+	private static function twitch( $channels, $settings, $now ) {
 		$token = self::oauth( 'twitch', $settings );
 		if ( is_wp_error( $token ) ) {
 			self::error( $channels, $token, 'live_error' );
@@ -168,56 +309,74 @@ final class BSC_TV_Sync {
 		$api = 'https://api.twitch.tv/helix/';
 		foreach ( array_chunk( $channels, 100, true ) as $group ) {
 			$logins = array_column( $group, 'key' );
-			$streams = self::request( $api . 'streams?first=100&' . self::repeated( 'user_login', $logins ), $headers );
+			$streams = self::require_items( self::request( $api . 'streams?first=100&' . self::repeated( 'user_login', $logins ), $headers ), 'data' );
 			if ( is_wp_error( $streams ) ) {
 				self::error( $group, $streams, 'live_error' );
 				self::forget_oauth( 'twitch', $settings, $streams );
 				continue;
 			}
 			$streams = self::indexed( $streams['data'] ?? array(), 'user_login' );
-			foreach ( $group as $id => $channel ) {
+			foreach ( $group as $channel ) {
 				$stream = $streams[ $channel['key'] ] ?? array();
 				$live = array();
 				if ( 'live' === ( $stream['type'] ?? '' ) && self::matches( $channel, $stream['title'] . ' ' . ( $stream['game_name'] ?? '' ) ) ) {
 					$image = strtr( $stream['thumbnail_url'] ?? '', array( '{width}' => '1280', '{height}' => '720' ) );
 					$live[] = self::event( $stream['id'], $stream['title'], 'https://www.twitch.tv/' . $channel['key'], $image, BSC_TV_Content::parse_date( $stream['started_at'], false ) );
 				}
-				$channels[ $id ]['state'] = self::save( $channel, array( 'live' => $live, 'live_at' => $now, 'live_error' => '' ) );
+				self::archive_disappeared_live( $channel, $live );
+				self::save( $channel, array( 'live' => $live, 'live_at' => $now, 'live_error' => '' ) );
 			}
 		}
-		uasort( $channels, static function ( $left, $right ) {
-			return ( $left['state']['schedule_attempt'] ?? 0 ) <=> ( $right['state']['schedule_attempt'] ?? 0 );
-		} );
-		$due = array_slice( array_filter( $channels, static function ( $channel ) use ( $now, $manual ) {
-			return $manual || $now - ( $channel['state']['schedule_attempt'] ?? 0 ) >= 30 * MINUTE_IN_SECONDS;
-		} ), 0, 5 );
-		if ( ! $due ) {
+	}
+
+	private static function discover_twitch( $channel, $settings, $now ) {
+		$token = self::oauth( 'twitch', $settings );
+		if ( is_wp_error( $token ) ) {
+			self::error( array( $channel ), $token, 'schedule_error' );
 			return;
 		}
-		$users = self::request( $api . 'users?' . self::repeated( 'login', array_column( $due, 'key' ) ), $headers );
-		if ( is_wp_error( $users ) ) {
-			self::error( $due, $users, 'schedule_error' );
-			return;
-		}
-		$users = self::indexed( $users['data'] ?? array(), 'login' );
-		foreach ( $due as $channel ) {
-			$user = $users[ $channel['key'] ] ?? array();
-			$changes = array( 'schedule_attempt' => $now );
+		$headers = array( 'Authorization' => 'Bearer ' . $token, 'Client-Id' => $settings['twitch_id'] );
+		$api = 'https://api.twitch.tv/helix/';
+		$user = $channel['state']['twitch_user'] ?? array();
+		if ( ! $user || $now - ( $channel['state']['twitch_user_at'] ?? 0 ) >= WEEK_IN_SECONDS ) {
+			$users = self::request( $api . 'users?' . self::repeated( 'login', array( $channel['key'] ) ), $headers );
+			if ( is_wp_error( $users ) ) {
+				self::forget_oauth( 'twitch', $settings, $users );
+				self::error( array( $channel ), $users, 'schedule_error' );
+				return;
+			}
+			$user = $users['data'][0] ?? array();
 			if ( ! $user ) {
-				self::save( $channel, $changes + array( 'schedule' => array(), 'schedule_error' => 'Chaîne Twitch introuvable.' ) );
-				continue;
+				self::save( $channel, array( 'schedule_error' => 'Chaîne Twitch introuvable.' ) );
+				return;
 			}
-			$events = self::twitch_schedule( $api, $headers, $channel, $user, $now );
-			self::save( $channel, is_wp_error( $events ) ? $changes + array( 'schedule_error' => $events->get_error_message() ) : $changes + array( 'schedule' => $events, 'schedule_error' => '' ) );
+			$channel['state'] = self::save( $channel, array( 'twitch_user' => $user, 'twitch_user_at' => $now ) );
 		}
+		$events = self::twitch_schedule( $api, $headers, $channel, $user, $now );
+		if ( is_wp_error( $events ) ) {
+			self::forget_oauth( 'twitch', $settings, $events );
+			self::error( array( $channel ), $events, 'schedule_error' );
+			return;
+		}
+		$previous = array_column( $channel['state']['schedule'] ?? array(), null, 'id' );
+		foreach ( $events as $id => $event ) {
+			if ( 'cancelled' === ( $event['status'] ?? '' ) ) {
+				BSC_TV_Library::archive_snapshot( $channel, $previous[ $id ] ?? $event, 'cancelled' );
+				unset( $previous[ $id ], $events[ $id ] );
+			}
+		}
+		foreach ( array_diff_key( $previous, array_column( $events, null, 'id' ) ) as $event ) {
+			BSC_TV_Library::archive_snapshot( $channel, $event, $event['start'] <= $now ? 'ended' : 'cancelled' );
+		}
+		self::save( $channel, array( 'schedule' => array_values( $events ), 'schedule_error' => '', 'schedule_attempt' => $now ) );
 	}
 
 	private static function twitch_schedule( $api, $headers, $channel, $user, $now ) {
 		$events = array();
 		$after = '';
 		$base = add_query_arg( array( 'broadcaster_id' => $user['id'], 'first' => 25, 'start_time' => gmdate( 'Y-m-d\TH:i:s\Z', $now ) ), $api . 'schedule' );
-		for ( $page = 0; $page < 3; ++$page ) {
-			$result = self::request( $after ? add_query_arg( 'after', rawurlencode( $after ), $base ) : $base, $headers, null, true );
+		for ( $page = 0; $page < 4; ++$page ) {
+			$result = self::require_items( self::request( $after ? add_query_arg( 'after', rawurlencode( $after ), $base ) : $base, $headers, null, true ), 'data' );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
@@ -228,12 +387,13 @@ final class BSC_TV_Sync {
 				if ( $start >= $now + self::SCHEDULE_WINDOW ) {
 					return $events;
 				}
-				if ( $start < $now || ! empty( $segment['canceled_until'] ) || ( $vacation && $start >= BSC_TV_Content::parse_date( $vacation['start_time'], false ) && $start < BSC_TV_Content::parse_date( $vacation['end_time'], false ) ) ) {
+				if ( ! $start || $end <= $now ) {
 					continue;
 				}
 				$title = $segment['title'] ?: 'Direct Twitch';
 				if ( self::matches( $channel, $title . ' ' . ( $segment['category']['name'] ?? '' ) ) ) {
-				$events[] = self::event( $segment['id'], $title, 'https://www.twitch.tv/' . $channel['key'], ( $user['offline_image_url'] ?? '' ) ?: ( $user['profile_image_url'] ?? '' ), $start, $end );
+					$cancelled = ! empty( $segment['canceled_until'] ) || ( $vacation && $start >= BSC_TV_Content::parse_date( $vacation['start_time'], false ) && $start < BSC_TV_Content::parse_date( $vacation['end_time'], false ) );
+					$events[ $segment['id'] ] = self::event( $segment['id'], $title, 'https://www.twitch.tv/' . $channel['key'], ( $user['offline_image_url'] ?? '' ) ?: ( $user['profile_image_url'] ?? '' ), $start, $end ) + array( 'status' => $cancelled ? 'cancelled' : 'upcoming' );
 				}
 			}
 			$after = $result['pagination']['cursor'] ?? '';
@@ -241,7 +401,7 @@ final class BSC_TV_Sync {
 				break;
 			}
 		}
-		return $events;
+		return $after ? new WP_Error( 'bsc_tv_twitch_pages', 'Planning Twitch incomplet après quatre pages.' ) : $events;
 	}
 
 	private static function kick( $channels, $settings, $now ) {
@@ -251,7 +411,7 @@ final class BSC_TV_Sync {
 			return;
 		}
 		foreach ( array_chunk( $channels, 50 ) as $group ) {
-			$result = self::request( 'https://api.kick.com/public/v1/channels?' . self::repeated( 'slug', array_column( $group, 'key' ) ), array( 'Authorization' => 'Bearer ' . $token ) );
+			$result = self::require_items( self::request( 'https://api.kick.com/public/v1/channels?' . self::repeated( 'slug', array_column( $group, 'key' ) ), array( 'Authorization' => 'Bearer ' . $token ) ), 'data' );
 			if ( is_wp_error( $result ) ) {
 				self::error( $group, $result, 'live_error' );
 				self::forget_oauth( 'kick', $settings, $result );
@@ -265,44 +425,57 @@ final class BSC_TV_Sync {
 					$start = BSC_TV_Content::parse_date( $item['stream']['start_time'], false );
 					$live[] = self::event( $channel['key'] . ':' . $start, $item['stream_title'], 'https://kick.com/' . $channel['key'], $item['stream']['thumbnail'] ?? $item['banner_picture'] ?? '', $start );
 				}
+				self::archive_disappeared_live( $channel, $live );
 				self::save( $channel, array( 'live' => $live, 'live_at' => $now, 'live_error' => $item ? '' : 'Chaîne Kick introuvable.' ) );
 			}
 		}
 	}
 
-	private static function yt_request( $endpoint, $key, $params ) {
-		return self::request( add_query_arg( $params + array( 'key' => rawurlencode( $key ) ), 'https://www.googleapis.com/youtube/v3/' . $endpoint ) );
+	private static function archive_disappeared_live( $channel, $live ) {
+		foreach ( array_diff_key( array_column( $channel['state']['live'] ?? array(), null, 'id' ), array_column( $live, null, 'id' ) ) as $event ) {
+			BSC_TV_Library::archive_snapshot( $channel, $event, 'ended' );
+		}
 	}
 
-	private static function youtube( $channels, $key, $now, $manual ) {
-		uasort( $channels, static function ( $left, $right ) {
-			return ( $left['state']['schedule_attempt'] ?? 0 ) <=> ( $right['state']['schedule_attempt'] ?? 0 );
-		} );
-		$attempts = 0;
-		foreach ( $channels as $id => $channel ) {
-			if ( ! $manual && $now - ( $channel['state']['schedule_attempt'] ?? 0 ) < self::DISCOVERY_INTERVAL ) {
-				continue;
-			}
-			if ( ++$attempts > 3 || ! self::yt_budget( $now, 2 ) ) {
-				break;
-			}
-			$changes = self::yt_discover( $channel, $key );
-			$channels[ $id ]['state'] = self::save( $channel, $changes + array( 'schedule_attempt' => $now ) );
-		}
+	private static function yt_request( $endpoint, $key, $params ) {
+		return self::require_items( self::request( add_query_arg( $params + array( 'key' => rawurlencode( $key ) ), 'https://www.googleapis.com/youtube/v3/' . $endpoint ) ), 'items' );
+	}
 
-		$video_ids = array();
+	private static function manual_youtube( $key, $now, $live_only ) {
+		$shows = self::manual_youtube_ids( $now, $live_only );
+		list( $videos, $failed ) = self::yt_details( $key, $shows );
+		self::save_manual_youtube( $shows, $videos, $failed, $now );
+	}
+
+	private static function manual_youtube_ids( $now, $live_only ) {
 		$manual_shows = array();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::SHOW ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
 			$video = BSC_TV_Content::youtube_video_id( $data['url'] ?? '' );
-			if ( $video && 'cancelled' !== ( $data['status'] ?? '' ) && ( $data['start'] ?? 0 ) >= $now - 2 * DAY_IN_SECONDS && $data['start'] < $now + self::SCHEDULE_WINDOW ) {
-				$video_ids[] = $video;
+			if ( ! $video || 'upcoming' !== ( $data['status'] ?? '' ) || ( ! empty( $data['origin_channel'] ) && ! BSC_TV_Content::public_channel( $data['origin_channel'] ) ) ) {
+				continue;
+			}
+			$previous = self::state( $post->ID, $video )['video'] ?? array();
+			$window = 'upcoming' === ( $previous['status'] ?? '' ) ? $previous : $data;
+			$was_live = 'live' === ( $previous['status'] ?? '' );
+			$needs_check = $live_only ? BSC_TV_Library::near( $window, $now ) : $window['start'] >= $now - 2 * DAY_IN_SECONDS && $window['start'] <= $now + self::SCHEDULE_WINDOW;
+			if ( $was_live || $needs_check ) {
 				$manual_shows[ $post->ID ] = $video;
 			}
 		}
-		foreach ( $channels as $channel ) {
-			$video_ids = array_merge( $video_ids, $channel['state']['ids'] ?? array() );
+		return $manual_shows;
+	}
+
+	private static function save_manual_youtube( $manual_shows, $videos, $failed, $now ) {
+		foreach ( $manual_shows as $post_id => $video ) {
+			if ( ! isset( $failed[ $video ] ) ) {
+				$event = $videos[ $video ] ?? array( 'status' => 'cancelled' );
+				update_post_meta( $post_id, BSC_TV_Content::STATE, wp_slash( array( 'key' => $video, 'live_at' => $now, 'video' => $event ) ) );
+			}
 		}
+	}
+
+	private static function yt_details( $key, $video_ids ) {
 		$videos = array();
 		$failed = array();
 		foreach ( array_chunk( array_unique( $video_ids ), 50 ) as $group ) {
@@ -315,46 +488,133 @@ final class BSC_TV_Sync {
 				$videos[ $item['id'] ] = self::yt_event( $item );
 			}
 		}
-		foreach ( $manual_shows as $post_id => $video ) {
-			if ( ! isset( $failed[ $video ] ) ) {
-				$event = $videos[ $video ] ?? array( 'status' => 'ended' );
-				update_post_meta( $post_id, BSC_TV_Content::STATE, wp_slash( array( 'key' => $video, 'live_at' => $now, 'video' => $event ) ) );
-			}
-		}
+		return array( $videos, $failed );
+	}
+
+	private static function live_youtube( $channels, $key, $now ) {
+		$manual_shows = self::manual_youtube_ids( $now, true );
+		$checks = array();
+		$all_ids = array_values( $manual_shows );
 		foreach ( $channels as $channel ) {
-			$ids = $channel['state']['ids'] ?? array();
+			foreach ( $channel['state']['schedule'] ?? array() as $event ) {
+				if ( 'live' === ( $event['status'] ?? '' ) || BSC_TV_Library::near( $event, $now ) ) {
+					$checks[ $channel['id'] ][ $event['id'] ] = $event;
+				}
+			}
+			foreach ( $channel['state']['live'] ?? array() as $event ) {
+				$checks[ $channel['id'] ][ $event['id'] ] = $event;
+			}
+			$all_ids = array_merge( $all_ids, array_keys( $checks[ $channel['id'] ] ?? array() ) );
+		}
+		list( $videos, $failed ) = self::yt_details( $key, $all_ids );
+		self::save_manual_youtube( $manual_shows, $videos, $failed, $now );
+		foreach ( $channels as $channel ) {
+			$tracked = $checks[ $channel['id'] ] ?? array();
+			$ids = array_keys( $tracked );
 			$errors = array_intersect_key( $failed, array_fill_keys( $ids, true ) );
 			if ( $errors ) {
 				self::save( $channel, array( 'live_error' => reset( $errors ) ) );
 				continue;
 			}
 			$live = array();
-			$schedule = array();
-			$tracked = array();
-			foreach ( $ids as $id ) {
+			$schedule = array_column( $channel['state']['schedule'] ?? array(), null, 'id' );
+			foreach ( $tracked as $id => $old ) {
 				$event = $videos[ $id ] ?? null;
-				if ( ! $event || 'ended' === $event['status'] ) {
+				if ( ! $event || in_array( $event['status'], array( 'ended', 'cancelled' ), true ) ) {
+					BSC_TV_Library::archive_snapshot( $channel, $event && $event['start'] ? $event : $old, $event['status'] ?? 'cancelled' );
+					unset( $schedule[ $id ] );
 					continue;
 				}
-				$tracked[] = $id;
-				if ( empty( $channel['state']['channel_id'] ) || $event['channel_id'] !== $channel['state']['channel_id'] || ! self::matches( $channel, $event['title'] ) ) {
+				if ( ! self::matches( $channel, $event['title'] ) ) {
+					unset( $schedule[ $id ] );
 					continue;
 				}
 				if ( 'live' === $event['status'] ) {
 					$live[] = $event;
 				} elseif ( 'upcoming' === $event['status'] ) {
+					$schedule[ $id ] = $event;
+				}
+			}
+			self::save( $channel, array( 'live' => $live, 'schedule' => array_values( $schedule ), 'live_at' => $now, 'live_error' => '' ) );
+		}
+	}
+
+	private static function discover_youtube( $channel, $key, $now ) {
+		$state = $channel['state'];
+		$previous = array_column( array_merge( $state['schedule'] ?? array(), $state['live'] ?? array() ), null, 'id' );
+		$channel_id = self::yt_channel_id( $channel, $key );
+		if ( is_wp_error( $channel_id ) ) {
+			self::error( array( $channel ), $channel_id, 'schedule_error' );
+			return;
+		}
+		$ids = array_unique( array_merge( array_keys( $previous ), $state['ids'] ?? array() ) );
+		$cursor = '';
+		$error = '';
+		$attempt = $state['schedule_attempt'] ?? 0;
+		for ( $page = 0; $page < 3; ++$page ) {
+			if ( ! self::yt_budget( $now, 1 ) ) {
+				$error = 'Budget quotidien YouTube épuisé.';
+				break;
+			}
+			$params = array( 'part' => 'snippet', 'type' => 'video', 'channelId' => $channel_id, 'eventType' => 'upcoming', 'maxResults' => 50 );
+			if ( $cursor ) {
+				$params['pageToken'] = rawurlencode( $cursor );
+			}
+			$attempt = $now;
+			$result = self::yt_request( 'search', $key, $params );
+			if ( is_wp_error( $result ) ) {
+				$error = $result->get_error_message();
+				break;
+			}
+			foreach ( $result['items'] ?? array() as $item ) {
+				if ( ! empty( $item['id']['videoId'] ) ) {
+					$ids[] = $item['id']['videoId'];
+				}
+			}
+			$cursor = $result['nextPageToken'] ?? '';
+			if ( ! $cursor ) {
+				break;
+			}
+		}
+		if ( $cursor && ! $error ) {
+			$error = 'Recherche YouTube partielle après trois pages.';
+		}
+		list( $videos, $failed ) = self::yt_details( $key, $ids );
+		$schedule = array();
+		foreach ( array_unique( $ids ) as $id ) {
+			if ( isset( $failed[ $id ] ) ) {
+				if ( isset( $previous[ $id ] ) ) {
+					$schedule[] = $previous[ $id ];
+				}
+				continue;
+			}
+			$event = $videos[ $id ] ?? null;
+			$status = $event['status'] ?? 'cancelled';
+			if ( 'ended' === $status || 'cancelled' === $status ) {
+				if ( isset( $previous[ $id ] ) ) {
+					BSC_TV_Library::archive_snapshot( $channel, $event && $event['start'] ? $event : $previous[ $id ], $status );
+				}
+				continue;
+			}
+			if ( $event['channel_id'] === $channel_id && self::matches( $channel, $event['title'] ) && $event['start'] <= $now + self::SCHEDULE_WINDOW ) {
+				if ( 'live' !== $status && BSC_TV_Library::expired( $event, $now ) ) {
+					BSC_TV_Library::archive_snapshot( $channel, $event, 'ended' );
+				} else {
 					$schedule[] = $event;
 				}
 			}
-			self::save( $channel, array( 'live' => $live, 'schedule' => $schedule, 'ids' => $tracked, 'live_at' => $now, 'live_error' => '' ) );
 		}
+		$active = array_filter( $state['live'] ?? array(), static function ( $event ) use ( $videos, $failed ) {
+			return isset( $failed[ $event['id'] ] ) || 'live' === ( $videos[ $event['id'] ]['status'] ?? '' );
+		} );
+		self::save( $channel, array( 'channel_id' => $channel_id, 'schedule' => $schedule, 'live' => array_values( $active ), 'ids' => array_keys( $failed ), 'schedule_attempt' => $attempt, 'schedule_error' => $error ?: ( $failed ? reset( $failed ) : '' ) ) );
 	}
 
 	private static function yt_budget( $now, $cost ) {
 		$date = wp_date( 'Y-m-d', $now, new DateTimeZone( 'America/Los_Angeles' ) );
 		$quota = (array) get_option( self::QUOTA, array() );
 		$count = $date === ( $quota['date'] ?? '' ) ? (int) $quota['count'] : 0;
-		$limit = min( 10000, max( 2, absint( self::settings()['youtube_search_limit'] ?? 90 ) ) );
+		$limit = min( 10000, max( 1, absint( self::settings()['youtube_search_limit'] ?? 90 ) ) );
 		if ( $count + $cost > $limit ) {
 			return false;
 		}
@@ -362,47 +622,37 @@ final class BSC_TV_Sync {
 		return true;
 	}
 
-	private static function yt_discover( $channel, $key ) {
+	private static function yt_channel_id( $channel, $key ) {
 		$state = $channel['state'];
 		$channel_id = $state['channel_id'] ?? '';
 		if ( ! $channel_id ) {
 			$identity = $channel['key'];
+			if ( preg_match( '/^UC[\w-]{22}$/D', $identity ) ) {
+				return $identity;
+			}
 			if ( 0 === strpos( $identity, '@' ) ) {
 				$param = array( 'forHandle' => rawurlencode( $identity ) );
 			} elseif ( 0 === strpos( $identity, 'user:' ) ) {
 				$param = array( 'forUsername' => rawurlencode( substr( $identity, 5 ) ) );
 			} else {
-				$param = array( 'id' => $identity );
+				return new WP_Error( 'bsc_tv_youtube_channel', 'Identifiant de chaîne YouTube invalide.' );
 			}
 			$result = self::yt_request( 'channels', $key, $param + array( 'part' => 'id' ) );
 			$channel_id = $result['items'][0]['id'] ?? '';
 			if ( is_wp_error( $result ) || ! $channel_id ) {
-				return array( 'schedule_error' => is_wp_error( $result ) ? $result->get_error_message() : 'Chaîne YouTube introuvable.' );
+				return is_wp_error( $result ) ? $result : new WP_Error( 'bsc_tv_youtube_channel', 'Chaîne YouTube introuvable.' );
 			}
 		}
-		$ids = $state['ids'] ?? array();
-		$changes = array( 'channel_id' => $channel_id, 'schedule_error' => '' );
-		foreach ( array( 'upcoming', 'live' ) as $type ) {
-			$result = self::yt_request( 'search', $key, array( 'part' => 'snippet', 'type' => 'video', 'channelId' => $channel_id, 'eventType' => $type, 'maxResults' => 50 ) );
-			if ( is_wp_error( $result ) ) {
-				$changes['schedule_error'] = $result->get_error_message();
-				break;
-			}
-			foreach ( $result['items'] ?? array() as $result_item ) {
-				if ( ! empty( $result_item['id']['videoId'] ) ) {
-					$ids[] = $result_item['id']['videoId'];
-				}
-			}
-		}
-		return $changes + array( 'ids' => array_values( array_unique( $ids ) ) );
+		return $channel_id;
 	}
 
 	private static function yt_event( $item ) {
 		$detail = $item['liveStreamingDetails'] ?? array();
 		$snippet = $item['snippet'] ?? array();
 		$flag = $snippet['liveBroadcastContent'] ?? '';
-		$status = 'ended';
+		$status = ! empty( $detail['actualEndTime'] ) ? 'ended' : 'cancelled';
 		$start = BSC_TV_Content::parse_date( $detail['scheduledStartTime'] ?? '', false );
+		$end = BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? $detail['scheduledEndTime'] ?? '', false );
 		if ( ! empty( $detail['actualStartTime'] ) && empty( $detail['actualEndTime'] ) && 'live' === $flag ) {
 			$status = 'live';
 			$start = BSC_TV_Content::parse_date( $detail['actualStartTime'], false );
@@ -411,6 +661,6 @@ final class BSC_TV_Sync {
 		}
 		$thumbnails = $snippet['thumbnails'] ?? array();
 		$thumbnail = $thumbnails['maxres']['url'] ?? $thumbnails['standard']['url'] ?? $thumbnails['high']['url'] ?? $thumbnails['medium']['url'] ?? $thumbnails['default']['url'] ?? '';
-		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start ) + array( 'status' => $status, 'channel_id' => $snippet['channelId'] ?? '' );
+		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start, $end > $start ? $end : 0 ) + array( 'status' => $status, 'channel_id' => $snippet['channelId'] ?? '' );
 	}
 }
