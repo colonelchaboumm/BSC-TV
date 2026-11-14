@@ -286,8 +286,8 @@ final class BSC_TV_Admin {
 	public static function sync_now() {
 		self::authorize( 'bsc_tv_sync_now' );
 		$live = 'live' === ( $_POST['sync_mode'] ?? '' );
-		if ( $live && empty( BSC_TV_Sync::settings()['live_enabled'] ) ) {
-			self::message( 'Activez d’abord la vérification des directs.', 'error' );
+		if ( $live && ! BSC_TV_Sync::can_check_live( BSC_TV_Sync::settings() ) ) {
+			self::message( 'Activez la vérification des directs et renseignez un accès API YouTube, Twitch ou Kick.', 'error' );
 		} elseif ( BSC_TV_Sync::queue( $live ? BSC_TV_Sync::LIVE_NOW : BSC_TV_Sync::DAILY_NOW, 0 ) ) {
 			spawn_cron();
 			self::message( $live ? 'Vérification des directs mise en file d’attente.' : 'Collecte du programme mise en file d’attente.' );
@@ -456,7 +456,7 @@ final class BSC_TV_Admin {
 				<input type="hidden" name="action" value="bsc_tv_sync_now">
 				<?php wp_nonce_field( 'bsc_tv_sync_now' ); ?>
 				<button type="submit" class="button" name="sync_mode" value="daily">Collecter le programme maintenant</button>
-				<?php if ( ! empty( $settings['live_enabled'] ) ) : ?><button type="submit" class="button" name="sync_mode" value="live">Vérifier les directs maintenant</button><?php endif; ?>
+			<?php if ( BSC_TV_Sync::can_check_live( $settings ) ) : ?><button type="submit" class="button" name="sync_mode" value="live">Vérifier les directs maintenant</button><?php endif; ?>
 			</form>
 			<hr>
 			<h2>Catalogue et import CSV</h2>

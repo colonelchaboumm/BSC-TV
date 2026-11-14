@@ -49,21 +49,42 @@ final class BSC_TV_Sync {
 	public static function upgrade() {
 		if ( 2 !== (int) get_option( 'bsc_tv_cron_version' ) ) {
 			self::activate();
+			return;
 		}
+		self::schedule_live();
 	}
 
 	public static function schedule() {
 		if ( ! wp_next_scheduled( self::DAILY ) ) {
 			wp_schedule_event( time() + 30, 'daily', self::DAILY );
 		}
-		if ( empty( self::settings()['live_enabled'] ) ) {
-			wp_unschedule_hook( self::LIVE );
-			wp_unschedule_hook( self::LIVE_NOW );
-		} elseif ( ! wp_next_scheduled( self::LIVE ) ) {
-			wp_schedule_event( time() + 45, 'bsc_tv_five_minutes', self::LIVE );
-		}
+		self::schedule_live();
 		if ( get_option( self::QUEUE ) ) {
 			self::queue( self::CONTINUE_DAILY );
+		}
+	}
+
+	public static function can_check_live( $settings ) {
+		return ! empty( $settings['live_enabled'] ) && (
+			$settings['youtube_key'] ||
+			( $settings['twitch_id'] && $settings['twitch_secret'] ) ||
+			( $settings['kick_id'] && $settings['kick_secret'] )
+		);
+	}
+
+	private static function schedule_live() {
+		$next = wp_next_scheduled( self::LIVE );
+		if ( self::can_check_live( self::settings() ) ) {
+			if ( ! $next ) {
+				wp_schedule_event( time() + 45, 'bsc_tv_five_minutes', self::LIVE );
+			}
+			return;
+		}
+		if ( $next ) {
+			wp_unschedule_hook( self::LIVE );
+		}
+		if ( wp_next_scheduled( self::LIVE_NOW ) ) {
+			wp_unschedule_hook( self::LIVE_NOW );
 		}
 	}
 
@@ -151,7 +172,7 @@ final class BSC_TV_Sync {
 
 	public static function live() {
 		$settings = self::settings();
-		if ( empty( $settings['live_enabled'] ) ) {
+		if ( ! self::can_check_live( $settings ) ) {
 			return;
 		}
 		$lock = BSC_TV_Content::lock( self::LOCK );
