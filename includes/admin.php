@@ -17,6 +17,8 @@ final class BSC_TV_Admin {
 		add_action( 'admin_notices', array( __CLASS__, 'notices' ) );
 		add_action( 'wp_ajax_bsc_tv_find_bdd', array( __CLASS__, 'find_bdd' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
+		add_filter( 'manage_' . BSC_TV_Content::CHANNEL . '_posts_columns', array( __CLASS__, 'channel_columns' ) );
+		add_action( 'manage_' . BSC_TV_Content::CHANNEL . '_posts_custom_column', array( __CLASS__, 'channel_column' ), 10, 2 );
 	}
 
 	public static function menu() {
@@ -33,6 +35,28 @@ final class BSC_TV_Admin {
 
 	public static function boxes() {
 		add_meta_box( 'bsc-tv-data', 'Détails BSC TV', array( __CLASS__, 'box' ), array( BSC_TV_Content::CHANNEL, BSC_TV_Content::SHOW ), 'normal', 'high' );
+	}
+
+	public static function channel_columns( $columns ) {
+		return array_slice( $columns, 0, 2, true ) + array( 'bsc_tv_bdd' => 'Fiche créateur BSC BDD' ) + $columns;
+	}
+
+	public static function channel_column( $column, $post_id ) {
+		if ( 'bsc_tv_bdd' !== $column ) {
+			return;
+		}
+		$bdd_id = BSC_TV_Content::data( $post_id )['bdd_id'] ?? 0;
+		$profile = BSC_TV_Content::profile( $bdd_id );
+		if ( $profile ) {
+			printf( '<a href="%s">%s</a>', esc_url( $profile['permalink'] ), esc_html( $profile['name'] ) );
+		} elseif ( $bdd_id ) {
+			echo esc_html( sprintf( 'Fiche #%d indisponible', $bdd_id ) );
+		} else {
+			echo 'Aucune association';
+		}
+		if ( $edit = get_edit_post_link( $post_id, 'raw' ) ) {
+			printf( '<div class="row-actions"><a href="%s">%s</a></div>', esc_url( $edit . '#bsc-tv-profile' ), $profile ? 'Modifier l’association' : 'Associer une fiche' );
+		}
 	}
 
 	private static function field( $key, $label, $value, $type = 'text' ) {
@@ -57,6 +81,9 @@ final class BSC_TV_Admin {
 		$data = BSC_TV_Content::data( $post->ID );
 		$channel = BSC_TV_Content::CHANNEL === $post->post_type;
 		wp_nonce_field( 'bsc_tv_save', 'bsc_tv_nonce' );
+		if ( ! $channel ) {
+			self::channel_field( $data['channel_id'] ?? 0 );
+		}
 		self::field( 'url', $channel ? 'URL officielle de la chaîne' : 'URL pour regarder le direct', $data['url'] ?? '', 'url' );
 		self::choice( 'platform', 'Plateforme', $data['platform'] ?? '', array( '' => 'Détecter depuis l’URL' ) + BSC_TV_Content::platforms() );
 		self::field( 'source', 'Lien de vérification ou d’annonce', $data['source'] ?? '', 'url' );
@@ -82,16 +109,59 @@ final class BSC_TV_Admin {
 			self::choice( 'status', 'État éditorial', $data['status'] ?? 'upcoming', array( 'upcoming' => 'À venir', 'live' => 'En direct (jusqu’à l’heure de fin)', 'cancelled' => 'Annulée' ) );
 			self::field( 'image', 'URL de l’image si aucun visuel WordPress n’est sélectionné', $data['image'] ?? '', 'url' );
 		}
-		self::field( 'bdd_id', 'Identifiant de la fiche BSC BDD', $data['bdd_id'] ?? '', 'number' );
-		$profile = BSC_TV_Content::profile( $data['bdd_id'] ?? 0 );
-		if ( $profile ) {
-			echo '<p>Fiche liée <a href="' . esc_url( $profile['permalink'] ) . '">' . esc_html( $profile['name'] ) . '</a></p>';
+		self::profile_field( $data['bdd_id'] ?? 0, $channel );
+	}
+
+	private static function channel_field( $selected_id ) {
+		$selected_id = absint( $selected_id );
+		$platforms = BSC_TV_Content::platforms();
+		$options = array();
+		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $channel ) {
+			$data = BSC_TV_Content::data( $channel->ID );
+			if ( ! empty( $data['url'] ) ) {
+				$options[ $channel->ID ] = sprintf( '%s · %s (#%d)', get_the_title( $channel ), $platforms[ $data['platform'] ] ?? 'Autre', $channel->ID );
+			}
 		}
-		if ( function_exists( 'bsc_bdd_query_entities' ) ) : ?>
-			<p><label for="bsc-tv-bdd-search">Rechercher une fiche publiée</label><br>
-			<input class="regular-text" type="search" id="bsc-tv-bdd-search" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'bsc_tv_bdd' ) ); ?>" autocomplete="off">
-			<br><select id="bsc-tv-bdd-results" aria-label="Fiches BSC BDD trouvées" hidden></select><br><span id="bsc-tv-bdd-status" role="status"></span></p>
-		<?php endif;
+		natcasesort( $options );
+		if ( $selected_id && ! isset( $options[ $selected_id ] ) ) {
+			$options[ $selected_id ] = sprintf( 'Chaîne #%d indisponible', $selected_id );
+		}
+		self::choice( 'channel_id', 'Chaîne du créateur', $selected_id, array( 0 => 'Détecter la chaîne à partir du lien' ) + $options );
+		echo '<p class="description">Les émissions reprennent la fiche BSC BDD de leur chaîne. Vous pouvez choisir une autre fiche pour cette émission.</p>';
+		if ( isset( $options[ $selected_id ] ) && BSC_TV_Content::public_channel( $selected_id ) ) {
+			$profile = BSC_TV_Content::profile( BSC_TV_Content::data( $selected_id )['bdd_id'] ?? 0 );
+			if ( $profile ) {
+				printf( '<p>Fiche de la chaîne enregistrée <a href="%s">%s</a></p>', esc_url( $profile['permalink'] ), esc_html( $profile['name'] ) );
+			} else {
+				echo '<p>Cette chaîne n’a pas de fiche BSC BDD accessible.</p>';
+			}
+		}
+	}
+
+	private static function profile_field( $bdd_id, $channel ) {
+		$profile = BSC_TV_Content::profile( $bdd_id );
+		?>
+		<div id="bsc-tv-profile">
+			<h3><?php echo $channel ? 'Fiche créateur BSC BDD' : 'Fiche BSC BDD propre à cette émission'; ?></h3>
+			<p class="description"><?php echo $channel ? 'Associez une fiche publiée pour afficher son nom, son avatar et son lien dans le programme. Plusieurs chaînes peuvent partager la même fiche.' : 'Laissez ce champ vide pour reprendre la fiche de la chaîne.'; ?></p>
+			<?php if ( function_exists( 'bsc_bdd_query_entities' ) ) : ?>
+				<p><label for="bsc-tv-bdd-search">Rechercher une fiche publiée par son nom</label><br>
+				<input class="regular-text" type="search" id="bsc-tv-bdd-search" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'bsc_tv_bdd' ) ); ?>" autocomplete="off">
+				<br><select id="bsc-tv-bdd-results" aria-label="Fiches BSC BDD trouvées" hidden></select><br><span id="bsc-tv-bdd-status" role="status"></span></p>
+			<?php else : ?>
+				<p class="description">Activez BSC BDD pour rechercher une fiche et afficher son lien.</p>
+			<?php endif; ?>
+			<?php self::field( 'bdd_id', 'Identifiant de la fiche BSC BDD', $bdd_id ?: '', 'number' ); ?>
+			<p id="bsc-tv-bdd-current" aria-live="polite">
+				<?php if ( $profile ) : ?>
+					Fiche liée <a href="<?php echo esc_url( $profile['permalink'] ); ?>"><?php echo esc_html( $profile['name'] ); ?></a>
+				<?php elseif ( $bdd_id ) : ?>
+					<?php echo esc_html( sprintf( 'Fiche #%d indisponible.', $bdd_id ) ); ?>
+				<?php endif; ?>
+			</p>
+			<p <?php echo $bdd_id ? '' : 'hidden'; ?>><button class="button" type="button" id="bsc-tv-bdd-clear">Retirer la fiche</button></p>
+		</div>
+		<?php
 	}
 
 	public static function find_bdd() {
@@ -119,6 +189,17 @@ final class BSC_TV_Admin {
 		$data = BSC_TV_Content::SHOW === $post->post_type ? BSC_TV_Content::show_data( $input ) : BSC_TV_Content::channel_data( $input );
 		if ( is_wp_error( $data ) || empty( $data['url'] ) ) {
 			self::message( is_wp_error( $data ) ? $data->get_error_message() : 'Une URL de chaîne valide est nécessaire.', 'error' );
+			return;
+		}
+		$previous = BSC_TV_Content::data( $post_id );
+		$channel_id = $data['channel_id'] ?? 0;
+		if ( $channel_id && $channel_id !== ( $previous['channel_id'] ?? 0 ) && ! BSC_TV_Content::public_channel( $channel_id ) ) {
+			self::message( 'Sélectionnez une chaîne BSC TV publiée.', 'error' );
+			return;
+		}
+		$bdd_id = $data['bdd_id'];
+		if ( $bdd_id && $bdd_id !== ( $previous['bdd_id'] ?? 0 ) && function_exists( 'bsc_bdd_get_entity' ) && ! BSC_TV_Content::profile( $bdd_id ) ) {
+			self::message( 'Sélectionnez une fiche BSC BDD publique.', 'error' );
 			return;
 		}
 		update_post_meta( $post_id, BSC_TV_Content::DATA, wp_slash( $data ) );
@@ -192,8 +273,7 @@ final class BSC_TV_Admin {
 
 	private static function identity( $type, $data ) {
 		if ( BSC_TV_Content::CHANNEL === $type ) {
-			$key = BSC_TV_Content::channel_key( $data['platform'], $data['url'] );
-			return $key ? $data['platform'] . ':' . ( 'youtube' === $data['platform'] && 0 === strpos( $key, 'UC' ) ? $key : strtolower( $key ) ) : untrailingslashit( $data['url'] );
+			return BSC_TV_Content::channel_identity( $data['platform'], $data['url'] );
 		}
 		$video = BSC_TV_Content::youtube_video_id( $data['url'] );
 		return $video ? 'youtube:' . $video : untrailingslashit( $data['url'] ) . ':' . $data['start'];
@@ -257,6 +337,10 @@ final class BSC_TV_Admin {
 			$title = sanitize_text_field( $input[ $title_field ] ?? '' );
 			$data = BSC_TV_Content::SHOW === $type ? BSC_TV_Content::show_data( $input ) : BSC_TV_Content::channel_data( $input );
 			if ( ! $title || is_wp_error( $data ) || empty( $data['url'] ) ) {
+				$counts['invalid'][] = $index + 2;
+				continue;
+			}
+			if ( ! empty( $data['channel_id'] ) && ! BSC_TV_Content::public_channel( $data['channel_id'] ) ) {
 				$counts['invalid'][] = $index + 2;
 				continue;
 			}
@@ -355,7 +439,7 @@ final class BSC_TV_Admin {
 				</select></p>
 				<p><label for="bsc-tv-file">Fichier CSV ou TSV</label><br><input type="file" id="bsc-tv-file" name="csv" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"></p>
 				<p><label for="bsc-tv-csv">Ou coller le tableau avec ses en-têtes</label><br><textarea class="large-text code" id="bsc-tv-csv" name="csv_text" rows="5"></textarea></p>
-				<p class="description">Chaînes <code>name,url,platform,bdd_id,source,country,language,activity,notes,keywords</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,bdd_id,image,status,source</code></p>
+				<p class="description">Chaînes <code>name,url,platform,bdd_id,source,country,language,activity,notes,keywords</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,channel_id,bdd_id,image,status,source</code></p>
 				<p><label><input type="checkbox" name="publish" value="1"> Publier les entrées de mon CSV au lieu de les enregistrer en brouillon</label></p>
 				<?php submit_button( 'Importer' ); ?>
 			</form>

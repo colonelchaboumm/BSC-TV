@@ -2,6 +2,24 @@
 	const input = document.querySelector('#bsc-tv-bdd-search');
 	const results = document.querySelector('#bsc-tv-bdd-results');
 	const status = document.querySelector('#bsc-tv-bdd-status');
+	const field = document.querySelector('#bsc-tv-bdd_id');
+	const current = document.querySelector('#bsc-tv-bdd-current');
+	const clear = document.querySelector('#bsc-tv-bdd-clear');
+	if (!field || !current || !clear) return;
+
+	const preview = (message) => {
+		current.textContent = message;
+		clear.parentElement.hidden = !field.value;
+	};
+	field.addEventListener('input', () => {
+		preview(field.value ? 'Enregistrez pour vérifier et associer cette fiche.' : 'Aucune fiche sélectionnée.');
+	});
+	clear.addEventListener('click', () => {
+		field.value = '';
+		if (results) results.value = '';
+		preview('La fiche sera retirée après enregistrement.');
+		(input || field).focus();
+	});
 	if (!input || !results || !status) return;
 
 	let timer;
@@ -33,6 +51,8 @@
 		}, 250);
 	});
 	results.addEventListener('change', () => {
-		if (results.value) document.querySelector('#bsc-tv-bdd_id').value = results.value;
+		if (!results.value) return;
+		field.value = results.value;
+		preview(`${results.selectedOptions[0].textContent} sera associée après enregistrement.`);
 	});
 })();

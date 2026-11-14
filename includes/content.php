@@ -121,6 +121,20 @@ final class BSC_TV_Content {
 		return (array) get_post_meta( $id, self::DATA, true );
 	}
 
+	public static function public_channel( $id ) {
+		$post = $id ? get_post( $id ) : null;
+		return $post && self::CHANNEL === $post->post_type && 'publish' === $post->post_status && '' === $post->post_password && ! empty( self::data( $id )['url'] ) ? $post : null;
+	}
+
+	public static function channel_identity( $platform, $url ) {
+		$key = self::channel_key( $platform, $url );
+		if ( $key ) {
+			// YouTube channel IDs are case-sensitive, unlike handles and usernames.
+			return $platform . ':' . ( 'youtube' === $platform && 0 === strpos( $key, 'UC' ) ? $key : strtolower( $key ) );
+		}
+		return $url ? $platform . ':' . untrailingslashit( $url ) : '';
+	}
+
 	public static function lock( $name ) {
 		global $wpdb;
 		$lock = ( time() + 10 * MINUTE_IN_SECONDS ) . ':' . wp_generate_uuid4();
@@ -186,6 +200,7 @@ final class BSC_TV_Content {
 		return array(
 			'url' => $url, 'platform' => isset( self::platforms()[ $platform ] ) ? $platform : self::platform_for_url( $url ),
 			'start' => $start, 'end' => $end, 'status' => in_array( $status, array( 'live', 'cancelled' ), true ) ? $status : 'upcoming',
+			'channel_id' => absint( $input['channel_id'] ?? 0 ),
 			'bdd_id' => absint( $input['bdd_id'] ?? 0 ), 'creator' => sanitize_text_field( $input['creator'] ?? '' ),
 			'image' => self::url( $input['image'] ?? '' ),
 			'source' => self::url( $input['source'] ?? '' ),

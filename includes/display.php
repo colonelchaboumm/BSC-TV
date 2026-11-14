@@ -49,16 +49,52 @@ final class BSC_TV_Display {
 
 	private static function match_manual( $event, $jobs ) {
 		$video = BSC_TV_Content::youtube_video_id( $event['url'] );
-		$key = $event['channel_key'];
+		$matching_channel = array();
 		foreach ( $jobs as $job ) {
-			if ( $video && $video === BSC_TV_Content::youtube_video_id( $job['url'] ) ) {
+			$job_video = BSC_TV_Content::youtube_video_id( $job['url'] );
+			if ( $video && $video === $job_video ) {
 				return $job;
 			}
-			if ( $key && 0 === strcasecmp( $key, BSC_TV_Content::channel_key( $job['platform'], $job['url'] ) ) && $event['platform'] === $job['platform'] && abs( $event['start'] - $job['start'] ) <= 15 * MINUTE_IN_SECONDS ) {
-				return $job;
+			if ( ! $matching_channel && $job['resolved_channel_id'] === $event['channel_id'] && $event['platform'] === $job['platform'] && ! $job_video && abs( $event['start'] - $job['start'] ) <= 15 * MINUTE_IN_SECONDS ) {
+				$matching_channel = $job;
 			}
 		}
-		return array();
+		return $matching_channel;
+	}
+
+	private static function channels() {
+		$channels = array();
+		$identities = array();
+		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
+			$data = BSC_TV_Content::data( $post->ID );
+			if ( empty( $data['url'] ) ) {
+				continue;
+			}
+			$data['creator'] = get_the_title( $post );
+			$channels[ $post->ID ] = $data;
+			$identity = BSC_TV_Content::channel_identity( $data['platform'], $data['url'] );
+			$identities[ $identity ][ $post->ID ] = true;
+			if ( 'youtube' === $data['platform'] ) {
+				$key = BSC_TV_Content::channel_key( 'youtube', $data['url'] );
+				$state = BSC_TV_Sync::state( $post->ID, $key );
+				if ( ! empty( $state['channel_id'] ) ) {
+					$identities[ 'youtube:' . $state['channel_id'] ][ $post->ID ] = true;
+				}
+			}
+		}
+		return array( $channels, $identities );
+	}
+
+	private static function resolve_channel( $show, $state, $identities ) {
+		if ( ! empty( $show['channel_id'] ) ) {
+			return $show['channel_id'];
+		}
+		$identity = BSC_TV_Content::channel_identity( $show['platform'], $show['url'] );
+		if ( 'youtube' === $show['platform'] && ! empty( $state['video']['channel_id'] ) ) {
+			$identity = 'youtube:' . $state['video']['channel_id'];
+		}
+		$matches = $identities[ $identity ] ?? array();
+		return 1 === count( $matches ) ? key( $matches ) : 0;
 	}
 
 	private static function events( $config ) {
@@ -66,6 +102,7 @@ final class BSC_TV_Display {
 		$live = array();
 		$upcoming = array();
 		$manual = array();
+		list( $channels, $identities ) = self::channels();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::SHOW ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
 			if ( empty( $data['url'] ) ) {
@@ -75,6 +112,10 @@ final class BSC_TV_Display {
 			$data['title'] = get_the_title( $post );
 			$data['image'] = $thumbnail ?: $data['image'];
 			$state = BSC_TV_Sync::state( $post->ID, BSC_TV_Content::youtube_video_id( $data['url'] ) );
+			$channel_id = self::resolve_channel( $data, $state, $identities );
+			$channel = $channels[ $channel_id ] ?? array();
+			$data['bdd_id'] = BSC_TV_Content::profile( $data['bdd_id'] ) ? $data['bdd_id'] : ( $channel['bdd_id'] ?? 0 );
+			$data['creator'] = $data['creator'] ?: ( $channel['creator'] ?? '' );
 			if ( isset( $state['video'] ) && 'upcoming' === $data['status'] ) {
 				$video = $state['video'];
 				if ( 'ended' === $video['status'] ) {
@@ -92,21 +133,20 @@ final class BSC_TV_Display {
 			} elseif ( 'upcoming' === $data['status'] ) {
 				$upcoming[ $post->ID ] = $data;
 			}
-			$manual[ $post->ID ] = $data + array( 'post_id' => $post->ID );
+			$manual[ $post->ID ] = $data + array( 'post_id' => $post->ID, 'resolved_channel_id' => $channel_id );
 		}
 		$seen = array();
-		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
-			$data = BSC_TV_Content::data( $post->ID );
-			$platform = $data['platform'] ?? '';
-			$key = BSC_TV_Content::channel_key( $platform, $data['url'] ?? '' );
+		foreach ( $channels as $channel_id => $data ) {
+			$platform = $data['platform'];
+			$key = BSC_TV_Content::channel_key( $platform, $data['url'] );
 			if ( ! $key || ( $config['platform'] && $platform !== $config['platform'] ) ) {
 				continue;
 			}
-			$state = BSC_TV_Sync::state( $post->ID, $key );
+			$state = BSC_TV_Sync::state( $channel_id, $key );
 			$current = $now - ( $state['live_at'] ?? 0 ) < BSC_TV_Sync::MAX_LIVE_AGE ? ( $state['live'] ?? array() ) : array();
 			foreach ( array( 'live' => $current, 'upcoming' => $state['schedule'] ?? array() ) as $status => $events ) {
 				foreach ( $events as $event ) {
-					$event += array( 'platform' => $platform, 'creator' => get_the_title( $post ), 'bdd_id' => $data['bdd_id'], 'channel_key' => $key );
+					$event += array( 'platform' => $platform, 'creator' => $data['creator'], 'bdd_id' => $data['bdd_id'], 'channel_id' => $channel_id );
 					$identity = $platform . ':' . $status . ':' . $event['id'] . ':' . $event['start'];
 					if ( isset( $seen[ $identity ] ) ) {
 						continue;

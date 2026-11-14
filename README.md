@@ -9,6 +9,14 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 3. Importez **Catalogue inclus · émissions annoncées** pour récupérer les dates sourcées. Les dates et les liens peuvent évoluer. Les événements en brouillon sont modifiables avant publication. Ajoutez une image WordPress ou une URL de visuel si nécessaire.
 4. Renseignez les clés des plateformes utilisées, puis lancez un passage de synchronisation. Le dernier passage WP-Cron figure dans les réglages et les éventuelles erreurs d’API figurent dans la fiche chaîne.
 
+## Associer une fiche créateur BSC BDD
+
+1. Dans **BSC TV → Chaînes**, utilisez la colonne **Fiche créateur BSC BDD** pour repérer les chaînes à associer.
+2. Ouvrez une chaîne, recherchez la fiche par son nom dans **Fiche créateur BSC BDD**, sélectionnez le résultat et enregistrez. Vous pouvez associer plusieurs chaînes Twitch, YouTube ou autres à la même fiche.
+3. Dans **BSC TV → Émissions**, choisissez la **Chaîne du créateur** pour reprendre sa fiche. Un lien de chaîne reconnu de façon unique suffit aussi à faire le lien entre les deux. Pour une vidéo YouTube, la synchronisation peut retrouver la chaîne d’origine. Le champ **Fiche BSC BDD propre à cette émission** permet de choisir un autre profil pour une émission.
+
+Une modification du rattachement sur une chaîne est répercutée sur les deux widgets, pour les émissions synchronisées et celles qui reprennent cette chaîne. Si la fiche devient inaccessible, le nom du créateur reste visible lorsqu’il est renseigné sur la chaîne ou l’émission.
+
 ## Elementor et méga-menu
 
 - **BSC TV – Programme** présente les directs en priorité, suivis des prochaines émissions. La une met en avant le premier direct ou la prochaine date. Réglez la période, le nombre d’émissions, la plateforme, les images, les couleurs, la typographie, les colonnes et les espacements.
@@ -39,9 +47,9 @@ Le formulaire accepte un fichier ou un tableau collé, en UTF-8. Séparateurs pr
 | Type | En-têtes requis | En-têtes facultatifs |
 | --- | --- | --- |
 | Chaînes | `name,url` | `platform,bdd_id,source,country,language,activity,notes,keywords` |
-| Émissions | `title,url,starts_at` | `ends_at,platform,creator,bdd_id,image,status,source` |
+| Émissions | `title,url,starts_at` | `ends_at,platform,creator,channel_id,bdd_id,image,status,source` |
 
-Pour `starts_at` et `ends_at`, utilisez `2026-12-03T21:00:00+01:00` ou `2026-12-03T21:00` dans le fuseau du site. Pour `status`, utilisez `upcoming`, `live` ou `cancelled`. Pour `bdd_id`, utilisez l’identifiant d’une fiche publique de votre installation. Les imports ignorent les doublons repérables et indiquent les lignes invalides. Les fiches existantes se modifient dans WordPress.
+Pour `starts_at` et `ends_at`, utilisez `2026-12-03T21:00:00+01:00` ou `2026-12-03T21:00` dans le fuseau du site. Pour `status`, utilisez `upcoming`, `live` ou `cancelled`. Pour `channel_id`, utilisez l’identifiant d’une chaîne publiée dans BSC TV. Pour `bdd_id`, utilisez l’identifiant d’une fiche publique de votre installation. Les imports ignorent les doublons repérables et indiquent les lignes invalides. Les fiches existantes se modifient dans WordPress.
 
 Le catalogue fourni est une photographie de sources publiques au 14 novembre 2026. Il comprend des créateurs, brasseries, médias et organisateurs. Un compte peut avoir plusieurs lignes si ses chaînes sont distinctes. Les vidéos montées, les replays et les émissions seulement annoncées par un tiers ont été traités selon les preuves décrites dans le [recensement](RECENSEMENT.md).
 
