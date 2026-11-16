@@ -5,7 +5,7 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 ## Installation
 
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.
-2. Dans **BSC TV → Réglages et imports**, choisissez **Catalogue inclus · créateurs**. Le catalogue contient des sources vérifiées et des pistes signalées. Dans **Chaînes**, publiez les comptes que vous souhaitez suivre. Recherchez et associez leur fiche BSC BDD publiée dans le champ prévu.
+2. Dans **BSC TV → Réglages et imports**, choisissez **Catalogue inclus · chaînes aux directs vérifiés**. Pour démarrer le suivi des nouveaux comptes dès l’import, cochez **Publier les nouvelles entrées**. Le catalogue complet comprend aussi les pistes dont le format direct reste à documenter. Les chaînes déjà enregistrées gardent leur statut.
 3. Importez **Catalogue inclus · émissions annoncées** pour récupérer les dates sourcées. Les dates et les liens peuvent évoluer. Les événements en brouillon sont modifiables avant publication. Ajoutez une image WordPress ou une URL de visuel si nécessaire.
 4. Renseignez les clés des plateformes utilisées, puis lancez **Collecter le programme maintenant**. Le dernier passage et les chaînes en attente figurent dans les réglages. Les erreurs d’API ou de flux figurent dans la fiche chaîne.
 
@@ -16,6 +16,8 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 3. Dans **BSC TV → Émissions**, choisissez la **Chaîne du créateur** pour reprendre sa fiche. Un lien de chaîne reconnu de façon unique suffit aussi à faire le lien entre les deux. Pour une vidéo YouTube, la synchronisation peut retrouver la chaîne d’origine. Le champ **Fiche BSC BDD propre à cette émission** permet de choisir un autre profil pour une émission.
 
 Une modification du rattachement sur une chaîne est répercutée sur les deux widgets, pour les émissions synchronisées et celles qui reprennent cette chaîne. Si la fiche devient inaccessible, le nom du créateur reste visible lorsqu’il est renseigné sur la chaîne ou l’émission.
+
+À l’import de chaînes, BSC TV rapproche un identifiant de fiche explicitement fourni, un slug de fiche vérifié dans le catalogue ou une URL de chaîne identique enregistrée sur une fiche candidate. Le rapprochement se fait avec les fiches publiques de l’installation locale. Une chaîne déjà importée sans fiche peut être associée lors d’un nouvel import. Un rattachement existant et le statut de la chaîne sont conservés. Les profils à compléter sont visibles dans la colonne **Fiche créateur BSC BDD**.
 
 ## Elementor et méga-menu
 
@@ -57,12 +59,12 @@ Le formulaire accepte un fichier ou un tableau collé, en UTF-8. Séparateurs pr
 
 | Type | En-têtes requis | En-têtes facultatifs |
 | --- | --- | --- |
-| Chaînes | `name,url` | `platform,bdd_id,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official` |
+| Chaînes | `name,url` | `platform,bdd_id,bdd_slug,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official` |
 | Émissions | `title,url,starts_at` | `ends_at,platform,creator,channel_id,bdd_id,image,status,source` |
 
 Pour `starts_at` et `ends_at`, utilisez `2026-12-03T21:00:00+01:00` ou `2026-12-03T21:00` dans le fuseau du site. Pour `status`, utilisez `upcoming`, `live` ou `cancelled`. Pour `channel_id`, utilisez l’identifiant d’une chaîne publiée dans BSC TV. Pour `bdd_id`, utilisez l’identifiant d’une fiche publique de votre installation. Les imports ignorent les doublons repérables et indiquent les lignes invalides. Les fiches existantes se modifient dans WordPress.
 
-Le catalogue fourni est une photographie de sources publiques au 14 novembre 2026. Il comprend des créateurs, brasseries, médias et organisateurs. Un compte peut avoir plusieurs lignes si ses chaînes sont distinctes. Les vidéos montées, les replays et les émissions seulement annoncées par un tiers ont été traités selon les preuves décrites dans le [recensement](RECENSEMENT.md).
+Le catalogue fourni est une photographie de sources publiques au 16 novembre 2026. Il comprend 22 canaux pour lesquels un direct est documenté ou annoncé, dont certains historiques. Un créateur peut avoir plusieurs lignes s’il publie sur différentes plateformes. Chaque ligne contient une source et un état d’activité. [Recensement](RECENSEMENT.md)
 
 ## Références techniques
 

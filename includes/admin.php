@@ -304,7 +304,7 @@ final class BSC_TV_Admin {
 		return BSC_TV_Library::show_identity( $data );
 	}
 
-	public static function import_csv( $contents, $kind, $publish ) {
+	public static function import_csv( $contents, $kind, $publish, $verified_only = false ) {
 		if ( strlen( $contents ) > self::MAX_IMPORT_BYTES ) {
 			return new WP_Error( 'bsc_tv_import_size', 'Limite de 1 Mo dépassée.' );
 		}
@@ -342,23 +342,70 @@ final class BSC_TV_Admin {
 			return new WP_Error( 'bsc_tv_import_busy', 'Un autre import est en cours. Relancez le vôtre après sa fin.' );
 		}
 		try {
-			return self::insert_rows( $rows, $headers, $required[0], $type, $publish );
+			return self::insert_rows( $rows, $headers, $required[0], $type, $publish, $verified_only );
 		} finally {
 			BSC_TV_Content::unlock( 'bsc_tv_csv_lock', $lock );
 		}
 	}
 
-	private static function insert_rows( $rows, $headers, $title_field, $type, $publish ) {
+	private static function match_bdd( $input, $data, $title ) {
+		if ( $data['bdd_id'] || ! function_exists( 'bsc_bdd_query_entities' ) ) {
+			return $data['bdd_id'];
+		}
+		$slug = sanitize_title( $input['bdd_slug'] ?? '' );
+		if ( $slug && defined( 'BSC_BDD_Content::POST_TYPE' ) ) {
+			$ids = get_posts( array(
+				'post_type' => BSC_BDD_Content::POST_TYPE, 'post_status' => 'publish',
+				'name' => $slug, 'has_password' => false, 'fields' => 'ids', 'posts_per_page' => 2,
+			) );
+			$profile = 1 === count( $ids ) ? BSC_TV_Content::profile( $ids[0] ) : array();
+			if ( $profile ) {
+				return $profile['id'];
+			}
+		}
+		// An exact channel URL is required when a verified BDD slug is unavailable.
+		$identity = BSC_TV_Content::channel_identity( $data['platform'], $data['url'] );
+		$matches = array();
+		foreach ( bsc_bdd_query_entities( array( 'search' => $title, 'status' => 'publish', 'limit' => 25 ) ) as $candidate ) {
+			$links = array_merge( $candidate['socials'] ?? array(), array( $candidate['contact']['website'] ?? '' ) );
+			foreach ( $links as $url ) {
+				if ( $url && $identity === BSC_TV_Content::channel_identity( BSC_TV_Content::platform_for_url( $url ), $url ) && BSC_TV_Content::profile( $candidate['id'] ) ) {
+					$matches[ $candidate['id'] ] = true;
+				}
+			}
+		}
+		return 1 === count( $matches ) ? key( $matches ) : 0;
+	}
+
+	private static function link_existing_channel( $post_id, $input, $data, $title ) {
+		$previous = BSC_TV_Content::data( $post_id );
+		if ( ! empty( $previous['bdd_id'] ) ) {
+			return false;
+		}
+		$bdd_id = self::match_bdd( $input, $data, $title );
+		if ( ! $bdd_id ) {
+			return false;
+		}
+		$updated = $previous;
+		$updated['bdd_id'] = $bdd_id;
+		return update_post_meta( $post_id, BSC_TV_Content::DATA, wp_slash( $updated ), $previous );
+	}
+
+	private static function insert_rows( $rows, $headers, $title_field, $type, $publish, $verified_only ) {
+		$is_channel = BSC_TV_Content::CHANNEL === $type;
 		$seen = array();
 		foreach ( BSC_TV_Content::posts( $type, array( 'publish', 'draft', 'pending', 'private', 'future', BSC_TV_Content::ARCHIVED ) ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
 			if ( ! empty( $data['url'] ) ) {
-				$seen[ self::identity( $type, $data ) ] = true;
+				$seen[ self::identity( $type, $data ) ][] = $post->ID;
 			}
 		}
-		$counts = array( 'added' => 0, 'duplicate' => 0, 'invalid' => array() );
+		$counts = array( 'added' => 0, 'duplicate' => 0, 'linked' => 0, 'invalid' => array() );
 		foreach ( $rows as $index => $row ) {
 			$input = count( $headers ) === count( $row ) ? array_combine( $headers, $row ) : array();
+			if ( $verified_only && '1' !== ( $input['verified_live'] ?? '' ) ) {
+				continue;
+			}
 			$title = sanitize_text_field( $input[ $title_field ] ?? '' );
 			$data = BSC_TV_Content::SHOW === $type ? BSC_TV_Content::show_data( $input ) : BSC_TV_Content::channel_data( $input );
 			if ( ! $title || is_wp_error( $data ) || empty( $data['url'] ) ) {
@@ -369,18 +416,31 @@ final class BSC_TV_Admin {
 				$counts['invalid'][] = $index + 2;
 				continue;
 			}
+			if ( $data['bdd_id'] && function_exists( 'bsc_bdd_get_entity' ) && ! BSC_TV_Content::profile( $data['bdd_id'] ) ) {
+				$counts['invalid'][] = $index + 2;
+				continue;
+			}
 			$id = self::identity( $type, $data );
 			if ( isset( $seen[ $id ] ) ) {
+				if ( $is_channel && 1 === count( $seen[ $id ] ) && self::link_existing_channel( $seen[ $id ][0], $input, $data, $title ) ) {
+					++$counts['linked'];
+				}
 				++$counts['duplicate'];
 				continue;
+			}
+			if ( $is_channel ) {
+				$data['bdd_id'] = self::match_bdd( $input, $data, $title );
 			}
 			$post = wp_insert_post( array( 'post_type' => $type, 'post_status' => $publish ? 'publish' : 'draft', 'post_title' => wp_slash( $title ), 'meta_input' => array( BSC_TV_Content::DATA => wp_slash( $data ) ) ), true );
 			if ( is_wp_error( $post ) || ! $post ) {
 				$counts['invalid'][] = $index + 2;
 				continue;
 			}
-			$seen[ $id ] = true;
+			$seen[ $id ] = array( $post );
 			++$counts['added'];
+			if ( $is_channel && $data['bdd_id'] ) {
+				++$counts['linked'];
+			}
 		}
 		return $counts;
 	}
@@ -389,11 +449,13 @@ final class BSC_TV_Admin {
 		self::authorize( 'bsc_tv_import' );
 		$kind = sanitize_key( $_POST['kind'] ?? '' );
 		$publish = ! empty( $_POST['publish'] );
+		$verified_only = 'catalogue_live' === $kind;
 		$contents = '';
-		if ( in_array( $kind, array( 'catalogue', 'selection' ), true ) ) {
-			$contents = file_get_contents( BSC_TV_DIR . 'data/' . ( 'catalogue' === $kind ? 'createurs.csv' : 'programmes.csv' ) );
-			$kind = 'catalogue' === $kind ? 'channels' : 'shows';
-			$publish = false;
+		if ( in_array( $kind, array( 'catalogue_live', 'catalogue', 'selection' ), true ) ) {
+			$is_catalogue = 'selection' !== $kind;
+			$contents = file_get_contents( BSC_TV_DIR . 'data/' . ( $is_catalogue ? 'createurs.csv' : 'programmes.csv' ) );
+			$kind = $is_catalogue ? 'channels' : 'shows';
+			$publish = $verified_only && $publish;
 		} elseif ( isset( $_FILES['csv']['error'] ) && UPLOAD_ERR_NO_FILE !== (int) $_FILES['csv']['error'] ) {
 			if ( UPLOAD_ERR_OK !== (int) $_FILES['csv']['error'] || (int) $_FILES['csv']['size'] > self::MAX_IMPORT_BYTES || ! is_uploaded_file( $_FILES['csv']['tmp_name'] ) ) {
 				self::message( 'Le fichier n’a pas pu être importé. Vérifiez la limite de 1 Mo et réessayez.', 'error' );
@@ -407,11 +469,14 @@ final class BSC_TV_Admin {
 			self::message( 'Import invalide.', 'error' );
 			self::redirect();
 		}
-		$result = self::import_csv( $contents, $kind, $publish );
+		$result = self::import_csv( $contents, $kind, $publish, $verified_only );
 		if ( is_wp_error( $result ) ) {
 			self::message( $result->get_error_message(), 'error' );
 		} else {
 			$message = sprintf( '%d ajout(s), %d doublon(s), %d ligne(s) invalide(s).', $result['added'], $result['duplicate'], count( $result['invalid'] ) );
+			if ( 'channels' === $kind ) {
+				$message .= sprintf( ' %d rattachement(s) à BSC BDD.', $result['linked'] );
+			}
 			if ( $result['invalid'] ) {
 				$message .= ' Lignes concernées (20 premières au maximum) ' . implode( ', ', array_slice( $result['invalid'], 0, 20 ) ) . '.';
 			}
@@ -460,18 +525,18 @@ final class BSC_TV_Admin {
 			</form>
 			<hr>
 			<h2>Catalogue et import CSV</h2>
-			<p>Le catalogue et la sélection éditoriale sont importés en brouillon. Publiez les chaînes à suivre et renseignez les fiches BSC BDD à associer.</p>
+			<p>Choisissez le catalogue des directs vérifiés pour suivre les créateurs dont la chaîne a diffusé ou annoncé un direct. L’import associe les fiches BSC BDD reconnues et complète les chaînes déjà importées sans remplacer leurs associations.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data">
 				<input type="hidden" name="action" value="bsc_tv_import">
 				<?php wp_nonce_field( 'bsc_tv_import' ); ?>
 				<p><label for="bsc-tv-import">Type d’import</label><br><select id="bsc-tv-import" name="kind">
-					<option value="catalogue">Catalogue inclus · créateurs</option><option value="selection">Catalogue inclus · émissions annoncées</option>
+					<option value="catalogue_live">Catalogue inclus · chaînes aux directs vérifiés</option><option value="catalogue">Catalogue inclus · tous les créateurs et les pistes</option><option value="selection">Catalogue inclus · émissions annoncées</option>
 					<option value="channels">Mon CSV de chaînes</option><option value="shows">Mon CSV d’émissions</option>
 				</select></p>
 				<p><label for="bsc-tv-file">Fichier CSV ou TSV</label><br><input type="file" id="bsc-tv-file" name="csv" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"></p>
 				<p><label for="bsc-tv-csv">Ou coller le tableau avec ses en-têtes</label><br><textarea class="large-text code" id="bsc-tv-csv" name="csv_text" rows="5"></textarea></p>
-				<p class="description">Chaînes <code>name,url,platform,bdd_id,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,channel_id,bdd_id,image,status,source</code></p>
-				<p><label><input type="checkbox" name="publish" value="1"> Publier les entrées de mon CSV au lieu de les enregistrer en brouillon</label></p>
+				<p class="description">Chaînes <code>name,url,platform,bdd_id,bdd_slug,source,country,language,activity,notes,keywords,feed_url,feed_timezone,feed_official</code><br>Émissions <code>title,url,starts_at,ends_at,platform,creator,channel_id,bdd_id,image,status,source</code></p>
+				<p><label><input type="checkbox" name="publish" value="1"> Publier les nouvelles entrées de mon CSV ou du catalogue des directs vérifiés</label></p>
 				<?php submit_button( 'Importer' ); ?>
 			</form>
 		</div>
