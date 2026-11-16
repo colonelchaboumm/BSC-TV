@@ -13,6 +13,75 @@
 	for (const image of document.querySelectorAll('[data-bsc-tv] img')) {
 		if (image.complete && image.naturalWidth === 0) hideBrokenImage({ target: image });
 	}
+
+	const positionPanel = (badge) => {
+		if (!badge.open || badge.classList.contains('bsc-tv-badge--inline')) return;
+		const panel = badge.querySelector('.bsc-tv-badge__panel');
+		const trigger = badge.querySelector('.bsc-tv-badge__trigger');
+		const bounds = trigger.getBoundingClientRect();
+		const viewport = document.documentElement;
+		const below = viewport.clientHeight - bounds.bottom - 20;
+		const above = bounds.top - 20;
+		const useAbove = below < Math.min(240, panel.scrollHeight) && above > below;
+		badge.dataset.bscTvPlacement = useAbove ? 'above' : 'below';
+		panel.style.setProperty('--bsc-tv-badge-panel-available', `${Math.max(80, useAbove ? above : below)}px`);
+
+		panel.style.removeProperty('--bsc-tv-badge-panel-shift');
+		const box = panel.getBoundingClientRect();
+		const shift = Math.max(12 - box.left, Math.min(0, viewport.clientWidth - 12 - box.right));
+		panel.style.setProperty('--bsc-tv-badge-panel-shift', `${shift}px`);
+	};
+
+	const closeBadge = (badge, restoreFocus) => {
+		badge.open = false;
+		if (restoreFocus) badge.querySelector('.bsc-tv-badge__trigger').focus();
+	};
+
+	document.addEventListener('toggle', ({ target }) => {
+		if (target.matches?.('.bsc-tv-badge[open]')) positionPanel(target);
+	}, true);
+	document.addEventListener('keydown', (event) => {
+		if (event.key !== 'Escape' || event.defaultPrevented) return;
+		const badge = event.target.closest?.('.bsc-tv-badge[open]');
+		if (!badge) return;
+		event.preventDefault();
+		closeBadge(badge, true);
+	});
+	document.addEventListener('click', ({ target }) => {
+		for (const badge of document.querySelectorAll('.bsc-tv-badge[open]:not(.bsc-tv-badge--inline)')) {
+			if (!badge.contains(target)) closeBadge(badge, false);
+		}
+	});
+	window.addEventListener('resize', () => {
+		for (const badge of document.querySelectorAll('.bsc-tv-badge[open]')) positionPanel(badge);
+	});
+
+	const updateBadge = (widget, highlight) => {
+		const badge = widget.querySelector('.bsc-tv-badge');
+		if (!badge || !highlight || !['live', 'upcoming', 'empty'].includes(highlight.state)) return;
+		if (![highlight.title, highlight.datetime, highlight.date].every((value) => typeof value === 'string')) return;
+		const status = badge.querySelector('.bsc-tv-badge__status');
+		const label = status.querySelector('.bsc-tv-badge__label');
+		const labels = { live: status.dataset.bscTvLiveLabel, upcoming: status.dataset.bscTvUpcomingLabel, empty: status.dataset.bscTvEmptyLabel };
+		widget.dataset.bscTvState = highlight.state;
+		if (label.textContent !== labels[highlight.state]) label.textContent = labels[highlight.state];
+		const title = badge.querySelector('.bsc-tv-badge__title');
+		const date = badge.querySelector('.bsc-tv-badge__date');
+		if (title) {
+			if (title.textContent !== highlight.title) title.textContent = highlight.title;
+			title.hidden = !highlight.title;
+		}
+		if (date) {
+			if (date.textContent !== highlight.date) date.textContent = highlight.date;
+			if (highlight.datetime) date.dateTime = highlight.datetime;
+			else date.removeAttribute('datetime');
+			date.hidden = !highlight.date;
+		}
+		const details = badge.querySelector('.bsc-tv-badge__details');
+		if (details) details.hidden = !(title && !title.hidden) && !(date && !date.hidden);
+		positionPanel(badge);
+	};
+
 	const tick = async () => {
 		if (document.visibilityState === 'hidden') return;
 		const groups = new Map();
@@ -28,11 +97,12 @@
 			if (typeof data.html !== 'string' || !Number.isInteger(data.live)) return;
 			for (const widget of widgets) {
 				const programme = widget.querySelector('.bsc-tv-programme');
-				if (!programme || programme.contains(document.activeElement)) continue;
-				if (widget.bscTvMarkup !== data.html) {
+				if (!programme) continue;
+				if (!programme.contains(document.activeElement) && widget.bscTvMarkup !== data.html) {
 					programme.innerHTML = data.html;
 					widget.bscTvMarkup = data.html;
 				}
+				updateBadge(widget, data.highlight);
 				if (Number(widget.dataset.live) !== data.live) {
 					widget.dataset.live = String(data.live);
 					widget.querySelector('.bsc-tv-announcement').textContent = data.live ? `${data.live} émission${data.live > 1 ? 's' : ''} en direct` : 'Aucune émission en direct';

@@ -10,8 +10,9 @@ final class BSC_TV_Display {
 		wp_register_script( 'bsc-tv', BSC_TV_URL . 'assets/programme.js', array(), BSC_TV_VERSION, true );
 		add_shortcode( 'bsc_tv', static function ( $attributes ) {
 			$attributes = (array) $attributes;
-			$compact = 'menu' === ( $attributes['format'] ?? '' );
-			return self::render( shortcode_atts( array( 'format' => 'programme', 'days' => $compact ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => $compact ? 'BSC TV' : 'Programme TV', 'agenda' => '' ), $attributes ) );
+			$format = $attributes['format'] ?? 'programme';
+			$compact = in_array( $format, array( 'menu', 'badge' ), true );
+			return self::render( shortcode_atts( array( 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '' ), $attributes ) );
 		} );
 	}
 
@@ -258,7 +259,19 @@ final class BSC_TV_Display {
 		} else {
 			echo '<p class="bsc-tv-empty">Aucun direct annoncé sur cette période.</p>';
 		}
-		return array( 'html' => ob_get_clean(), 'live' => count( $live ) );
+		return array( 'html' => ob_get_clean(), 'live' => count( $live ), 'highlight' => self::highlight( $live[0] ?? $upcoming[0] ?? array(), ! empty( $live ) ) );
+	}
+
+	private static function highlight( $event, $live ) {
+		if ( ! $event ) {
+			return array( 'state' => 'empty', 'title' => '', 'datetime' => '', 'date' => '' );
+		}
+		return array(
+			'state' => $live ? 'live' : 'upcoming',
+			'title' => html_entity_decode( wp_strip_all_tags( $event['title'] ?: 'Émission en direct' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
+			'datetime' => $live ? '' : gmdate( DATE_ATOM, $event['start'] ),
+			'date' => $live ? '' : wp_date( 'D j M · H:i', $event['start'] ),
+		);
 	}
 
 	private static function cards( $events, $config, $live, $featured ) {
@@ -272,17 +285,66 @@ final class BSC_TV_Display {
 	public static function render( $settings ) {
 		wp_enqueue_style( 'bsc-tv' );
 		wp_enqueue_script( 'bsc-tv' );
-		$config = self::config( $settings );
+		$badge = 'badge' === ( $settings['format'] ?? '' );
+		$config = self::config( $badge ? array_merge( $settings, array( 'format' => 'menu' ) ) : $settings );
 		$programme = self::programme( $config );
 		$title = sanitize_text_field( $settings['title'] ?? '' );
 		$agenda = BSC_TV_Content::url( $settings['agenda'] ?? '' );
+		$refresh_url = add_query_arg( $config, rest_url( 'bsc-tv/v1/programme' ) );
+		if ( $badge ) {
+			return self::badge( $settings, $programme, $title, $agenda, $refresh_url );
+		}
 		ob_start();
 		?>
-		<div class="bsc-tv bsc-tv--<?php echo esc_attr( $config['format'] ); ?>" data-bsc-tv="<?php echo esc_url( add_query_arg( $config, rest_url( 'bsc-tv/v1/programme' ) ) ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>">
+		<div class="bsc-tv bsc-tv--<?php echo esc_attr( $config['format'] ); ?>" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>">
 			<?php if ( $title ) : ?><p class="bsc-tv-heading"><?php echo esc_html( $title ); ?></p><?php endif; ?>
-			<div class="bsc-tv-programme"><?php echo $programme['html']; // Generated and escaped by card(). ?></div>
+			<?php self::programme_body( $programme, $agenda ); ?>
 			<span class="bsc-tv-announcement" role="status"></span>
-			<?php if ( $agenda ) : ?><a class="bsc-tv-agenda" href="<?php echo esc_url( $agenda ); ?>">Voir le programme <span aria-hidden="true">→</span></a><?php endif; ?>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	private static function programme_body( $programme, $agenda ) {
+		?>
+		<div class="bsc-tv-programme"><?php echo $programme['html']; // Generated and escaped by card(). ?></div>
+		<?php if ( $agenda ) : ?><a class="bsc-tv-agenda" href="<?php echo esc_url( $agenda ); ?>">Voir le programme <span aria-hidden="true">→</span></a><?php endif;
+	}
+
+	private static function badge( $settings, $programme, $title, $agenda, $refresh_url ) {
+		$highlight = $programme['highlight'];
+		$labels = array(
+			'live' => sanitize_text_field( $settings['live_label'] ?? '' ) ?: 'LIVE',
+			'upcoming' => sanitize_text_field( $settings['upcoming_label'] ?? '' ) ?: 'À venir',
+			'empty' => sanitize_text_field( $settings['empty_label'] ?? '' ) ?: 'BSC TV',
+		);
+		$show_title = ! isset( $settings['show_highlight_title'] ) || 'yes' === $settings['show_highlight_title'];
+		$show_date = ! isset( $settings['show_highlight_date'] ) || 'yes' === $settings['show_highlight_date'];
+		$inline = 'inline' === ( $settings['panel_mode'] ?? '' );
+		$animate = 'yes' === ( $settings['pulse'] ?? '' );
+		ob_start();
+		?>
+		<div class="bsc-tv bsc-tv--badge" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
+			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?><?php echo $animate ? ' bsc-tv-badge--pulse' : ''; ?>">
+				<summary class="bsc-tv-badge__trigger">
+					<span class="bsc-tv-badge__status" data-bsc-tv-live-label="<?php echo esc_attr( $labels['live'] ); ?>" data-bsc-tv-upcoming-label="<?php echo esc_attr( $labels['upcoming'] ); ?>" data-bsc-tv-empty-label="<?php echo esc_attr( $labels['empty'] ); ?>">
+						<span class="bsc-tv-badge__dot" aria-hidden="true"></span>
+						<span class="bsc-tv-badge__label"><?php echo esc_html( $labels[ $highlight['state'] ] ); ?></span>
+					</span>
+					<?php if ( $show_title || $show_date ) : ?>
+						<span class="bsc-tv-badge__details" <?php echo ( $show_title && $highlight['title'] ) || ( $show_date && $highlight['date'] ) ? '' : 'hidden'; ?>>
+							<?php if ( $show_title ) : ?><span class="bsc-tv-badge__title" <?php echo $highlight['title'] ? '' : 'hidden'; ?>><?php echo esc_html( $highlight['title'] ); ?></span><?php endif; ?>
+							<?php if ( $show_date ) : ?><time class="bsc-tv-badge__date" <?php echo $highlight['datetime'] ? 'datetime="' . esc_attr( $highlight['datetime'] ) . '"' : 'hidden'; ?>><?php echo esc_html( $highlight['date'] ); ?></time><?php endif; ?>
+						</span>
+					<?php endif; ?>
+					<span class="bsc-tv-badge__chevron" aria-hidden="true"></span>
+				</summary>
+				<div class="bsc-tv-badge__panel bsc-tv--menu">
+					<?php if ( $title ) : ?><p class="bsc-tv-heading"><?php echo esc_html( $title ); ?></p><?php endif; ?>
+					<?php self::programme_body( $programme, $agenda ); ?>
+				</div>
+			</details>
+			<span class="bsc-tv-announcement" role="status"></span>
 		</div>
 		<?php
 		return ob_get_clean();

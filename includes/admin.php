@@ -429,7 +429,7 @@ final class BSC_TV_Admin {
 		?>
 		<div class="wrap">
 			<h1>BSC TV</h1>
-			<p>Dans Elementor, ajoutez <strong>BSC TV – Programme</strong> à la page et <strong>BSC TV – Méga-menu</strong> au conteneur de votre menu.</p>
+			<p>Dans Elementor, ajoutez <strong>BSC TV – Programme</strong> à la page, <strong>BSC TV – Méga-menu</strong> au conteneur de votre menu ou <strong>BSC TV – Pastille Live</strong> pour afficher le programme au clic.</p>
 			<h2>Synchronisation</h2>
 			<p>Collecte quotidienne sur 45 jours pour YouTube, Twitch et les agendas publics configurés. Les annonces à vérifier apparaissent dans les brouillons des émissions.</p>
 			<p><?php echo $last ? esc_html( 'Dernière collecte terminée ' . wp_date( 'j F Y · H:i', $last ) . '.' ) : 'Première collecte en attente.'; ?>
