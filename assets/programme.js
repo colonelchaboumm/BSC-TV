@@ -1,5 +1,8 @@
 (() => {
 	const pollingInterval = 60_000;
+	const dropdownSelector = '.bsc-tv-badge:not(.bsc-tv-badge--inline)';
+	const hoverTimers = new WeakMap();
+	const openedByHover = new WeakSet();
 	const hideBrokenImage = (event) => {
 		const image = event.target;
 		if (image instanceof HTMLImageElement && image.closest('[data-bsc-tv]')) {
@@ -33,22 +36,71 @@
 	};
 
 	const closeBadge = (badge, restoreFocus) => {
+		clearTimeout(hoverTimers.get(badge));
+		openedByHover.delete(badge);
 		badge.open = false;
 		if (restoreFocus) badge.querySelector('.bsc-tv-badge__trigger').focus();
 	};
 
 	document.addEventListener('toggle', ({ target }) => {
-		if (target.matches?.('.bsc-tv-badge[open]')) positionPanel(target);
+		if (!target.matches?.(dropdownSelector)) return;
+		if (target.open) positionPanel(target);
+		else openedByHover.delete(target);
 	}, true);
+
+	document.addEventListener('pointerover', (event) => {
+		if (event.pointerType !== 'mouse') return;
+		const badge = event.target.closest?.(dropdownSelector);
+		if (!badge || badge.contains(event.relatedTarget)) return;
+		clearTimeout(hoverTimers.get(badge));
+		if (badge.open || !event.target.closest('.bsc-tv-badge__trigger')) return;
+		hoverTimers.set(badge, setTimeout(() => {
+			if (badge.open || !badge.isConnected) return;
+			openedByHover.add(badge);
+			badge.open = true;
+		}, 250));
+	});
+
+	document.addEventListener('pointerout', (event) => {
+		if (event.pointerType !== 'mouse') return;
+		const badge = event.target.closest?.(dropdownSelector);
+		if (!badge || badge.contains(event.relatedTarget)) return;
+		clearTimeout(hoverTimers.get(badge));
+		if (!badge.open) return;
+		hoverTimers.set(badge, setTimeout(() => {
+			if (!badge.querySelector(':focus-visible')) closeBadge(badge, false);
+		}, 500));
+	});
+
+	document.addEventListener('focusout', (event) => {
+		const badge = event.target.closest?.(dropdownSelector);
+		if (badge?.open && !badge.contains(event.relatedTarget)) closeBadge(badge, false);
+	});
+
 	document.addEventListener('keydown', (event) => {
 		if (event.key !== 'Escape' || event.defaultPrevented) return;
 		const badge = event.target.closest?.('.bsc-tv-badge[open]');
-		if (!badge) return;
-		event.preventDefault();
-		closeBadge(badge, true);
+		if (badge) {
+			event.preventDefault();
+			closeBadge(badge, true);
+			return;
+		}
+		for (const dropdown of document.querySelectorAll(`${dropdownSelector}[open]`)) {
+			event.preventDefault();
+			closeBadge(dropdown, false);
+		}
 	});
-	document.addEventListener('click', ({ target }) => {
-		for (const badge of document.querySelectorAll('.bsc-tv-badge[open]:not(.bsc-tv-badge--inline)')) {
+	document.addEventListener('click', (event) => {
+		const { target } = event;
+		const trigger = target.closest?.('.bsc-tv-badge__trigger');
+		const clicked = trigger?.closest(dropdownSelector);
+		const mouseClick = event.pointerType ? event.pointerType === 'mouse' : event.detail > 0;
+		if (clicked && mouseClick && openedByHover.has(clicked)) {
+			// The first click confirms an already visible menu. A second click toggles it.
+			event.preventDefault();
+			openedByHover.delete(clicked);
+		}
+		for (const badge of document.querySelectorAll(`${dropdownSelector}[open]`)) {
 			if (!badge.contains(target)) closeBadge(badge, false);
 		}
 	});
