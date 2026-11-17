@@ -9,6 +9,8 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 3. Importez **Catalogue inclus · émissions annoncées** pour récupérer les dates sourcées. Les dates et les liens peuvent évoluer. Les événements en brouillon sont modifiables avant publication. Ajoutez une image WordPress ou une URL de visuel si nécessaire.
 4. Renseignez les clés des plateformes utilisées, puis lancez **Collecter le programme maintenant**. Le dernier passage et les chaînes en attente figurent dans les réglages. Les erreurs d’API ou de flux figurent dans la fiche chaîne.
 
+Pour publier des brouillons existants, ouvrez **BSC TV → Chaînes** ou **BSC TV → Émissions**, puis l’onglet **Brouillons**. Cliquez sur **Publier** sous une ligne, ou sélectionnez plusieurs entrées et utilisez **Actions groupées → Publier les brouillons**. Le résultat indique les fiches à corriger.
+
 ## Associer une fiche créateur BSC BDD
 
 1. Dans **BSC TV → Chaînes**, utilisez la colonne **Fiche créateur BSC BDD** pour repérer les chaînes à associer.

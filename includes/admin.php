@@ -5,6 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Admin {
 	const MAX_IMPORT_BYTES = 1048576;
 	const MAX_IMPORT_ROWS = 500;
+	const PUBLISH_DRAFTS = 'bsc_tv_publish_drafts';
 
 	public static function register() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
@@ -14,11 +15,17 @@ final class BSC_TV_Admin {
 		add_action( 'admin_post_bsc_tv_settings', array( __CLASS__, 'save_settings' ) );
 		add_action( 'admin_post_bsc_tv_import', array( __CLASS__, 'import' ) );
 		add_action( 'admin_post_bsc_tv_sync_now', array( __CLASS__, 'sync_now' ) );
+		add_action( 'admin_post_bsc_tv_publish_drafts', array( __CLASS__, 'publish_row' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'notices' ) );
 		add_action( 'wp_ajax_bsc_tv_find_bdd', array( __CLASS__, 'find_bdd' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_filter( 'manage_' . BSC_TV_Content::CHANNEL . '_posts_columns', array( __CLASS__, 'channel_columns' ) );
 		add_action( 'manage_' . BSC_TV_Content::CHANNEL . '_posts_custom_column', array( __CLASS__, 'channel_column' ), 10, 2 );
+		add_filter( 'post_row_actions', array( __CLASS__, 'row_actions' ), 10, 2 );
+		foreach ( array( BSC_TV_Content::CHANNEL, BSC_TV_Content::SHOW ) as $type ) {
+			add_filter( "bulk_actions-edit-{$type}", array( __CLASS__, 'bulk_actions' ) );
+			add_filter( "handle_bulk_actions-edit-{$type}", array( __CLASS__, 'publish_bulk' ), 10, 3 );
+		}
 	}
 
 	public static function menu() {
@@ -56,6 +63,122 @@ final class BSC_TV_Admin {
 		}
 		if ( $edit = get_edit_post_link( $post_id, 'raw' ) ) {
 			printf( '<div class="row-actions"><a href="%s">%s</a></div>', esc_url( $edit . '#bsc-tv-profile' ), $profile ? 'Modifier l’association' : 'Associer une fiche' );
+		}
+	}
+
+	private static function can_publish( $type ) {
+		if ( ! in_array( $type, array( BSC_TV_Content::CHANNEL, BSC_TV_Content::SHOW ), true ) ) {
+			return false;
+		}
+		$object = get_post_type_object( $type );
+		return $object && current_user_can( $object->cap->publish_posts );
+	}
+
+	private static function is_draft( $post ) {
+		return $post && in_array( $post->post_status, array( 'draft', 'pending' ), true );
+	}
+
+	public static function row_actions( $actions, $post ) {
+		if ( self::can_publish( $post->post_type ) && self::is_draft( $post ) && current_user_can( 'edit_post', $post->ID ) ) {
+			$url = add_query_arg( array( 'action' => self::PUBLISH_DRAFTS, 'post' => $post->ID ), admin_url( 'admin-post.php' ) );
+			$actions[ self::PUBLISH_DRAFTS ] = sprintf( '<a href="%s" aria-label="%s">Publier</a>', esc_url( wp_nonce_url( $url, self::PUBLISH_DRAFTS . '_' . $post->ID ) ), esc_attr( sprintf( 'Publier %s', $post->post_title ) ) );
+		}
+		return $actions;
+	}
+
+	public static function bulk_actions( $actions ) {
+		if ( self::can_publish( get_current_screen()->post_type ?? '' ) ) {
+			$actions[ self::PUBLISH_DRAFTS ] = 'Publier les brouillons';
+		}
+		return $actions;
+	}
+
+	public static function publish_row() {
+		$id = absint( $_GET['post'] ?? 0 );
+		check_admin_referer( self::PUBLISH_DRAFTS . '_' . $id );
+		$type = $id ? get_post_type( $id ) : '';
+		self::publish_selection( $type, array( $id ) );
+		wp_safe_redirect( wp_get_referer() ?: admin_url( 'edit.php?post_type=' . $type ) );
+		exit;
+	}
+
+	public static function publish_bulk( $redirect, $action, $ids ) {
+		if ( self::PUBLISH_DRAFTS === $action ) {
+			self::publish_selection( get_current_screen()->post_type ?? '', $ids );
+		}
+		return $redirect;
+	}
+
+	private static function publish_selection( $type, $ids ) {
+		if ( ! self::can_publish( $type ) ) {
+			wp_die( 'Vous n’avez pas les droits de publication pour ces entrées.', '', array( 'response' => 403 ) );
+		}
+		$published = 0;
+		$skipped = 0;
+		$errors = array();
+		foreach ( array_unique( array_filter( array_map( 'absint', $ids ) ) ) as $id ) {
+			$post = get_post( $id );
+			if ( ! $post || $type !== $post->post_type || ! self::is_draft( $post ) || ! current_user_can( 'edit_post', $id ) ) {
+				++$skipped;
+				continue;
+			}
+			$result = self::publish_draft( $post );
+			if ( is_wp_error( $result ) ) {
+				$errors[] = sprintf( '« %s » — %s', $post->post_title ?: '#' . $id, $result->get_error_message() );
+			} else {
+				++$published;
+			}
+		}
+		$message = sprintf( '%d entrée(s) publiée(s).', $published );
+		if ( $skipped ) {
+			$message .= sprintf( ' %d entrée(s) ignorée(s) car déjà traitée(s) ou inaccessible(s).', $skipped );
+		}
+		if ( $errors ) {
+			$message .= ' ' . implode( ' ', array_slice( $errors, 0, 5 ) );
+			if ( count( $errors ) > 5 ) {
+				$message .= sprintf( ' %d autre(s) entrée(s) restent à vérifier.', count( $errors ) - 5 );
+			}
+		}
+		self::message( $message, $errors || $skipped ? 'warning' : 'success' );
+	}
+
+	private static function publish_draft( $post ) {
+		if ( wp_check_post_lock( $post->ID ) ) {
+			return new WP_Error( 'bsc_tv_draft_locked', 'Une autre personne modifie cette fiche.' );
+		}
+		$feed = get_post_meta( $post->ID, BSC_TV_Library::FEED, true );
+		$lock = $feed ? BSC_TV_Content::lock( BSC_TV_Sync::LOCK ) : '';
+		if ( $feed && ! $lock ) {
+			return new WP_Error( 'bsc_tv_draft_busy', 'La collecte de l’agenda est en cours. Réessayez dans un instant.' );
+		}
+		try {
+			if ( $feed ) {
+				clean_post_cache( $post->ID );
+				if ( ! self::is_draft( get_post( $post->ID ) ) ) {
+					return new WP_Error( 'bsc_tv_draft_changed', 'Le statut de cette émission vient de changer.' );
+				}
+			}
+			$data = BSC_TV_Content::data( $post->ID );
+			if ( ! BSC_TV_Content::url( $data['url'] ?? '' ) ) {
+				return new WP_Error( 'bsc_tv_draft_url', 'Renseignez une URL valide dans la fiche.' );
+			}
+			if ( BSC_TV_Content::SHOW === $post->post_type && ! BSC_TV_Content::show_dates_valid( $data['start'] ?? 0, $data['end'] ?? 0, $data['status'] ?? '' ) ) {
+				return new WP_Error( 'bsc_tv_draft_dates', 'Vérifiez les horaires et l’état de l’émission dans la fiche.' );
+			}
+			$now = current_time( 'mysql', true );
+			$update = array( 'ID' => $post->ID, 'post_status' => 'publish', 'edit_date' => true, 'post_date' => get_date_from_gmt( $now ), 'post_date_gmt' => $now );
+			if ( $feed ) {
+				$update['meta_input'] = array( BSC_TV_Library::AUTO => 0 );
+			}
+			$result = wp_update_post( $update, true );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			return $result && 'publish' === get_post_status( $post->ID ) ? true : new WP_Error( 'bsc_tv_draft_publish', 'WordPress n’a pas publié cette entrée.' );
+		} finally {
+			if ( $lock ) {
+				BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $lock );
+			}
 		}
 	}
 
@@ -526,6 +649,7 @@ final class BSC_TV_Admin {
 			<hr>
 			<h2>Catalogue et import CSV</h2>
 			<p>Choisissez le catalogue des directs vérifiés pour suivre les créateurs dont la chaîne a diffusé ou annoncé un direct. L’import associe les fiches BSC BDD reconnues et complète les chaînes déjà importées sans remplacer leurs associations.</p>
+			<p>Pour publier des brouillons existants, sélectionnez-les dans <a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . BSC_TV_Content::CHANNEL . '&post_status=draft' ) ); ?>">Chaînes</a> ou <a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . BSC_TV_Content::SHOW . '&post_status=draft' ) ); ?>">Émissions</a>, puis choisissez <strong>Publier les brouillons</strong> dans les actions groupées.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data">
 				<input type="hidden" name="action" value="bsc_tv_import">
 				<?php wp_nonce_field( 'bsc_tv_import' ); ?>

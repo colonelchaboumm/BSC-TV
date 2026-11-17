@@ -26,7 +26,7 @@ final class BSC_TV_Library {
 
 	public static function show_identity( $event ) {
 		$video = BSC_TV_Content::youtube_video_id( $event['url'] );
-		return $video ? 'youtube:' . $video : untrailingslashit( $event['url'] ) . ':' . $event['start'];
+		return $video ? 'youtube:' . $video : untrailingslashit( $event['url'] ) . ':' . ( $event['start'] ?? 0 );
 	}
 
 	public static function archive_snapshot( $channel, $event, $reason ) {

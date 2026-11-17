@@ -197,13 +197,18 @@ final class BSC_TV_Content {
 		);
 	}
 
+	public static function show_dates_valid( $start, $end, $status ) {
+		$now = time();
+		return $start > 0 && ( ! $end || $end > $start ) && ( 'live' !== $status || ( $start <= $now && $end > $now ) );
+	}
+
 	public static function show_data( $input ) {
 		$url = self::url( $input['url'] ?? '' );
 		$start = self::parse_date( $input['starts_at'] ?? '' );
 		$end = self::parse_date( $input['ends_at'] ?? '' );
 		$platform = sanitize_key( $input['platform'] ?? '' );
 		$status = sanitize_key( $input['status'] ?? '' );
-		if ( ! $url || ! $start || ( ! empty( $input['ends_at'] ) && $end <= $start ) || ( 'live' === $status && ( ! $end || $start > time() || $end <= time() ) ) ) {
+		if ( ! $url || ( ! empty( $input['ends_at'] ) && ! $end ) || ! self::show_dates_valid( $start, $end, $status ) ) {
 			return new WP_Error( 'invalid_show', 'Saisissez un lien et un début valides. Une émission déclarée en direct doit avoir commencé et avoir une heure de fin future.' );
 		}
 		return array(
