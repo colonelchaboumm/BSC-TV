@@ -4,14 +4,14 @@
 	const selector = '[data-bsc-tv-guide]';
 	const guides = new WeakMap();
 
-	function showWeeks({ content, weeksVisible }) {
-		const weeks = content.querySelectorAll('[data-guide-week]');
-		weeks.forEach((week, index) => { week.hidden = index >= weeksVisible; });
+	function showGroups({ content, groupsVisible }) {
+		const groups = content.querySelectorAll('[data-guide-week]');
+		groups.forEach((group, index) => { group.hidden = index >= groupsVisible; });
 		const button = content.querySelector('[data-guide-more]');
 		if (!button) return;
-		const days = weeks[weeksVisible]?.querySelectorAll('[data-guide-day]').length || 0;
+		const days = groups[groupsVisible]?.querySelectorAll('[data-guide-day]').length || 0;
 		button.hidden = days === 0;
-		button.textContent = days === 1 ? 'Afficher le jour suivant' : `Afficher les ${days} jours suivants`;
+		button.textContent = days === 1 ? 'Afficher la prochaine date' : `Afficher les ${days} prochaines dates`;
 	}
 
 	function hideBrokenImage(event) {
@@ -22,21 +22,21 @@
 		if (guides.has(root)) return guides.get(root);
 		const content = root.querySelector('[data-guide-content]');
 		if (!content) return null;
-		const state = { content, loading: false, lastHtml: '', weeksVisible: 1 };
+		const state = { content, loading: false, lastHtml: '', groupsVisible: 1 };
 		guides.set(root, state);
 		root.addEventListener('error', hideBrokenImage, true);
 		content.addEventListener('click', event => {
 			if (!event.target.closest('[data-guide-more]')) return;
 			const nextDate = content.querySelector('[data-guide-week][hidden] [data-guide-date]');
 			if (!nextDate) return;
-			state.weeksVisible += 1;
-			showWeeks(state);
+			state.groupsVisible += 1;
+			showGroups(state);
 			nextDate.focus();
 		});
 		for (const image of content.querySelectorAll('img')) {
 			if (image.complete && !image.naturalWidth) image.hidden = true;
 		}
-		showWeeks(state);
+		showGroups(state);
 		return state;
 	}
 
@@ -60,7 +60,7 @@
 				day.dataset.guideDay, day.querySelector('.bsc-guide__scroll')?.scrollLeft || 0,
 			]));
 			content.innerHTML = data.html;
-			showWeeks(state);
+			showGroups(state);
 			for (const day of content.querySelectorAll('[data-guide-day]')) {
 				const grid = day.querySelector('.bsc-guide__scroll');
 				if (grid) grid.scrollLeft = scrolls.get(day.dataset.guideDay) || 0;

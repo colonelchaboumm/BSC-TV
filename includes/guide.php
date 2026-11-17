@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class BSC_TV_Guide {
-	const DAYS_PER_WEEK = 7;
+	const DAYS_PER_GROUP = 7;
 
 	public static function render( $title, $url, $schedule ) {
 		ob_start();
@@ -54,30 +54,26 @@ final class BSC_TV_Guide {
 			}
 		}
 
-		$last = $dates ? max( array_keys( $dates ) ) : $today_start;
-		$weeks = array();
-		for ( $day = $today, $index = 0; $day->getTimestamp() < $until; $day = $day->modify( '+1 day' ), ++$index ) {
-			$date = $day->getTimestamp();
-			if ( 0 === $index % self::DAYS_PER_WEEK && $date > $last ) {
-				break;
-			}
-			$weeks[ intdiv( $index, self::DAYS_PER_WEEK ) ][ $date ] = $dates[ $date ] ?? array();
+		if ( ! $dates ) {
+			return '<p class="bsc-guide__empty">Aucune émission annoncée sur cette période.</p>';
 		}
+		ksort( $dates, SORT_NUMERIC );
+		$groups = array_chunk( $dates, self::DAYS_PER_GROUP, true );
 		uasort( $rows, static function ( $left, $right ) {
 			return strnatcasecmp( $left['name'], $right['name'] ) ?: strcmp( $left['platform'], $right['platform'] );
 		} );
 
 		ob_start();
 		?>
-		<?php foreach ( $weeks as $index => $week ) : ?>
+		<?php foreach ( $groups as $index => $group ) : ?>
 			<div class="bsc-guide__week" data-guide-week<?php if ( $index ) : ?> hidden<?php endif; ?>>
-				<?php foreach ( $week as $date => $day_rows ) : ?>
+				<?php foreach ( $group as $date => $day_rows ) : ?>
 					<?php self::day( $date, $day_rows, $rows, $today_start, $timezone, $now, $images ); ?>
 				<?php endforeach; ?>
 			</div>
 		<?php endforeach; ?>
-		<?php if ( count( $weeks ) > 1 ) : ?>
-			<button class="bsc-guide__more" type="button" data-guide-more hidden>Afficher les jours suivants</button>
+		<?php if ( count( $groups ) > 1 ) : ?>
+			<button class="bsc-guide__more" type="button" data-guide-more hidden>Afficher les prochaines dates</button>
 		<?php endif; ?>
 		<?php
 		return ob_get_clean();
@@ -116,11 +112,7 @@ final class BSC_TV_Guide {
 		?>
 		<section class="bsc-guide__day" data-guide-day="<?php echo esc_attr( $date ); ?>">
 			<h3 class="bsc-guide__date" data-guide-date tabindex="-1"><?php echo esc_html( $label ); ?></h3>
-			<?php if ( $day_rows ) : ?>
-				<?php self::timeline( $date, $label, $day_rows, $rows, $timezone, $now, $images ); ?>
-			<?php else : ?>
-				<p class="bsc-guide__empty">Aucune émission annoncée.</p>
-			<?php endif; ?>
+			<?php self::timeline( $date, $label, $day_rows, $rows, $timezone, $now, $images ); ?>
 		</section>
 		<?php
 	}
