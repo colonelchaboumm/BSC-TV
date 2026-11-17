@@ -218,6 +218,12 @@ final class BSC_TV_Admin {
 			self::field( 'keywords', 'Filtre facultatif, mots-clés séparés par des virgules', $data['keywords'] ?? '' );
 			self::field( 'feed_url', 'URL de l’agenda ou du flux public', $data['feed_url'] ?? '', 'url' );
 			echo '<p class="description">Formats compatibles : iCalendar (.ics), RSS avec dates d’événement ou page d’agenda structurée en JSON-LD.</p>';
+			if ( empty( $data['feed_url'] ) ) {
+				$catalogue = BSC_TV_Feeds::with_catalogue_source( $data );
+				if ( ! empty( $catalogue['feed_url'] ) ) {
+					printf( '<p class="description">Agenda utilisé par défaut <a href="%s">Agenda du catalogue BSC TV</a>.</p>', esc_url( $catalogue['feed_url'] ) );
+				}
+			}
 			self::field( 'feed_timezone', 'Fuseau de l’agenda pour les horaires sans indication (ex. Europe/Berlin)', $data['feed_timezone'] ?? '' );
 			if ( current_user_can( 'manage_options' ) ) {
 				printf( '<p><label><input type="checkbox" name="bsc_tv[feed_official]" value="1" %s> Publier automatiquement les annonces confirmées de cette source officielle</label></p>', checked( 1, $data['feed_official'] ?? 0, false ) );
@@ -386,6 +392,8 @@ final class BSC_TV_Admin {
 
 	public static function save_settings() {
 		self::authorize( 'bsc_tv_settings' );
+		$discovery_keys = array_fill_keys( array( 'youtube_key', 'twitch_id', 'twitch_secret' ), true );
+		$previous = array_intersect_key( BSC_TV_Sync::settings(), $discovery_keys );
 		$current = (array) get_option( BSC_TV_Sync::SETTINGS, array() );
 		$input = (array) wp_unslash( $_POST['bsc_tv'] ?? array() );
 		foreach ( self::secrets() as $key => $label ) {
@@ -402,7 +410,8 @@ final class BSC_TV_Admin {
 		$current['live_enabled'] = empty( $input['live_enabled'] ) ? 0 : 1;
 		update_option( BSC_TV_Sync::SETTINGS, $current, false );
 		BSC_TV_Sync::schedule();
-		self::message( 'Réglages enregistrés.' );
+		$changed = $previous !== array_intersect_key( BSC_TV_Sync::settings(), $discovery_keys );
+		self::message( $changed && BSC_TV_Sync::queue( BSC_TV_Sync::DAILY_NOW ) ? 'Réglages enregistrés. La collecte des chaînes publiées est planifiée.' : 'Réglages enregistrés.' );
 		self::redirect();
 	}
 
@@ -614,12 +623,25 @@ final class BSC_TV_Admin {
 		$last_live = (int) get_option( BSC_TV_Sync::LAST_LIVE );
 		$remaining = count( (array) get_option( BSC_TV_Sync::QUEUE, array() ) );
 		$quota = (array) get_option( BSC_TV_Sync::QUOTA, array() );
+		$channels = BSC_TV_Sync::discovery_channels( $settings );
+		$ready = count( array_filter( array_column( $channels, 'ready' ) ) );
+		$next = wp_next_scheduled( BSC_TV_Sync::CONTINUE_DAILY );
+		foreach ( array( BSC_TV_Sync::DAILY_NOW, BSC_TV_Sync::DAILY ) as $hook ) {
+			$run = wp_next_scheduled( $hook );
+			if ( $run && ( ! $next || $run < $next ) ) {
+				$next = $run;
+			}
+		}
 		?>
 		<div class="wrap">
 			<h1>BSC TV</h1>
-			<p>Dans Elementor, ajoutez <strong>BSC TV – Programme</strong> à la page, <strong>BSC TV – Méga-menu</strong> au conteneur de votre menu ou <strong>BSC TV – Pastille Live</strong> pour afficher le programme au clic.</p>
+			<p>Dans Elementor, ajoutez <strong>BSC TV – Grille TV</strong> ou <strong>BSC TV – Programme</strong> à votre page. Utilisez <strong>BSC TV – Méga-menu</strong> ou <strong>BSC TV – Pastille Live</strong> dans votre menu.</p>
 			<h2>Synchronisation</h2>
-			<p>Collecte quotidienne sur 45 jours pour YouTube, Twitch et les agendas publics configurés. Les annonces à vérifier apparaissent dans les brouillons des émissions.</p>
+			<p>Collecte automatique chaque jour sur 45 jours pour les chaînes publiées. Les annonces à vérifier apparaissent dans les brouillons des émissions.</p>
+			<p><?php echo esc_html( sprintf( '%d chaîne(s) sur %d avec un agenda ou un accès API configuré.', $ready, count( $channels ) ) ); ?>
+			<?php if ( $ready < count( $channels ) ) : ?> Ajoutez les accès API ci-dessous ou renseignez un agenda public dans la fiche de la chaîne.<?php endif; ?></p>
+			<?php if ( $next ) : ?><p><?php echo $next <= time() ? 'Prochaine collecte en attente d’exécution par WP-Cron.' : esc_html( 'Prochaine collecte à partir du ' . wp_date( 'j F Y à H:i', $next ) . '.' ); ?></p><?php endif; ?>
+			<?php if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) : ?><p class="description">Le lancement de WP-Cron lors des visites est désactivé. La collecte dépend du cron configuré chez votre hébergeur.</p><?php endif; ?>
 			<p><?php echo $last ? esc_html( 'Dernière collecte terminée ' . wp_date( 'j F Y · H:i', $last ) . '.' ) : 'Première collecte en attente.'; ?>
 			<?php if ( $remaining ) : echo esc_html( sprintf( ' Chaînes restant à traiter : %d.', $remaining ) ); endif; ?></p>
 			<?php if ( $last_live ) : ?><p><?php echo esc_html( 'Dernier contrôle des directs ' . wp_date( 'j F Y · H:i', $last_live ) . '.' ); ?></p><?php endif; ?>

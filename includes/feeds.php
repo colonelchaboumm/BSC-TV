@@ -5,6 +5,33 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Feeds {
 	const MAX_BYTES = 1048576;
 
+	public static function with_catalogue_source( $data ) {
+		if ( ! empty( $data['feed_url'] ) || empty( $data['url'] ) ) {
+			return $data;
+		}
+		static $sources;
+		if ( null === $sources ) {
+			$sources = array();
+			$file = fopen( BSC_TV_DIR . 'data/createurs.csv', 'rb' );
+			if ( $file ) {
+				$columns = fgetcsv( $file, 0, ',', '"', '' ) ?: array();
+				while ( false !== ( $row = fgetcsv( $file, 0, ',', '"', '' ) ) ) {
+					if ( count( $row ) !== count( $columns ) ) {
+						continue;
+					}
+					$entry = BSC_TV_Content::channel_data( array_combine( $columns, $row ) );
+					if ( $entry['url'] && $entry['feed_url'] ) {
+						$key = BSC_TV_Content::channel_identity( $entry['platform'], $entry['url'] );
+						$sources[ $key ] = array_intersect_key( $entry, array( 'feed_url' => true, 'feed_timezone' => true, 'feed_official' => true ) );
+					}
+				}
+				fclose( $file );
+			}
+		}
+		$key = BSC_TV_Content::channel_identity( $data['platform'] ?? BSC_TV_Content::platform_for_url( $data['url'] ), $data['url'] );
+		return array_replace( $data, $sources[ $key ] ?? array() );
+	}
+
 	public static function fetch( $channel, $now ) {
 		$url = $channel['data']['feed_url'];
 		$result = wp_safe_remote_get( $url, array( 'timeout' => 7, 'redirection' => 2, 'limit_response_size' => self::MAX_BYTES + 1 ) );

@@ -16,6 +16,7 @@ final class BSC_TV_Sync {
 	const LAST_LIVE = 'bsc_tv_last_live_check';
 	const LOCK = 'bsc_tv_sync_lock';
 	const QUOTA = 'bsc_tv_youtube_search_quota';
+	const CRON_VERSION = 3;
 
 	public static function settings() {
 		$values = (array) get_option( self::SETTINGS, array() );
@@ -37,7 +38,11 @@ final class BSC_TV_Sync {
 	public static function activate() {
 		wp_unschedule_hook( 'bsc_tv_sync' );
 		self::schedule();
-		update_option( 'bsc_tv_cron_version', 2, false );
+		$next = wp_next_scheduled( self::DAILY );
+		if ( ! $next || $next > time() + MINUTE_IN_SECONDS ) {
+			self::queue( self::DAILY_NOW );
+		}
+		update_option( 'bsc_tv_cron_version', self::CRON_VERSION, false );
 	}
 
 	public static function deactivate() {
@@ -47,11 +52,11 @@ final class BSC_TV_Sync {
 	}
 
 	public static function upgrade() {
-		if ( 2 !== (int) get_option( 'bsc_tv_cron_version' ) ) {
+		if ( self::CRON_VERSION !== (int) get_option( 'bsc_tv_cron_version' ) ) {
 			self::activate();
 			return;
 		}
-		self::schedule_live();
+		self::schedule();
 	}
 
 	public static function schedule() {
@@ -89,8 +94,7 @@ final class BSC_TV_Sync {
 	}
 
 	public static function queue( $hook, $delay = 15 ) {
-		$next = wp_next_scheduled( $hook );
-		return ( $next && $next <= time() + $delay + 60 ) || wp_schedule_single_event( time() + $delay, $hook );
+		return wp_next_scheduled( $hook ) || wp_schedule_single_event( time() + $delay, $hook ) || wp_next_scheduled( $hook );
 	}
 
 	public static function daily() {
@@ -99,6 +103,39 @@ final class BSC_TV_Sync {
 
 	public static function continue_daily() {
 		self::discover( false );
+	}
+
+	public static function refresh_discovery() {
+		if ( get_option( self::QUEUE ) ) {
+			// Finish the previous run before building a fresh list with the current settings.
+			self::queue( self::DAILY_NOW, 5 * MINUTE_IN_SECONDS );
+			self::queue( self::CONTINUE_DAILY );
+			return;
+		}
+		self::daily();
+	}
+
+	public static function discovery_channels( $settings ) {
+		$available = array(
+			'youtube' => (bool) $settings['youtube_key'],
+			'twitch'  => $settings['twitch_id'] && $settings['twitch_secret'],
+		);
+		$channels = array();
+		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
+			$data = BSC_TV_Content::data( $post->ID );
+			if ( empty( $data['url'] ) ) {
+				continue;
+			}
+			$platform = $data['platform'] ?? '';
+			$key = BSC_TV_Content::channel_key( $platform, $data['url'] );
+			$data = BSC_TV_Feeds::with_catalogue_source( $data );
+			$api = $key && ! empty( $available[ $platform ] ) ? $platform : '';
+			$channels[ $post->ID ] = array(
+				'id' => $post->ID, 'key' => $key, 'data' => $data, 'api' => $api,
+				'ready' => $api || ! empty( $data['feed_url'] ),
+			);
+		}
+		return $channels;
 	}
 
 	private static function discover( $begin ) {
@@ -111,34 +148,35 @@ final class BSC_TV_Sync {
 		try {
 			$settings = self::settings();
 			$now = time();
-			$channels = array();
-			foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
-				$data = BSC_TV_Content::data( $post->ID );
-				$key = BSC_TV_Content::channel_key( $data['platform'] ?? '', $data['url'] ?? '' );
-				if ( $key || ! empty( $data['feed_url'] ) ) {
-					$channels[ $post->ID ] = array( 'id' => $post->ID, 'key' => $key, 'data' => $data, 'state' => self::state( $post->ID, $key ) );
-				}
-			}
 			$queue = (array) get_option( self::QUEUE, array() );
 			if ( ! $queue && ! $begin ) {
 				return;
 			}
-			if ( ! $queue ) {
+			$channels = array_filter( self::discovery_channels( $settings ), static function ( $channel ) {
+				return $channel['ready'];
+			} );
+			$starting = ! $queue;
+			if ( $starting ) {
+				foreach ( $channels as $id => $channel ) {
+					$channels[ $id ]['state'] = self::state( $id, $channel['key'] );
+				}
 				uasort( $channels, static function ( $a, $b ) { return ( $a['state']['schedule_attempt'] ?? 0 ) <=> ( $b['state']['schedule_attempt'] ?? 0 ); } );
 				$queue = array_keys( $channels );
 				update_option( self::QUEUE, $queue, false );
-				if ( $settings['youtube_key'] ) {
-					self::manual_youtube( $settings['youtube_key'], $now, false );
-				}
+			}
+			if ( $queue ) {
+				self::queue( self::CONTINUE_DAILY, 30 );
+			}
+			if ( $starting && $settings['youtube_key'] ) {
+				self::manual_youtube( $settings['youtube_key'], $now, false );
 			}
 			$deadline = microtime( true ) + 15;
 			for ( $count = 0; $queue && $count < 4 && microtime( true ) < $deadline; ++$count ) {
 				$id = reset( $queue );
-				if ( count( $queue ) > 1 ) {
-					self::queue( self::CONTINUE_DAILY, 30 );
-				}
 				if ( isset( $channels[ $id ] ) ) {
-					self::discover_channel( $channels[ $id ], $settings, $now );
+					$channel = $channels[ $id ];
+					$channel['state'] = $channel['state'] ?? self::state( $id, $channel['key'] );
+					self::discover_channel( $channel, $settings, $now );
 				}
 				array_shift( $queue );
 				update_option( self::QUEUE, $queue, false );
@@ -158,10 +196,10 @@ final class BSC_TV_Sync {
 
 	private static function discover_channel( $channel, $settings, $now ) {
 		$data = $channel['data'];
-		if ( $channel['key'] && 'twitch' === $data['platform'] && $settings['twitch_id'] && $settings['twitch_secret'] ) {
+		if ( 'twitch' === $channel['api'] ) {
 			self::discover_twitch( $channel, $settings, $now );
 		}
-		if ( $channel['key'] && 'youtube' === $data['platform'] && $settings['youtube_key'] ) {
+		if ( 'youtube' === $channel['api'] ) {
 			self::discover_youtube( $channel, $settings['youtube_key'], $now );
 		}
 		if ( ! empty( $data['feed_url'] ) ) {
