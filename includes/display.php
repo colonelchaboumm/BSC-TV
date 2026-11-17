@@ -8,6 +8,8 @@ final class BSC_TV_Display {
 	public static function register() {
 		wp_register_style( 'bsc-tv', BSC_TV_URL . 'assets/programme.css', array(), BSC_TV_VERSION );
 		wp_register_script( 'bsc-tv', BSC_TV_URL . 'assets/programme.js', array(), BSC_TV_VERSION, true );
+		wp_register_style( 'bsc-tv-guide', BSC_TV_URL . 'assets/guide.css', array(), BSC_TV_VERSION );
+		wp_register_script( 'bsc-tv-guide', BSC_TV_URL . 'assets/guide.js', array(), BSC_TV_VERSION, true );
 		add_shortcode( 'bsc_tv', static function ( $attributes ) {
 			$attributes = (array) $attributes;
 			$format = $attributes['format'] ?? 'programme';
@@ -17,12 +19,13 @@ final class BSC_TV_Display {
 	}
 
 	private static function config( $values ) {
-		$compact = 'menu' === ( $values['format'] ?? '' );
+		$format = $values['format'] ?? 'programme';
+		$compact = 'menu' === $format;
 		$platform = sanitize_key( $values['platform'] ?? '' );
 		return array(
-			'format' => $compact ? 'menu' : 'programme',
+			'format' => in_array( $format, array( 'menu', 'guide' ), true ) ? $format : 'programme',
 			'days' => max( 1, min( self::MAX_DAYS, absint( $values['days'] ?? 45 ) ) ),
-			'limit' => max( 1, min( $compact ? 12 : 60, absint( $values['limit'] ?? 12 ) ) ),
+			'limit' => 'guide' === $format ? null : max( 1, min( $compact ? 12 : 60, absint( $values['limit'] ?? 12 ) ) ),
 			'platform' => isset( BSC_TV_Content::platforms()[ $platform ] ) ? $platform : '',
 			'image' => empty( $values['image'] ) ? 0 : 1,
 		);
@@ -33,7 +36,7 @@ final class BSC_TV_Display {
 			'methods' => WP_REST_Server::READABLE,
 			'permission_callback' => '__return_true',
 			'args' => array(
-				'format' => array( 'type' => 'string', 'enum' => array( 'programme', 'menu' ) ),
+				'format' => array( 'type' => 'string', 'enum' => array( 'programme', 'menu', 'guide' ) ),
 				'days' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => self::MAX_DAYS ),
 				'limit' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 60 ),
 				'platform' => array( 'type' => 'string', 'enum' => array_merge( array( '' ), array_keys( BSC_TV_Content::platforms() ) ) ),
@@ -41,7 +44,8 @@ final class BSC_TV_Display {
 			),
 			'callback' => static function ( $request ) {
 				$config = self::config( $request->get_query_params() );
-				$response = new WP_REST_Response( self::programme( $config ) );
+				$content = 'guide' === $config['format'] ? array( 'html' => self::guide( $config ) ) : self::programme( $config );
+				$response = new WP_REST_Response( $content );
 				$response->header( 'Cache-Control', 'no-store, max-age=0' );
 				return $response;
 			},
@@ -98,8 +102,9 @@ final class BSC_TV_Display {
 		return 1 === count( $matches ) ? key( $matches ) : 0;
 	}
 
-	private static function events( $config ) {
+	private static function events( $config, $until = null ) {
 		$now = time();
+		$until = $until ?? $now + $config['days'] * DAY_IN_SECONDS;
 		$live_enabled = ! empty( BSC_TV_Sync::settings()['live_enabled'] );
 		$live = array();
 		$upcoming = array();
@@ -118,6 +123,7 @@ final class BSC_TV_Display {
 			$channel = $channels[ $channel_id ] ?? array();
 			$data['bdd_id'] = BSC_TV_Content::profile( $data['bdd_id'] ) ? $data['bdd_id'] : ( $channel['bdd_id'] ?? 0 );
 			$data['creator'] = $data['creator'] ?: ( $channel['creator'] ?? '' );
+			$data['channel_id'] = $channel_id;
 			if ( isset( $state['video'] ) && 'upcoming' === $data['status'] ) {
 				$video = $state['video'];
 				if ( in_array( $video['status'], array( 'ended', 'cancelled' ), true ) ) {
@@ -192,12 +198,20 @@ final class BSC_TV_Display {
 			return ! $config['platform'] || $config['platform'] === $event['platform'];
 		};
 		$live = array_filter( $live, $platform_filter );
-		$upcoming = array_filter( $upcoming, static function ( $event ) use ( $now, $config, $platform_filter ) {
-			return $event['start'] >= $now && $event['start'] <= $now + $config['days'] * DAY_IN_SECONDS && $platform_filter( $event );
+		$upcoming = array_filter( $upcoming, static function ( $event ) use ( $now, $until, $platform_filter ) {
+			return $event['start'] >= $now && $event['start'] <= $until && $platform_filter( $event );
 		} );
 		usort( $live, static function ( $left, $right ) { return $right['start'] <=> $left['start']; } );
 		usort( $upcoming, static function ( $left, $right ) { return $left['start'] <=> $right['start']; } );
-		return array( array_slice( $live, 0, $config['limit'] ), array_slice( $upcoming, 0, $config['limit'] ) );
+		return array( array_slice( $live, 0, $config['limit'] ), array_slice( $upcoming, 0, $config['limit'] ), $channels );
+	}
+
+	private static function guide( $config ) {
+		$now = time();
+		$today = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( wp_timezone() )->setTime( 0, 0 );
+		$until = $today->modify( '+' . $config['days'] . ' days' )->getTimestamp();
+		list( $live, $upcoming, $channels ) = self::events( $config, $until - 1 );
+		return BSC_TV_Guide::schedule( $live, $upcoming, $channels, $today, $until, $now, $config['image'] );
 	}
 
 	private static function overlaps_live( $event, $starts ) {
@@ -283,6 +297,13 @@ final class BSC_TV_Display {
 	}
 
 	public static function render( $settings ) {
+		if ( 'guide' === ( $settings['format'] ?? '' ) ) {
+			$config = self::config( $settings );
+			wp_enqueue_style( 'bsc-tv-guide' );
+			wp_enqueue_script( 'bsc-tv-guide' );
+			$url = add_query_arg( array_diff_key( $config, array( 'limit' => true ) ), rest_url( 'bsc-tv/v1/programme' ) );
+			return BSC_TV_Guide::render( sanitize_text_field( $settings['title'] ?? '' ), $url, self::guide( $config ) );
+		}
 		wp_enqueue_style( 'bsc-tv' );
 		wp_enqueue_script( 'bsc-tv' );
 		$badge = 'badge' === ( $settings['format'] ?? '' );

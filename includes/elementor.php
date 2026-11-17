@@ -131,3 +131,44 @@ final class BSC_TV_Badge_Widget extends BSC_TV_Programme_Widget {
 	protected function compact() { return true; }
 	protected function badge() { return true; }
 }
+
+final class BSC_TV_Guide_Widget extends Elementor\Widget_Base {
+	public function get_name() { return 'bsc-tv-guide'; }
+	public function get_title() { return 'BSC TV – Grille TV'; }
+	public function get_icon() { return 'eicon-calendar'; }
+	public function get_categories() { return array( 'general' ); }
+	public function get_style_depends() { return array( 'bsc-tv-guide' ); }
+	public function get_script_depends() { return array( 'bsc-tv-guide' ); }
+	protected function is_dynamic_content(): bool { return true; }
+
+	protected function register_controls() {
+		$this->start_controls_section( 'content', array( 'label' => 'Grille TV' ) );
+		$this->add_control( 'title', array( 'label' => 'Titre', 'type' => Controls_Manager::TEXT, 'default' => 'Programme TV' ) );
+		$this->add_control( 'days', array( 'label' => 'Période (jours)', 'type' => Controls_Manager::NUMBER, 'min' => 1, 'max' => BSC_TV_Display::MAX_DAYS, 'default' => 45 ) );
+		$this->add_control( 'platform', array( 'label' => 'Plateforme', 'type' => Controls_Manager::SELECT, 'default' => '', 'options' => array( '' => 'Toutes' ) + BSC_TV_Content::platforms() ) );
+		$this->add_control( 'image', array( 'label' => 'Vignettes des émissions', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'style', array( 'label' => 'Mise en page et couleurs', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$root = '{{WRAPPER}} .bsc-guide';
+		foreach ( array( 'channel-width' => array( 'Largeur de la colonne des chaînes', 80, 300 ), 'hour-width' => array( 'Largeur d’une heure', 140, 360 ), 'logo-size' => array( 'Taille des logos', 20, 64 ), 'radius' => array( 'Arrondi des angles', 0, 24 ) ) as $key => list( $label, $min, $max ) ) {
+			$this->add_responsive_control( 'guide_' . $key, array(
+				'label' => $label, 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => $min, 'max' => $max ) ),
+				'selectors' => array( $root => '--bsc-guide-' . $key . ': {{SIZE}}{{UNIT}};' ),
+			) );
+		}
+		foreach ( array( 'surface' => 'Fond de la grille', 'card' => 'Fond des émissions', 'ink' => 'Titres', 'muted' => 'Horaires et libellés', 'line' => 'Traits de la grille', 'accent' => 'Accent', 'live' => 'Indicateur LIVE' ) as $key => $label ) {
+			$this->add_control( 'color_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-guide-' . $key . ': {{VALUE}};' ) ) );
+		}
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'guide_title_typography', 'label' => 'Titre du widget', 'selector' => $root . ' .bsc-guide__title' ) );
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'guide_show_typography', 'label' => 'Titres des émissions', 'selector' => $root . ' .bsc-guide__programme-title' ) );
+		$this->end_controls_section();
+	}
+
+	protected function render() {
+		$settings = $this->get_settings_for_display();
+		$settings['format'] = 'guide';
+		$settings['image'] = 'yes' === ( $settings['image'] ?? '' );
+		echo BSC_TV_Display::render( $settings ); // The rendering method escapes the output.
+	}
+}

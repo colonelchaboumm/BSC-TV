@@ -32,9 +32,9 @@ final class BSC_TV_Content {
 			'label_count' => _n_noop( 'Archive BSC TV <span class="count">(%s)</span>', 'Archives BSC TV <span class="count">(%s)</span>' ),
 		) );
 		register_post_type( self::CHANNEL, array(
-			'labels' => array( 'name' => 'Chaînes', 'singular_name' => 'Chaîne', 'add_new_item' => 'Ajouter une chaîne' ),
+			'labels' => array( 'name' => 'Chaînes', 'singular_name' => 'Chaîne', 'add_new_item' => 'Ajouter une chaîne', 'featured_image' => 'Logo de la chaîne', 'set_featured_image' => 'Choisir le logo' ),
 			'public' => false, 'show_ui' => true, 'show_in_menu' => 'bsc-tv',
-			'supports' => array( 'title' ), 'capability_type' => 'post', 'map_meta_cap' => true,
+			'supports' => array( 'title', 'thumbnail' ), 'capability_type' => 'post', 'map_meta_cap' => true,
 		) );
 		register_post_type( self::SHOW, array(
 			'labels' => array( 'name' => 'Émissions', 'singular_name' => 'Émission', 'add_new_item' => 'Ajouter une émission' ),
