@@ -144,7 +144,7 @@ final class BSC_TV_Guide_Widget extends Elementor\Widget_Base {
 	protected function register_controls() {
 		$this->start_controls_section( 'content', array( 'label' => 'Grille TV' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre', 'type' => Controls_Manager::TEXT, 'default' => 'Programme TV' ) );
-		$this->add_control( 'days', array( 'label' => 'Période (jours)', 'type' => Controls_Manager::NUMBER, 'min' => 1, 'max' => BSC_TV_Display::MAX_DAYS, 'default' => 45 ) );
+		$this->add_control( 'days', array( 'label' => 'Période consultable (jours)', 'type' => Controls_Manager::NUMBER, 'min' => 1, 'max' => BSC_TV_Display::MAX_DAYS, 'default' => 45 ) );
 		$this->add_control( 'platform', array( 'label' => 'Plateforme', 'type' => Controls_Manager::SELECT, 'default' => '', 'options' => array( '' => 'Toutes' ) + BSC_TV_Content::platforms() ) );
 		$this->add_control( 'image', array( 'label' => 'Vignettes des émissions', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		$this->end_controls_section();

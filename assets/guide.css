@@ -27,46 +27,25 @@
 	font: 700 clamp(2rem, 5vw, 3.25rem)/1.05 var(--e-global-typography-primary-font-family, Roboto), system-ui, sans-serif;
 }
 
-.bsc-guide__navigation {
-	display: flex;
-	align-items: stretch;
-	gap: 8px;
-	margin-block-end: 16px;
-}
-
-.bsc-guide .bsc-guide__arrow, .bsc-guide .bsc-guide__select {
+.bsc-guide .bsc-guide__more {
 	min-block-size: 44px;
-	margin: 0;
+	margin-block-start: 22px;
+	padding: 8px 14px;
 	border: 1px solid var(--bsc-guide-line);
 	border-radius: var(--bsc-guide-radius);
 	background: var(--bsc-guide-surface);
 	color: var(--bsc-guide-ink);
 	font: inherit;
-	color-scheme: dark;
+	cursor: pointer;
 }
 
-.bsc-guide .bsc-guide__arrow {
-	flex: 0 0 44px;
-	padding: 0;
-	font-size: 1.5rem;
-	line-height: 1;
-}
-
-.bsc-guide .bsc-guide__select {
-	inline-size: min(100%, 26rem);
-	min-inline-size: 0;
-	padding-inline: 12px;
-	font-size: 0.9375rem;
-}
-
-.bsc-guide .bsc-guide__arrow:enabled:hover {
+.bsc-guide .bsc-guide__more:hover {
 	border-color: var(--bsc-guide-accent);
 	color: var(--bsc-guide-accent);
 }
 
-.bsc-guide .bsc-guide__arrow:disabled { opacity: 0.45; cursor: default; }
 .bsc-guide :focus-visible { outline: 2px solid var(--bsc-guide-accent); outline-offset: -3px; }
-.bsc-guide__day + .bsc-guide__day { margin-block-start: 22px; }
+.bsc-guide__day + .bsc-guide__day, .bsc-guide__week + .bsc-guide__week { margin-block-start: 24px; }
 
 .bsc-guide .bsc-guide__date {
 	margin: 0 0 10px;
@@ -267,6 +246,7 @@
 }
 
 .bsc-guide__empty {
+	margin: 0;
 	padding: 16px;
 	border: 1px solid var(--bsc-guide-line);
 	border-radius: var(--bsc-guide-radius);

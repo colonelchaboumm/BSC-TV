@@ -3,6 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class BSC_TV_Guide {
+	const DAYS_PER_WEEK = 7;
 
 	public static function render( $title, $url, $schedule ) {
 		ob_start();
@@ -53,29 +54,32 @@ final class BSC_TV_Guide {
 			}
 		}
 
-		if ( ! $dates ) {
-			return '<p class="bsc-guide__empty">Aucun direct annoncé sur cette période.</p>';
+		$last = $dates ? max( array_keys( $dates ) ) : $today_start;
+		$weeks = array();
+		for ( $day = $today, $index = 0; $day->getTimestamp() < $until; $day = $day->modify( '+1 day' ), ++$index ) {
+			$date = $day->getTimestamp();
+			if ( 0 === $index % self::DAYS_PER_WEEK && $date > $last ) {
+				break;
+			}
+			$weeks[ intdiv( $index, self::DAYS_PER_WEEK ) ][ $date ] = $dates[ $date ] ?? array();
 		}
-		ksort( $dates, SORT_NUMERIC );
 		uasort( $rows, static function ( $left, $right ) {
 			return strnatcasecmp( $left['name'], $right['name'] ) ?: strcmp( $left['platform'], $right['platform'] );
 		} );
 
 		ob_start();
 		?>
-		<div class="bsc-guide__navigation" data-guide-navigation hidden>
-			<button class="bsc-guide__arrow" type="button" data-guide-step="-1" aria-label="Jour précédent">&#8249;</button>
-			<select class="bsc-guide__select" data-guide-select aria-label="Jour du programme">
-				<?php foreach ( array_keys( $dates ) as $date ) : ?>
-					<option value="<?php echo esc_attr( $date ); ?>"><?php echo esc_html( self::date_label( $date, $today_start, $timezone ) ); ?></option>
+		<?php foreach ( $weeks as $index => $week ) : ?>
+			<div class="bsc-guide__week" data-guide-week<?php if ( $index ) : ?> hidden<?php endif; ?>>
+				<?php foreach ( $week as $date => $day_rows ) : ?>
+					<?php self::day( $date, $day_rows, $rows, $today_start, $timezone, $now, $images ); ?>
 				<?php endforeach; ?>
-			</select>
-			<button class="bsc-guide__arrow" type="button" data-guide-step="1" aria-label="Jour suivant">&#8250;</button>
-		</div>
+			</div>
+		<?php endforeach; ?>
+		<?php if ( count( $weeks ) > 1 ) : ?>
+			<button class="bsc-guide__more" type="button" data-guide-more hidden>Afficher les jours suivants</button>
+		<?php endif; ?>
 		<?php
-		foreach ( $dates as $date => $day_rows ) {
-			self::day( $date, $day_rows, $rows, $today_start, $timezone, $now, $images );
-		}
 		return ob_get_clean();
 	}
 
@@ -108,6 +112,20 @@ final class BSC_TV_Guide {
 	}
 
 	private static function day( $date, $day_rows, $rows, $today, $timezone, $now, $images ) {
+		$label = self::date_label( $date, $today, $timezone );
+		?>
+		<section class="bsc-guide__day" data-guide-day="<?php echo esc_attr( $date ); ?>">
+			<h3 class="bsc-guide__date" data-guide-date tabindex="-1"><?php echo esc_html( $label ); ?></h3>
+			<?php if ( $day_rows ) : ?>
+				<?php self::timeline( $date, $label, $day_rows, $rows, $timezone, $now, $images ); ?>
+			<?php else : ?>
+				<p class="bsc-guide__empty">Aucune émission annoncée.</p>
+			<?php endif; ?>
+		</section>
+		<?php
+	}
+
+	private static function timeline( $date, $label, $day_rows, $rows, $timezone, $now, $images ) {
 		$hour = HOUR_IN_SECONDS;
 		$first = PHP_INT_MAX;
 		$last = 0;
@@ -122,27 +140,23 @@ final class BSC_TV_Guide {
 		$hours = $duration / $hour;
 		$has_now = $now >= $start && $now < $start + $duration;
 		$style = '--guide-hours:' . $hours . ';' . ( $has_now ? '--guide-now:' . self::percent( $now - $start, $duration ) . ';' : '' );
-		$label = self::date_label( $date, $today, $timezone );
 		?>
-		<section class="bsc-guide__day" data-guide-day="<?php echo esc_attr( $date ); ?>">
-			<h3 class="bsc-guide__date" data-guide-date><?php echo esc_html( $label ); ?></h3>
-			<div class="bsc-guide__scroll" tabindex="0" role="region" aria-label="<?php echo esc_attr( 'Grille des horaires · ' . $label ); ?>">
-				<div class="bsc-guide__grid" style="<?php echo esc_attr( $style ); ?>">
-					<div class="bsc-guide__row bsc-guide__ruler">
-						<div class="bsc-guide__channel bsc-guide__corner">Chaînes</div>
-						<div class="bsc-guide__track">
-							<?php for ( $offset = 0; $offset < $duration; $offset += $hour ) : ?>
-								<time class="bsc-guide__tick" datetime="<?php echo esc_attr( gmdate( DATE_ATOM, $start + $offset ) ); ?>" style="--guide-position:<?php echo esc_attr( self::percent( $offset, $duration ) ); ?>"><?php echo esc_html( wp_date( 'H:i', $start + $offset, $timezone ) ); ?></time>
-							<?php endfor; ?>
-							<?php if ( $has_now ) : ?><time class="bsc-guide__now" datetime="<?php echo esc_attr( gmdate( DATE_ATOM, $now ) ); ?>" title="Heure actuelle"><?php echo esc_html( wp_date( 'H:i', $now, $timezone ) ); ?></time><?php endif; ?>
-						</div>
+		<div class="bsc-guide__scroll" tabindex="0" role="region" aria-label="<?php echo esc_attr( 'Grille des horaires · ' . $label ); ?>">
+			<div class="bsc-guide__grid" style="<?php echo esc_attr( $style ); ?>">
+				<div class="bsc-guide__row bsc-guide__ruler">
+					<div class="bsc-guide__channel bsc-guide__corner">Chaînes</div>
+					<div class="bsc-guide__track">
+						<?php for ( $offset = 0; $offset < $duration; $offset += $hour ) : ?>
+							<time class="bsc-guide__tick" datetime="<?php echo esc_attr( gmdate( DATE_ATOM, $start + $offset ) ); ?>" style="--guide-position:<?php echo esc_attr( self::percent( $offset, $duration ) ); ?>"><?php echo esc_html( wp_date( 'H:i', $start + $offset, $timezone ) ); ?></time>
+						<?php endfor; ?>
+						<?php if ( $has_now ) : ?><time class="bsc-guide__now" datetime="<?php echo esc_attr( gmdate( DATE_ATOM, $now ) ); ?>" title="Heure actuelle"><?php echo esc_html( wp_date( 'H:i', $now, $timezone ) ); ?></time><?php endif; ?>
 					</div>
-					<?php foreach ( array_intersect_key( $rows, $day_rows ) as $key => $row ) : ?>
-						<?php self::row( $row, $day_rows[ $key ], $start, $duration, $timezone, $images ); ?>
-					<?php endforeach; ?>
 				</div>
+				<?php foreach ( array_intersect_key( $rows, $day_rows ) as $key => $row ) : ?>
+					<?php self::row( $row, $day_rows[ $key ], $start, $duration, $timezone, $images ); ?>
+				<?php endforeach; ?>
 			</div>
-		</section>
+		</div>
 		<?php
 	}
 
