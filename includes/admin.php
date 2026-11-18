@@ -668,7 +668,7 @@ final class BSC_TV_Admin {
 			<h1>BSC TV</h1>
 			<p>Dans Elementor, ajoutez <strong>BSC TV – Grille TV</strong> ou <strong>BSC TV – Programme</strong> à votre page. Utilisez <strong>BSC TV – Méga-menu</strong> ou <strong>BSC TV – Pastille Live</strong> dans votre menu.</p>
 			<h2>Synchronisation</h2>
-			<p>Collecte automatique chaque jour sur 45 jours pour les chaînes publiées. Les annonces à vérifier apparaissent dans les brouillons des émissions.</p>
+			<p>Toutes les 24 heures, BSC TV recherche les émissions des chaînes publiées pour les 45 prochains jours. Les émissions confirmées par une source autorisée alimentent la grille. Les annonces à vérifier restent en brouillon.</p>
 			<p><?php echo esc_html( sprintf( '%d chaîne(s) sur %d avec un agenda ou un accès API configuré.', $ready, count( $channels ) ) ); ?>
 			<?php if ( $ready < count( $channels ) ) : ?> Ajoutez les accès API ci-dessous ou renseignez un agenda public dans la fiche de la chaîne.<?php endif; ?></p>
 			<?php if ( $next ) : ?><p><?php echo $next <= time() ? 'Prochaine collecte en attente d’exécution par WP-Cron.' : esc_html( 'Prochaine collecte à partir du ' . wp_date( 'j F Y à H:i', $next ) . '.' ); ?></p><?php endif; ?>

@@ -16,7 +16,7 @@ final class BSC_TV_Sync {
 	const LAST_LIVE = 'bsc_tv_last_live_check';
 	const LOCK = 'bsc_tv_sync_lock';
 	const QUOTA = 'bsc_tv_youtube_search_quota';
-	const CRON_VERSION = 3;
+	const CRON_VERSION = 4;
 
 	public static function settings() {
 		$values = (array) get_option( self::SETTINGS, array() );
@@ -105,16 +105,6 @@ final class BSC_TV_Sync {
 		self::discover( false );
 	}
 
-	public static function refresh_discovery() {
-		if ( get_option( self::QUEUE ) ) {
-			// Finish the previous run before building a fresh list with the current settings.
-			self::queue( self::DAILY_NOW, 5 * MINUTE_IN_SECONDS );
-			self::queue( self::CONTINUE_DAILY );
-			return;
-		}
-		self::daily();
-	}
-
 	public static function discovery_channels( $settings ) {
 		$available = array(
 			'youtube' => (bool) $settings['youtube_key'],
@@ -149,6 +139,12 @@ final class BSC_TV_Sync {
 			$settings = self::settings();
 			$now = time();
 			$queue = (array) get_option( self::QUEUE, array() );
+			if ( $queue && $begin ) {
+				// Keep the new scan scheduled while the previous batch finishes.
+				self::queue( self::DAILY_NOW, 5 * MINUTE_IN_SECONDS );
+				self::queue( self::CONTINUE_DAILY );
+				return;
+			}
 			if ( ! $queue && ! $begin ) {
 				return;
 			}
