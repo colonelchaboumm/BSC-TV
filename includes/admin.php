@@ -287,9 +287,10 @@ final class BSC_TV_Admin {
 		<div id="bsc-tv-profile">
 			<h3><?php echo $channel ? 'Fiche créateur BSC BDD' : 'Fiche BSC BDD propre à cette émission'; ?></h3>
 			<p class="description"><?php echo $channel ? 'Associez une fiche publiée pour afficher son nom, son avatar et son lien dans le programme. Plusieurs chaînes peuvent partager la même fiche.' : 'Laissez ce champ vide pour reprendre la fiche de la chaîne.'; ?></p>
-			<?php if ( function_exists( 'bsc_bdd_query_entities' ) ) : ?>
+			<?php if ( self::bdd_search_available() ) : ?>
 				<p><label for="bsc-tv-bdd-search">Rechercher une fiche publiée par son nom</label><br>
-				<input class="regular-text" type="search" id="bsc-tv-bdd-search" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'bsc_tv_bdd' ) ); ?>" autocomplete="off">
+				<input class="regular-text" type="search" id="bsc-tv-bdd-search" data-url="<?php echo esc_url( admin_url( 'admin-ajax.php', 'relative' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'bsc_tv_bdd' ) ); ?>" autocomplete="off" aria-describedby="bsc-tv-bdd-status">
+				<button class="button" type="button" id="bsc-tv-bdd-submit">Rechercher</button>
 				<br><select id="bsc-tv-bdd-results" aria-label="Fiches BSC BDD trouvées" hidden></select><br><span id="bsc-tv-bdd-status" role="status"></span></p>
 			<?php else : ?>
 				<p class="description">Activez BSC BDD pour rechercher une fiche et afficher son lien.</p>
@@ -307,19 +308,49 @@ final class BSC_TV_Admin {
 		<?php
 	}
 
+	private static function bdd_search_available() {
+		return function_exists( 'bsc_bdd_get_entity' ) && class_exists( 'BSC_BDD_Content' ) && post_type_exists( BSC_BDD_Content::POST_TYPE );
+	}
+
 	public static function find_bdd() {
-		check_ajax_referer( 'bsc_tv_bdd', 'nonce' );
-		if ( ! current_user_can( 'edit_posts' ) || ! function_exists( 'bsc_bdd_query_entities' ) ) {
-			wp_send_json_error( null, 403 );
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( array( 'message' => 'Vous n’avez pas accès à cette recherche.' ), 403 );
 		}
-		$term = substr( sanitize_text_field( wp_unslash( $_GET['q'] ?? '' ) ), 0, 120 );
+		if ( ! is_string( $_REQUEST['nonce'] ?? null ) || ! check_ajax_referer( 'bsc_tv_bdd', 'nonce', false ) ) {
+			wp_send_json_error( array( 'message' => 'La session de recherche a expiré. Rechargez la page.' ), 403 );
+		}
+		if ( ! self::bdd_search_available() ) {
+			wp_send_json_error( array( 'message' => 'BSC BDD est indisponible.' ), 503 );
+		}
+
+		$input = $_POST['q'] ?? $_GET['q'] ?? '';
+		$term = is_string( $input ) ? mb_substr( sanitize_text_field( wp_unslash( $input ) ), 0, 120, 'UTF-8' ) : '';
 		$results = array();
-		if ( strlen( $term ) >= 2 ) {
-			foreach ( bsc_bdd_query_entities( array( 'search' => $term, 'status' => 'publish', 'limit' => 20 ) ) as $row ) {
-				if ( ! get_post_field( 'post_password', $row['id'] ) ) {
-					$results[] = array( 'id' => $row['id'], 'name' => wp_strip_all_tags( $row['name'] ), 'type' => implode( ', ', $row['type_names'] ?? array() ) );
-				}
+		if ( mb_strlen( $term, 'UTF-8' ) < 2 ) {
+			wp_send_json_success( $results );
+		}
+
+		$query = array( 'post_type' => BSC_BDD_Content::POST_TYPE, 'post_status' => 'publish', 'has_password' => false );
+		$slug = sanitize_title( $term );
+		$matches = $slug ? get_posts( $query + array( 'name' => $slug, 'numberposts' => 1 ) ) : array();
+		$searches = array_unique( array( $term, str_replace( '’', "'", $term ), str_replace( "'", '’', $term ) ) );
+		foreach ( $searches as $search ) {
+			$remaining = 20 - count( $matches );
+			if ( ! $remaining ) {
+				break;
 			}
+			$matches = array_merge( $matches, get_posts( $query + array(
+				's' => $search, 'search_columns' => array( 'post_title' ), 'orderby' => 'title', 'order' => 'ASC',
+				'post__not_in' => wp_list_pluck( $matches, 'ID' ), 'numberposts' => $remaining,
+			) ) );
+		}
+		foreach ( $matches as $post ) {
+			$types = get_the_terms( $post->ID, BSC_BDD_Content::TAXONOMY );
+			$results[] = array(
+				'id' => $post->ID,
+				'name' => html_entity_decode( wp_strip_all_tags( get_the_title( $post ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
+				'type' => is_array( $types ) ? implode( ', ', wp_list_pluck( $types, 'name' ) ) : '',
+			);
 		}
 		wp_send_json_success( $results );
 	}

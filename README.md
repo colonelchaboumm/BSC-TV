@@ -14,7 +14,7 @@ Pour publier des brouillons existants, ouvrez **BSC TV → Chaînes** ou **BSC T
 ## Associer une fiche créateur BSC BDD
 
 1. Dans **BSC TV → Chaînes**, utilisez la colonne **Fiche créateur BSC BDD** pour repérer les chaînes à associer.
-2. Ouvrez une chaîne, recherchez la fiche par son nom dans **Fiche créateur BSC BDD**, sélectionnez le résultat et enregistrez. Vous pouvez associer plusieurs chaînes Twitch, YouTube ou autres à la même fiche.
+2. Ouvrez une chaîne et saisissez au moins deux caractères du nom dans **Fiche créateur BSC BDD**. Vous pouvez lancer la recherche avec **Rechercher** ou la touche Entrée. Sélectionnez une fiche publiée dans les résultats, puis enregistrez la chaîne. Vous pouvez associer plusieurs chaînes Twitch, YouTube ou autres à la même fiche.
 3. Dans **BSC TV → Émissions**, choisissez la **Chaîne du créateur** pour reprendre sa fiche. Un lien de chaîne reconnu de façon unique suffit aussi à faire le lien entre les deux. Pour une vidéo YouTube, la synchronisation peut retrouver la chaîne d’origine. Le champ **Fiche BSC BDD propre à cette émission** permet de choisir un autre profil pour une émission.
 
 Une modification du rattachement sur une chaîne se répercute sur les widgets, pour les émissions synchronisées et celles qui reprennent cette chaîne. Si la fiche devient inaccessible, le nom du créateur reste visible lorsqu’il est renseigné sur la chaîne ou l’émission.
