@@ -591,8 +591,12 @@ final class BSC_TV_Player {
 		wp_enqueue_style( 'bsc-tv-player' );
 		wp_enqueue_script( 'bsc-tv-player' );
 		$settings = (array) $settings;
+		// Empty legacy autoplay settings follow the new automatic default.
+		$settings['start_mode'] = $settings['start_mode'] ?? ( in_array( $settings['autoplay'] ?? null, array( 'no', '0', 0, false ), true ) ? 'click' : 'auto' );
 		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay' ), 'yes' );
-		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'autoplay' => '', 'muted' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
+		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'muted' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
+		$settings['autoplay'] = 'click' === $settings['start_mode'] ? '' : 'yes';
+		$join_label = is_scalar( $settings['join_label'] ) ? sanitize_text_field( $settings['join_label'] ) : '';
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );
 		$poster = 'yes' === $settings['show_poster'] ? ( self::snapshot()['current']['image'] ?? '' ) : '';
 		$transition_media = $settings['transition_video'];

@@ -13,7 +13,7 @@
 		<?php if ( 'yes' === $settings['transition_enabled'] ) : ?><div class="bsc-player__transition" data-player-transition data-timeout="<?php echo esc_attr( $transition_timeout ); ?>" aria-hidden="true" hidden><img src="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" alt="" decoding="async"><video data-player-transition-video data-src="<?php echo esc_url( $transition_url ); ?>" poster="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture></video></div><?php endif; ?>
 	</div></div>
 	<div class="bsc-player__actions">
-		<button class="bsc-player__join" type="button" data-player-join><?php echo esc_html( $settings['join_label'] ); ?></button>
+		<button class="bsc-player__join" type="button" data-player-join aria-label="<?php echo esc_attr( $join_label ?: 'Lire le programme BSC TV' ); ?>"><svg class="bsc-player__play-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7 4v16l13-8z"/></svg><?php if ( $join_label ) : ?><span><?php echo esc_html( $join_label ); ?></span><?php endif; ?></button>
 		<a class="bsc-player__source" data-player-source hidden>Regarder sur la plateforme</a>
 	</div>
 	<p class="bsc-player__message" data-player-message role="status" aria-live="polite">Chargement du programme…</p>

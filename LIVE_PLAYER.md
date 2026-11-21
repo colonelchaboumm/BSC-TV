@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.12.1, branche `feature/badge-live-style`. La **Pastille Live** affiche le mot **LIVE en rouge et en gras** à côté du point rouge clignotant, activé par défaut. Elle suit l’émission en cours sur l’antenne 24/7 et propose **Regarder Le live** dans son déroulant. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.13.0, branche `feature/player-autoplay-icon`. Le lecteur tente la lecture automatique par défaut dès qu’il est visible et utilise une icône de lecture SVG, même si le texte du bouton est vide. La pastille LIVE et l’animation de transition conservent leur fonctionnement. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -75,7 +75,9 @@ La file couvre jusqu’à 72 heures, dans une limite de 500 programmes. Elle se 
 ## Réglages Elementor
 
 - Contenu : titre, bouton, logo fixe, image de l’émission avant lecture, avatar et lien BSC BDD, créateur, émission, programme suivant, horaires, progression et badges.
-- Lecture : démarrage sur clic par défaut, autoplay facultatif, **son activé par défaut**. **Démarrer sans son** permet toujours une lecture silencieuse. Un widget déjà sauvegardé avec cette option activée conserve son choix : désactivez-la et enregistrez la page pour activer son audio. YouTube reçoit explicitement `unMute()` et Twitch `muted: false` lorsque le son est actif ; les commandes du volume et du plein écran restent celles de la plateforme. Un navigateur peut exiger un clic pour autoriser la lecture avec le son. [Événement YouTube de lecture automatique bloquée](https://developers.google.com/youtube/iframe_api_reference#onAutoplayBlocked).
+- Lecture : **démarrage automatique et son activé par défaut**. Dans **Contenu → Démarrage de la vidéo**, choisir **Automatique quand le lecteur est visible** ou **Après un clic sur Lecture**. Les anciens widgets dont le réglage de démarrage était vide adoptent le nouveau défaut automatique. La lecture est tentée lorsqu’au moins la moitié du widget est visible, dans un onglet actif ; un seul lecteur par page démarre automatiquement. Un lecteur ouvert dans un onglet masqué peut démarrer lorsque l’onglet devient actif. Un clic manuel réserve aussi cette priorité pour éviter qu’un second widget ajoute une autre piste sonore.
+- **Démarrer sans son** permet toujours une lecture silencieuse. Un widget déjà sauvegardé avec cette option activée conserve son choix : désactivez-la et enregistrez la page pour activer son audio. YouTube reçoit explicitement `unMute()` et Twitch `muted: false` lorsque le son est actif ; les commandes du volume et du plein écran restent celles de la plateforme. Un navigateur peut exiger un clic pour autoriser la lecture avec le son. Le bouton Lecture reste alors disponible, sans désactiver silencieusement l’audio demandé. [Événement YouTube de lecture automatique bloquée](https://developers.google.com/youtube/iframe_api_reference#onAutoplayBlocked).
+- Le bouton situé à côté de **Regarder sur la plateforme** contient toujours un triangle SVG, sans dépendance à une police d’icônes. Un texte vide conserve un bouton avec cette icône et le nom accessible **Lire le programme BSC TV**. Un libellé personnalisé reste affiché à côté de l’icône. Le raccourci `[bsc_tv_player start_mode="click"]` force le démarrage manuel ; une demande explicite `autoplay="no"` reste également reconnue.
 - **Image de l’émission avant lecture**, activée par défaut : l’aperçu est présent dès le HTML initial, puis suit le programme courant lors des rafraîchissements. Il reprend l’image mise en avant de l’émission, son visuel enregistré ou le visuel du vrai direct ; à défaut, le logo de la chaîne ou l’avatar BSC BDD. Sans image disponible, l’écran conserve son fond. Une image qui échoue au chargement est masquée. Le lecteur officiel apparaît au-dessus dès sa création ; ses commandes restent accessibles. L’aperçu ne charge aucun SDK ni iframe. Dans **Style → Cadrage de l’image avant lecture**, choisir **Remplir l’écran** ou **Afficher l’image entière**.
 - **Contenu → Animation entre les programmes**, activée par défaut : l’animation Brewers Social Club fournie est incluse dans le plugin. Elle démarre après la demande de lecture, à la fin d’une émission et lors du changement de programme, puis boucle sans son pendant le chargement. Elle s’arrête à l’événement de lecture effective **PLAYING** de YouTube ou Twitch, et non au simple événement **READY**. Sa durée de dix secondes n’ajoute aucun créneau dans la programmation commune : elle peut s’arrêter avant la fin de sa boucle. **Animation personnalisée** permet de choisir une autre vidéo dans la médiathèque ; **Style → Cadrage de l’animation** règle son remplissage.
 - La transition s’efface immédiatement si la plateforme bloque la lecture automatique, signale une erreur ou si l’animation est indisponible. Les clics atteignent les commandes du lecteur officiel et le bouton Rejoindre reste en dehors de l’animation. Une attente maximale de **20 secondes**, réglable de 5 à 60 secondes, rend le lecteur visible même sans confirmation de lecture. Les pauses, publicités et mises en mémoire tampon d’un programme déjà commencé ne relancent pas l’animation. Un changement de programme ne peut pas être validé par un événement tardif du lecteur précédent.
@@ -133,7 +135,7 @@ Les replays restent sur leurs plateformes : aucun téléchargement, stockage, r�
 
 L’option non autoloadée `bsc_tv_player_clock` contient l’antenne, la file `plan`, les diffusions récentes `aired`, l’historique et la graine du mélange. L’import conserve ses curseurs dans `bsc_tv_player_replay_import` et son passage quotidien dans `bsc_tv_player_import_daily`. Les traitements relisent l’état sous verrou. Après plus de 200 transitions pendant une longue inactivité, le rattrapage est borné.
 
-La route publique `GET /wp-json/bsc-tv/v1/player` renvoie l’émission en cours et seulement les cinq suivantes, sans réglage privé ni appel externe. Son rafraîchissement est généralement de 60 secondes et se rapproche d’une transition. Les SDK externes sont chargés à la demande de lecture.
+La route publique `GET /wp-json/bsc-tv/v1/player` renvoie l’émission en cours et seulement les cinq suivantes, sans réglage privé ni appel externe. Son rafraîchissement est généralement de 60 secondes et se rapproche d’une transition. Les SDK externes sont chargés lorsque le lecteur visible tente le démarrage automatique ou lors du clic en mode manuel.
 
 Les plateformes peuvent bloquer ou retarder une intégration selon le compte, la région, la publicité, l’autoplay ou la disponibilité de la vidéo. La synchronisation reste celle permise par leurs lecteurs officiels. Un direct spontané non découvert ne peut pas prendre la priorité ; une confirmation de direct expire selon la durée existante de vingt minutes. Une erreur de lecture conserve un lien vers la source et ne permet pas à un visiteur de changer l’antenne globale.
 
@@ -141,7 +143,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.12.1 : les **25 contrôles WordPress/Elementor de la pastille et 22 contrôles JavaScript de son menu** ont été exécutés, avec vérification de la syntaxe PHP et du diff. La suite complète de la version 1.12.0 comprenait **397 contrôles locaux** : 73 d’horloge et de grille, 84 WordPress/Elementor du lecteur, 81 d’import et de restrictions vidéo, 49 JavaScript du lecteur, 37 WordPress/Elementor de la liste quotidienne, 26 JavaScript de son rafraîchissement et les 47 contrôles de pastille.
+Version 1.13.0 : **90 contrôles WordPress/Elementor du lecteur, 49 contrôles JavaScript du lecteur et 14 contrôles de lecture automatique**, soit 153 contrôles ciblés exécutés, avec vérification de la syntaxe PHP et du diff. La suite complète de la version 1.12.0 comprenait 397 contrôles locaux ; la version 1.12.1 avait également validé les 47 contrôles de pastille.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 
@@ -150,6 +152,7 @@ php tests/player-clock.php
 php tests/player-integration.php /chemin/vers/wordpress-de-test
 php tests/player-import.php /chemin/vers/wordpress-de-test
 node tests/player-browser.mjs
+node tests/player-autoplay.mjs
 php tests/day-integration.php /chemin/vers/wordpress-de-test
 node tests/day-browser.mjs
 php tests/badge-integration.php /chemin/vers/wordpress-de-test
