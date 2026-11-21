@@ -192,6 +192,8 @@
 .bsc-tv-badge--inline .bsc-tv-badge__panel { margin-block-start: 8px; max-inline-size: 100%; position: static; transform: none; }
 .bsc-tv-badge__panel .bsc-tv-heading { font-size: 1.3rem; }
 .bsc-tv-badge__panel .bsc-tv-section:first-child { margin-block-start: 0; }
+.bsc-tv-badge__panel .bsc-tv-badge__current { border-inline-start: 3px solid var(--bsc-tv-accent); }
+.bsc-tv-badge__panel .bsc-tv-watch { margin-inline-end: 8px; }
 
 @media (any-hover: hover) and (any-pointer: fine) {
 	.bsc-tv-badge:not(.bsc-tv-badge--inline) > .bsc-tv-badge__panel { inset-block-start: 100%; }

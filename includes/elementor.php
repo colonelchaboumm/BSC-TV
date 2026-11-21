@@ -76,6 +76,10 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'pulse' === $key ? '' : 'yes' ) );
 		}
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
+		$this->add_control( 'show_player_current', array( 'label' => 'Afficher l’émission BSC TV en cours', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'description' => 'Priorité à l’émission diffusée dans Le live, y compris un replay. Sans programme en cours, reprend les directs et annonces des plateformes.' ) );
+		$this->add_control( 'show_watch_link', array( 'label' => 'Bouton pour regarder Le live', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->add_control( 'watch_url', array( 'label' => 'Lien vers la page Le live', 'type' => Controls_Manager::URL, 'options' => array( 'url' ), 'default' => array( 'url' => BSC_TV_Display::LIVE_PAGE ) ) );
+		$this->add_control( 'watch_label', array( 'label' => 'Texte du bouton Le live', 'type' => Controls_Manager::TEXT, 'default' => 'Regarder Le live' ) );
 		$this->end_controls_section();
 	}
 
@@ -97,7 +101,7 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 			'label' => 'Marges intérieures du bouton', 'type' => Controls_Manager::DIMENSIONS, 'size_units' => array( 'px', 'em', 'rem' ),
 			'selectors' => array( $root . ' .bsc-tv-badge__trigger' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};' ),
 		) );
-		foreach ( array( 'label' => 'Typographie des libellés', 'title' => 'Typographie du titre', 'date' => 'Typographie de la date' ) as $key => $label ) {
+		foreach ( array( 'label' => 'Typographie des libellés', 'title' => 'Typographie du titre', 'date' => 'Typographie de la date', 'watch' => 'Bouton Regarder Le live' ) as $key => $label ) {
 			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'badge_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-tv-badge__' . $key ) );
 		}
 		$this->end_controls_section();

@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.11.0, branche `feature/player-sound-poster`. Le lecteur démarre avec le son activé par défaut, affiche l’image de l’émission avant la lecture et utilise l’animation Brewers Social Club fournie comme transition pendant le chargement du programme suivant. La liste quotidienne conserve ses lots de cinq programmes avec **Afficher plus**, ainsi que le filtre des restrictions d’âge du lecteur. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.12.0, branche `feature/badge-current-player`. La **Pastille Live** suit maintenant l’émission en cours sur l’antenne 24/7 et propose **Regarder Le live** dans son déroulant. Le lecteur conserve le son actif par défaut, l’aperçu et l’animation entre les programmes ; la liste quotidienne conserve ses lots de cinq programmes. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -115,6 +115,16 @@ Les erreurs du lecteur d’un visiteur ne modifient pas la programmation globale
 
 Références : [indicateur d’âge YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos#contentDetails.contentRating.ytRating), [restrictions des vidéos intégrées](https://support.google.com/youtube/answer/171780), [champs de l’API des vidéos Twitch](https://dev.twitch.tv/docs/api/reference/videos).
 
+## Pastille LIVE liée à l’antenne
+
+Le widget existant **BSC TV – Pastille Live** lit la même horloge locale que le lecteur de **Le live**. Lorsqu’un programme est à l’antenne, son titre et son horaire apparaissent dans le bouton à côté du point rouge **LIVE**. Ce libellé indique la diffusion actuelle sur BSC TV ; la carte dans le déroulant distingue explicitement **DIRECT** et **REDIFFUSION**. Elle reprend le visuel et le lien vers le créateur BSC BDD. Un véritable direct déjà diffusé dans l’antenne est retiré de la section des autres directs pour éviter un doublon.
+
+Le bouton **Regarder Le live**, ainsi que le titre de cette carte, mènent par défaut à `https://brewerssocialclub.com/le-live/`. Dans Elementor → **Bouton et ouverture**, régler **Afficher l’émission BSC TV en cours**, **Bouton pour regarder Le live**, **Lien vers la page Le live** et **Texte du bouton Le live**. Sa typographie se règle dans **Style → Bouton et pastille**. Le lien vers l’agenda complet reste disponible séparément. Le filtre de plateforme porte sur les annonces ; l’émission BSC TV représente l’antenne commune.
+
+Lorsque l’antenne est désactivée, attend un créneau ou ne possède aucun programme utilisable, la pastille reprend les directs et annonces des plateformes. Désactiver **Afficher l’émission BSC TV en cours** conserve également ce fonctionnement. Une source retirée ne peut pas laisser son ancien titre dans la pastille. Le raccourci `[bsc_tv format="badge" watch_label="Regarder la chaîne"]` propose la même fonction ; `show_player_current="no"` désactive la priorité à l’antenne et `show_watch_link="no"` masque le bouton supplémentaire.
+
+Le rafraîchissement utilise la route locale publique du programme avec `format=badge`, sans chargement de vidéo, SDK, clé privée ou nouvel import. Il passe généralement chaque minute et se rapproche des changements d’émission, avec un délai minimal de cinq secondes. Plusieurs pastilles de même configuration partagent une requête. Un échec conserve l’affichage précédent ; l’onglet masqué suspend les requêtes. L’actualisation garde le menu ouvert, le bouton Regarder et le lien qui a le focus clavier. Le comportement du survol, du clic extérieur et d’Échap est conservé.
+
 ## Fonctionnement et limites
 
 Les replays restent sur leurs plateformes : aucun téléchargement, stockage, réencodage ou proxy vidéo. Les références et métadonnées utilisent les émissions et chaînes BSC TV existantes. Le catalogue local examine au plus les 1 000 émissions publiées ou archivées les plus récemment modifiées et reste en cache une minute, avec invalidation à la modification des sources.
@@ -129,7 +139,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.11.0 : **73 contrôles d’horloge et de grille, 84 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 49 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne et 26 contrôles JavaScript de son rafraîchissement**, soit 350 contrôles locaux.
+Version 1.12.0 : **73 contrôles d’horloge et de grille, 84 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 49 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne, 26 contrôles JavaScript de son rafraîchissement, 25 contrôles WordPress/Elementor de la pastille et 22 contrôles JavaScript de son menu**, soit 397 contrôles locaux.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 
@@ -140,6 +150,8 @@ php tests/player-import.php /chemin/vers/wordpress-de-test
 node tests/player-browser.mjs
 php tests/day-integration.php /chemin/vers/wordpress-de-test
 node tests/day-browser.mjs
+php tests/badge-integration.php /chemin/vers/wordpress-de-test
+node tests/badge-browser.mjs
 ```
 
 Les tests WordPress copient une base SQLite jetable avant toute écriture. Les API et SDK sont simulés : ils ne prouvent pas l’accès réel à chaque chaîne ni la configuration d’une tâche Infomaniak. La fixture émet deux avertissements Elementor préexistants sous PHP 8.4. La livraison doit être installée et la tâche quotidienne configurée dans le Manager pour être active sur le site.
