@@ -255,10 +255,50 @@ final class BSC_TV_Player {
 		return $candidates[0];
 	}
 
-	private static function begin( $media, &$state ) {
+	/** A persisted future slot has priority over the automatic rotation. */
+	public static function select_next( $pool, $state, $settings, $cursor ) {
+		foreach ( $state['plan'] ?? array() as $row ) {
+			if ( empty( $row['id'] ) || ! isset( $pool[ $row['key'] ] ) ) {
+				continue;
+			}
+			$media = $pool[ $row['key'] ];
+			$last = $state['history'][ $row['key'] ]['end'] ?? 0;
+			$available = max( $cursor, $row['start'], $media['published_at'], $last ? $last + (int) ( $settings['repeat_hours'] * HOUR_IN_SECONDS ) : 0 );
+			foreach ( $state['manual'] ?? array() as $show_id ) {
+				foreach ( $pool as $priority ) {
+					if ( $priority['show_id'] !== $show_id ) { continue; }
+					$previous = $state['history'][ $priority['key'] ]['end'] ?? 0;
+					$start = max( $cursor, $priority['published_at'], $previous ? $previous + (int) ( $settings['repeat_hours'] * HOUR_IN_SECONDS ) : 0 );
+					if ( $start <= $available && $priority['key'] !== $row['key'] ) {
+						return $priority + array( 'available' => $start );
+					}
+					if ( $start <= $available ) { break 2; }
+				}
+			}
+			return $media + array( 'available' => $available, 'plan_id' => $row['id'], 'plan_end' => $row['end'] );
+		}
+		return self::select( $pool, $state, $settings, $cursor );
+	}
+
+	public static function shift_plan( &$state, $seconds ) {
+		foreach ( $state['plan'] ?? array() as $index => $row ) {
+			$state['plan'][ $index ]['start'] += $seconds;
+			$state['plan'][ $index ]['end'] += $seconds;
+		}
+	}
+
+	public static function begin( $media, &$state ) {
 		$slot = array_intersect_key( $media, array_fill_keys( array( 'show_id', 'key', 'resource', 'channel_id', 'premiere' ), true ) );
 		$slot['start'] = $media['available'];
 		$slot['end'] = $slot['start'] + $media['duration'];
+		if ( isset( $media['plan_id'] ) ) {
+			$slot['id'] = $media['plan_id'];
+			$index = array_search( $media['plan_id'], array_column( $state['plan'], 'id' ), true );
+			$state['plan'] = array_slice( $state['plan'], $index + 1 );
+			self::shift_plan( $state, max( 0, $slot['end'] - $media['plan_end'] ) );
+		} elseif ( ! empty( $state['plan'] ) ) {
+			self::shift_plan( $state, max( 0, $slot['end'] - $state['plan'][0]['start'] ) );
+		}
 		$slot['premiere'] = $slot['premiere'] && empty( $state['premiered'][ $media['key'] ] );
 		$state['premiered'][ $media['key'] ] = true;
 		$state['history'][ $media['key'] ] = array( 'end' => $slot['end'] );
@@ -269,13 +309,15 @@ final class BSC_TV_Player {
 
 	/** Only this state, stored under a database lock, determines the common antenna. */
 	public static function advance( $state, $pool, $lives, $settings, $now ) {
-		$state += array( 'vod' => null, 'live' => null, 'paused_at' => 0, 'history' => array(), 'manual' => array(), 'last_creator' => '', 'premiered' => array() );
+		$state += array( 'vod' => null, 'live' => null, 'paused_at' => 0, 'history' => array(), 'manual' => array(), 'plan' => array(), 'last_creator' => '', 'premiered' => array() );
+		$state['plan'] = array_values( array_filter( $state['plan'], static function ( $row ) use ( $pool ) { return isset( $pool[ $row['key'] ] ); } ) );
 		if ( $state['vod'] && ! isset( $pool[ $state['vod']['key'] ] ) ) {
 			$state['vod'] = null;
 		}
 		if ( $state['live'] && ! isset( $lives[ $state['live']['key'] ] ) ) {
+			$pause = $state['paused_at'] ? max( 0, $now - $state['paused_at'] ) : 0;
+			self::shift_plan( $state, $pause );
 			if ( $state['vod'] && $state['paused_at'] ) {
-				$pause = max( 0, $now - $state['paused_at'] );
 				$state['vod']['start'] += $pause;
 				$state['vod']['end'] += $pause;
 				$state['history'][ $state['vod']['key'] ]['end'] = $state['vod']['end'];
@@ -286,9 +328,10 @@ final class BSC_TV_Player {
 		if ( $state['live'] ) {
 			return $state;
 		}
-		$cursor = $state['vod']['end'] ?? $now;
+		// After an intentional gap, a late visitor must join at the planned offset.
+		$cursor = $state['vod']['end'] ?? ( $state['plan'][0]['start'] ?? $now );
 		for ( $count = 0; $count < 200 && ( ! $state['vod'] || $state['vod']['end'] <= $now ); ++$count ) {
-			$media = self::select( $pool, $state, $settings, $cursor );
+			$media = self::select_next( $pool, $state, $settings, $cursor );
 			if ( $media && $media['available'] > $now ) {
 				$state['vod'] = null;
 				break;
@@ -301,7 +344,8 @@ final class BSC_TV_Player {
 		}
 		// Bound work after months without a visitor or cron; never replay a stale slot.
 		if ( $state['vod'] && $state['vod']['end'] <= $now ) {
-			$media = self::select( $pool, $state, $settings, $now );
+			$state['plan'] = array_values( array_filter( $state['plan'], static function ( $row ) use ( $now ) { return $row['end'] > $now; } ) );
+			$media = self::select_next( $pool, $state, $settings, $now );
 			$state['vod'] = $media ? self::begin( $media, $state ) : null;
 		}
 		if ( $lives ) {
@@ -374,7 +418,7 @@ final class BSC_TV_Player {
 			$result['next'][] = $next;
 		}
 		for ( $count = count( $result['next'] ); $count < 5; ++$count ) {
-			$media = self::select( $catalogue['pool'], $forecast, $settings, $cursor );
+			$media = self::select_next( $catalogue['pool'], $forecast, $settings, $cursor );
 			if ( ! $media ) {
 				break;
 			}

@@ -2,6 +2,8 @@
 
 Lecteur ajouté dans BSC TV 1.5.0. Filtres rétro superposés à l’image et couleur des coins arrondis dans la version 1.5.3 sur la branche `feature/player-crt`. Aucun déploiement en production.
 
+La version 1.6.0 ajoute la grille d’administration modifiable sur 48 ou 72 heures, sur la branche `feature/player-schedule`.
+
 Le nouveau widget compose une antenne commune à partir des émissions existantes et des confirmations de direct déjà enregistrées. Il conserve un début et une fin de diffusion côté WordPress. Un visiteur qui rejoint une émission commencée depuis quinze minutes demande au lecteur officiel une lecture à quinze minutes. Les replays alternent avec les vrais directs prioritaires, puis reprennent au point d’interruption lorsque le direct se termine.
 
 ## Mise en service
@@ -11,7 +13,7 @@ Le nouveau widget compose une antenne commune à partir des émissions existante
 3. Dans une émission existante ou archivée, choisir **Inclure ce replay dans la programmation** et renseigner son lien vidéo, sa durée exacte en secondes (de 1 seconde à 24 heures) et sa date de publication. Les liens YouTube vidéo et Twitch `/videos/ID` sont acceptés. Un lien Twitch de chaîne correspond à un vrai direct, pas à un replay.
 4. Le mode **Automatique** utilise les archives terminées dont la lecture intégrée, la durée et la date sont confirmées. La collecte YouTube quotidienne existante complète au plus 50 archives connues par passage avec les détails officiels. Il n’y a pas de recherche de nouvelles vidéos ni de nouveau catalogue de chaînes. Les archives de brouillons non approuvées, les brouillons, les éléments privés, protégés ou à la corbeille sont exclus.
 5. Activer l’antenne, régler la priorité aux nouveautés, le délai entre rediffusions et la tolérance de synchronisation. La première activation met la collecte existante en attente d’exécution pour compléter les métadonnées connues, sans ajouter de nouveau cron récurrent. L’antenne attend si le catalogue ne permet pas de respecter le délai choisi. Ajouter suffisamment de replays ou réduire ce délai pour couvrir 24 heures.
-6. Pour privilégier une émission disponible, utiliser **Programmer ensuite**. La liste prioritaire peut contenir vingt références. Elle respecte les dates de publication et le délai de rediffusion. **Passer au programme suivant** agit sur le replay courant, pas sur un vrai direct. Les cinq prochains programmes sont des estimations qui peuvent évoluer à la découverte de nouveaux contenus.
+6. Dans **Grille de diffusion**, choisir **48 heures** ou **72 heures**. La grille est enregistrée et le lecteur suit ces créneaux. Utiliser **Décaler** pour modifier le début d’un programme et décaler les suivants ; utiliser **Remplacer** pour sélectionner un autre replay disponible. Le programme en cours est conservé. **Programmer ensuite** intègre une priorité à la grille en respectant les disponibilités et le délai de rediffusion. **Passer au programme suivant** agit sur le replay courant, pas sur un vrai direct.
 7. Déposer **BSC TV — Live Player 24/7** dans Elementor. Le shortcode `[bsc_tv_player]` est également disponible. Les anciens widgets et la grille conservent leur fonctionnement.
 
 ## Réglages Elementor
@@ -25,9 +27,23 @@ Le nouveau widget compose une antenne commune à partir des émissions existante
 - Logo, avatar et badges restent hors de l’image du lecteur officiel. L’avatar et le lien viennent de la fiche BSC BDD publique existante. Il n’y a pas de deuxième base d’avatars.
 - Les métadonnées et le programme sont prévisualisés dans l’éditeur Elementor. Le bouton permet de charger le véritable lecteur dans l’aperçu.
 
+## Grille de diffusion dans l’administration
+
+La grille est intégrée à **BSC TV → Réglages et imports → BSC TV LIVE 24/7**. Les programmes à venir sont regroupés par jour, avec horaires, titre, créateur, plateforme, durée et actions. Les vues couvrent les 48 ou 72 prochaines heures à partir de l’heure actuelle, dans le fuseau WordPress. L’émission en cours est affichée séparément et ne propose pas les actions de modification.
+
+- **Décaler** ouvre un éditeur de date et d’heure. Le programme et les suivants sont déplacés de la même durée. Il peut être avancé dans une plage libre après le précédent ; un chevauchement est refusé. Un déplacement plus tardif peut créer une **Pause de programmation**, affichée dans la grille. Le lecteur attend ce créneau et un visiteur arrivant après la pause rejoint la bonne position de lecture.
+- **Remplacer** ouvre une liste des replays utilisables du catalogue existant. La durée du nouveau replay recale les suivants. Sa date de publication et le délai entre deux rediffusions sont respectés, ce qui peut repousser le début demandé. Les brouillons, sources exclues et vidéos indisponibles dans le catalogue ne sont pas proposés.
+- **Recréer la grille automatique** remplace les modifications futures par une nouvelle rotation selon les priorités actuelles. Le replay en cours est conservé. La grille enregistrée garde ses choix malgré les nouvelles découvertes ; ce bouton permet de les prendre en compte immédiatement.
+- Un vrai direct prioritaire suspend le replay courant et la grille. À sa fin, la même durée est ajoutée au replay et aux créneaux suivants. Pendant le direct, les horaires sont prévisionnels. Afficher la grille pendant un long direct ne décale pas deux fois les programmes.
+- Un formulaire devenu obsolète est refusé si la grille a été modifiée ou si le programme a commencé. Les mutations nécessitent un administrateur et un nonce WordPress valide, puis relisent l’état sous le verrou partagé du lecteur.
+
+L’ouverture de l’administration complète la grille jusqu’à 72 heures, dans une limite de 500 programmes. Avec des vidéos très courtes, elle peut couvrir une durée inférieure. Les créneaux repoussés au-delà de la fenêtre visible restent conservés, dans cette limite. À la fin de la file enregistrée, le lecteur reprend sa sélection automatique. Aucun nouveau cron ni appel externe n’est ajouté et le navigateur public continue de recevoir seulement les cinq programmes suivants.
+
 ## Fonctionnement et performances
 
 `includes/player.php` gère la sélection et l’horloge. Les références de replays sont stockées sur les émissions existantes dans `_bsc_tv_player_media`. Les autorisations et priorités sont sur les chaînes existantes dans `_bsc_tv_player_channel`. L’option `bsc_tv_player_clock`, non autoloadée, conserve la référence en cours, les temps de diffusion, les interruptions, la file manuelle et l’historique nécessaire aux rediffusions.
+
+`includes/player-schedule.php` enregistre la file future dans la clé `plan` de cette même option. Il réutilise la sélection et le démarrage des créneaux du lecteur. La projection s’exécute uniquement dans l’administration et les actions de programmation ; les visiteurs consomment la file déjà enregistrée. Une empreinte de cette file protège les formulaires contre les modifications concurrentes. Une durée modifiée ou une source devenue inutilisable est réévaluée ; une émission retirée est exclue de la file.
 
 Le catalogue local examine les 1 000 émissions publiées ou archivées les plus récemment modifiées. Il est mis en cache une minute et invalidé à la modification des émissions, chaînes ou états synchronisés. Les transitions sont protégées par un verrou en base. Les options sont relues sous verrou pour éviter qu’une requête concurrente remette l’horloge à zéro. Une nouvelle émission n’interrompt pas le replay en cours. Après plus de 200 transitions non traitées pendant une longue inactivité, l’antenne repart sur un créneau commun actuel pour borner le travail serveur.
 
@@ -52,6 +68,10 @@ Les filtres restent dans la page : le plein écran déclenché dans le lecteur o
 
 ## Validation
 
+Version 1.6.0 : **45 contrôles d’horloge et de grille, 56 contrôles WordPress/Elementor, 20 contrôles JavaScript avec SDK simulés**. Les nouveaux scénarios couvrent la conservation de trois jours, les décalages, les remplacements et le recalage des durées, la diffusion réelle d’un créneau modifié, l’arrivée après une pause, les délais de rediffusion, les longs directs, la limite de 500 créneaux, les conflits de formulaires, les droits d’accès, les nonces et l’identité entre la file stockée et la réponse REST. Aucun appel API externe pour ces opérations.
+
+Les formulaires de remplacement et de décalage ont également été soumis dans un navigateur sur une copie locale de WordPress : les changements sont enregistrés, les horaires suivants décalés et la pause de programmation affichée, avec le programme courant conservé. Ce test utilise une base SQLite jetable exportée par sauvegarde, sans accès à la production.
+
 ```sh
 php tests/player-clock.php
 node tests/player-browser.mjs
@@ -59,6 +79,8 @@ php tests/player-integration.php /chemin/vers/wordpress-de-test
 ```
 
 Le test WordPress utilise une installation locale contenant Elementor, BSC BDD et le pilote SQLite. Il copie `wp-content/database/bsc-tv-integration.sqlite` dans un répertoire temporaire avant toute modification. Ne pas l’utiliser avec une base de production. Le fichier de configuration de la fixture peut fournir ses réglages WordPress habituels, sans accès API réel.
+
+Les extensions PHP `pdo_sqlite`, `sqlite3` et `mbstring` sont utilisées par cette fixture. La sauvegarde SQLite exportée pour le navigateur reste dans `work/tv-schedule-qa`, hors du plugin et de l’archive de livraison.
 
 Les tests de l’horloge couvrent les visiteurs successifs, les changements de programmes, les six tranches de nouveauté, l’alternance, les priorités manuelles et de direct, l’absence de basculements répétés, la reprise d’un replay, les délais, les futures publications, les premières et les longues inactivités. L’intégration vérifie les profils BSC BDD, les exclusions, les contrôles Elementor et les anciens widgets, la route REST et l’absence d’appels externes. Les tests JavaScript emploient des doubles des SDK officiels pour simuler blocage d’autoplay, refus de vidéo, changement d’avatar et passage YouTube/Twitch ; ils ne valident pas les publicités ou autorisations réelles de chaque compte.
 
@@ -77,3 +99,5 @@ Avant mise en service, tester les véritables sources YouTube et Twitch sur le d
 Ajouts : `includes/player.php`, `includes/player-admin.php`, `includes/player-view.php`, `includes/player-widget.php`, `assets/player.js`, `assets/player.css`, `tests/player-clock.php`, `tests/player-browser.mjs`, `tests/player-integration.php`, `LIVE_PLAYER.md`.
 
 Modifications : `bsc-tv.php` (version et branchements), `includes/admin.php` (section dans la page actuelle), `includes/sync.php` (métadonnées de vidéos déjà connues et réutilisation du passage quotidien), `README.md` (présentation du widget).
+
+Version 1.6.0 : ajout de `includes/player-schedule.php` et `assets/player-admin.css` ; modifications de `includes/player.php`, `includes/player-admin.php`, `bsc-tv.php`, `tests/player-clock.php`, `tests/player-integration.php`, `README.md` et du présent guide.
