@@ -64,6 +64,11 @@ final class BSC_TV_Player_Admin {
 		$published = ( $values['published_at'] ?? 0 ) ?: ( $video['published_at'] ?? 0 );
 		self::field( 'published_at', 'Publication du replay · fuseau du site', $published ? wp_date( 'Y-m-d\TH:i', $published ) : '', 'datetime-local' );
 		printf( '<p><label><input type="checkbox" name="bsc_player[premiere]" value="1" %s> Signaler la première diffusion sur BSC TV comme PREMIÈRE</label></p>', checked( ! empty( $values['premiere'] ), true, false ) );
+		$resource = BSC_TV_Player::resource( ( $values['url'] ?? '' ) ?: ( $data['url'] ?? '' ) );
+		$manual_restriction = $resource && ! empty( $values['age_restricted'] ) && ( $values['restriction_key'] ?? '' ) === BSC_TV_Player::resource_key( $resource );
+		printf( '<p><label><input type="checkbox" name="bsc_player[age_restricted]" value="1" %s> Exclure cette vidéo du lecteur : limite d’âge ou lecture bloquée</label></p>', checked( $manual_restriction, true, false ) );
+		$access = (array) get_post_meta( $post->ID, BSC_TV_Player::ACCESS, true );
+		if ( $resource && ( $access['key'] ?? '' ) === BSC_TV_Player::resource_key( $resource ) && ! empty( $access['age_restricted'] ) ) { echo '<p class="description">YouTube signale une limite d’âge : cette vidéo est automatiquement exclue du lecteur 24/7, même en mode Inclure.</p>'; }
 		echo '<p class="description">La durée et la date proviennent du collecteur YouTube lorsqu’elles sont disponibles. Pour Twitch, renseignez le lien du VOD et sa durée. Une URL de chaîne Twitch seule ne permet pas une rediffusion synchronisée. Les brouillons restent exclus. Aucun fichier vidéo n’est importé.</p>';
 	}
 
@@ -85,7 +90,8 @@ final class BSC_TV_Player_Admin {
 			self::message( 'Programmation 24/7 non enregistrée : indiquez un lien vidéo YouTube ou VOD Twitch, une durée et une date de publication valides.' );
 			return;
 		}
-		update_post_meta( $id, BSC_TV_Player::MEDIA, array( 'mode' => $mode, 'url' => $url, 'duration' => $duration, 'published_at' => $published, 'premiere' => ! empty( $input['premiere'] ) ) );
+		$resource = BSC_TV_Player::resource( $actual_url );
+		update_post_meta( $id, BSC_TV_Player::MEDIA, array( 'mode' => $mode, 'url' => $url, 'duration' => $duration, 'published_at' => $published, 'premiere' => ! empty( $input['premiere'] ), 'age_restricted' => ! empty( $input['age_restricted'] ), 'restriction_key' => $resource && ! empty( $input['age_restricted'] ) ? BSC_TV_Player::resource_key( $resource ) : '' ) );
 	}
 
 	private static function authorize( $action ) {

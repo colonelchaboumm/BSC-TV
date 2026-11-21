@@ -9,6 +9,7 @@ final class BSC_TV_Player {
 	const MEDIA = '_bsc_tv_player_media';
 	const CHANNEL = '_bsc_tv_player_channel';
 	const APPROVED = '_bsc_tv_player_was_public';
+	const ACCESS = '_bsc_tv_player_access';
 	const CACHE = 'bsc_tv_player_catalogue';
 	const LOCK = 'bsc_tv_player_lock';
 
@@ -44,7 +45,7 @@ final class BSC_TV_Player {
 	}
 
 	public static function invalidate_meta( $meta_id, $post_id, $key ) {
-		if ( in_array( $key, array( self::MEDIA, self::CHANNEL, self::APPROVED, BSC_TV_Content::DATA, BSC_TV_Content::STATE ), true ) ) {
+		if ( in_array( $key, array( self::MEDIA, self::CHANNEL, self::APPROVED, self::ACCESS, BSC_TV_Content::DATA, BSC_TV_Content::STATE ), true ) ) {
 			delete_transient( self::CACHE );
 			do_action( 'bsc_tv_player_catalogue_changed' );
 		}
@@ -82,6 +83,19 @@ final class BSC_TV_Player {
 		return $resource['platform'] . ':' . $resource['id'];
 	}
 
+	/** Store official API flags without changing editorial content or creating a new show. */
+	public static function remember_access( $videos, $now ) {
+		if ( ! $videos ) { return; }
+		foreach ( get_posts( array( 'post_type' => BSC_TV_Content::SHOW, 'post_status' => array( 'publish', BSC_TV_Content::ARCHIVED ), 'posts_per_page' => 1000, 'has_password' => false, 'orderby' => 'modified', 'order' => 'DESC', 'update_post_term_cache' => false ) ) as $post ) {
+			$data = BSC_TV_Content::data( $post->ID );
+			$media = (array) get_post_meta( $post->ID, self::MEDIA, true );
+			$resource = self::resource( ( $media['url'] ?? '' ) ?: ( $data['url'] ?? '' ) );
+			if ( ! $resource || 'youtube' !== $resource['platform'] || ! isset( $videos[ $resource['id'] ]['age_restricted'] ) ) { continue; }
+			$video = $videos[ $resource['id'] ];
+			update_post_meta( $post->ID, self::ACCESS, array( 'key' => self::resource_key( $resource ), 'age_restricted' => (bool) $video['age_restricted'], 'embeddable' => $video['embeddable'] ?? null, 'checked_at' => $now ) );
+		}
+	}
+
 	private static function catalogue() {
 		$cached = get_transient( self::CACHE );
 		if ( is_array( $cached ) ) {
@@ -100,6 +114,7 @@ final class BSC_TV_Player {
 			);
 		}
 		$pool = array();
+		$blocked = array();
 		$manual_live = array();
 		// Only the existing catalogue is queried. Drafts, private and trash never participate.
 		$shows = get_posts( array( 'post_type' => BSC_TV_Content::SHOW, 'post_status' => array( 'publish', BSC_TV_Content::ARCHIVED ), 'has_password' => false, 'posts_per_page' => 1000, 'orderby' => 'modified', 'order' => 'DESC', 'update_post_term_cache' => false ) );
@@ -113,6 +128,16 @@ final class BSC_TV_Player {
 			$source = self::resource( $data['url'] ?? '' );
 			$state = BSC_TV_Sync::state( $post->ID, $video_id ?: ( $source ? self::resource_key( $source ) : '' ) );
 			$video = $state['video'] ?? $data;
+			$same_video = ! $media || empty( $media['url'] ) || self::resource( $data['url'] ?? '' ) === $resource;
+			if ( $resource ) {
+				$access = (array) get_post_meta( $post->ID, self::ACCESS, true );
+				$resource_key = self::resource_key( $resource );
+				$same_access = ( $access['key'] ?? '' ) === $resource_key;
+				$manual_restriction = ! empty( $media['age_restricted'] ) && ( $media['restriction_key'] ?? '' ) === $resource_key;
+				$age_restricted = $same_access ? ! empty( $access['age_restricted'] ) : ( $same_video && ! empty( $video['age_restricted'] ) );
+				$embedding_denied = $same_access && isset( $access['embeddable'] ) ? false === $access['embeddable'] : ( $same_video && false === ( $video['embeddable'] ?? null ) );
+				if ( $manual_restriction || $age_restricted || $embedding_denied ) { $blocked[ $resource_key ] = true; }
+			}
 			$channel_id = (int) ( $data['channel_id'] ?? $data['origin_channel'] ?? 0 );
 			if ( ! isset( $channels[ $channel_id ] ) ) {
 				$matches = array_filter( $channels, static function ( $channel ) use ( $data, $video ) {
@@ -139,10 +164,7 @@ final class BSC_TV_Player {
 			if ( 'yes' !== $mode && ! $automatic ) {
 				continue;
 			}
-			$same_video = ! $media || empty( $media['url'] ) || self::resource( $data['url'] ?? '' ) === $resource;
-			if ( $same_video && isset( $video['embeddable'] ) && false === $video['embeddable'] ) {
-				continue;
-			}
+			if ( isset( $blocked[ self::resource_key( $resource ) ] ) ) { continue; }
 			$duration = (int) ( $media['duration'] ?? 0 );
 			$duration = $duration ?: ( $same_video ? (int) ( $video['duration'] ?? 0 ) : 0 );
 			$published = (int) ( $media['published_at'] ?? 0 );
@@ -156,7 +178,8 @@ final class BSC_TV_Player {
 			}
 			$pool[ $key ] = $base + array( 'key' => $key, 'resource' => $resource, 'duration' => $duration, 'published_at' => $published, 'premiere' => ! empty( $media['premiere'] ), 'creator_key' => (string) ( $base['bdd_id'] ?: ( $channel['data']['bdd_id'] ?? 0 ) ?: ( $channel_id ?: sanitize_title( $base['creator'] ) ?: $key ) ) );
 		}
-		$result = array( 'pool' => $pool, 'channels' => $channels, 'manual_live' => $manual_live );
+		$pool = array_diff_key( $pool, $blocked );
+		$result = array( 'pool' => $pool, 'channels' => $channels, 'manual_live' => $manual_live, 'blocked' => $blocked );
 		set_transient( self::CACHE, $result, MINUTE_IN_SECONDS );
 		return $result;
 	}
@@ -202,11 +225,12 @@ final class BSC_TV_Player {
 		foreach ( $entries as $entry ) {
 			$channel = $catalogue['channels'][ $entry['channel_id'] ] ?? null;
 			$event = $entry['event'];
+			if ( ! empty( $event['age_restricted'] ) || false === ( $event['embeddable'] ?? null ) ) { continue; }
 			if ( ! $channel || ( isset( $channel['config']['live'] ) && ! $channel['config']['live'] ) || $now - $entry['confirmed_at'] >= BSC_TV_Sync::MAX_LIVE_AGE || $entry['confirmed_at'] > $now + 30 || empty( $event['start'] ) || $event['start'] > $now || ( ! empty( $event['end'] ) && $event['end'] <= $now ) ) {
 				continue;
 			}
 			$resource = self::resource( $event['url'] ?? '', true );
-			if ( ! $resource ) {
+			if ( ! $resource || isset( $catalogue['blocked'][ self::resource_key( $resource ) ] ) ) {
 				continue;
 			}
 			$key = 'live:' . self::resource_key( $resource ) . ':' . ( $event['id'] ?? $event['start'] );

@@ -60,6 +60,8 @@ $videos['beer0000011']['status']['uploadStatus'] = 'uploaded';
 $videos['beer0000013']['snippet']['channelId'] = 'UC' . str_repeat( 'b', 22 );
 $videos['beer0000018'] = youtube_fixture( 18, 30 );
 $videos['beer0000019'] = youtube_fixture( 19, 100 );
+$videos['beer0000020'] = youtube_fixture( 20 );
+$videos['beer0000020']['contentDetails']['contentRating']['ytRating'] = 'ytAgeRestricted';
 $existing = array();
 foreach ( array( 3 => 'draft', 4 => 'publish', 12 => 'publish', 14 => BSC_TV_Content::ARCHIVED, 15 => 'publish', 16 => 'trash', 17 => BSC_TV_Content::ARCHIVED ) as $number => $status ) {
 	$data = array( 'url' => 'https://youtu.be/' . sprintf( 'beer%07d', $number ), 'platform' => 'youtube', 'channel_id' => $youtube, 'bdd_id' => 0, 'creator' => '', 'start' => $now - DAY_IN_SECONDS, 'end' => 0, 'status' => 17 === $number ? 'cancelled' : 'upcoming', 'image' => 'https://example.com/editorial.jpg' );
@@ -91,7 +93,7 @@ add_filter( 'pre_http_request', static function ( $pre, $args, $url ) use ( &$re
 		if ( '/youtube/v3/playlistItems' === $path ) {
 			if ( $fail_youtube ) { return array( 'response' => array( 'code' => 503 ), 'body' => '{}' ); }
 			$page = $query['pageToken'] ?? '';
-			$numbers = 'page-two' === $page ? array( 18 ) : ( 'old-page' === $page ? array( 19 ) : range( 1, 17 ) );
+			$numbers = 'page-two' === $page ? array( 18 ) : ( 'old-page' === $page ? array( 19 ) : array_merge( range( 1, 17 ), array( 20 ) ) );
 			$items = array();
 			foreach ( $numbers as $number ) { $id = sprintf( 'beer%07d', $number ); $items[] = array( 'contentDetails' => array( 'videoId' => $id, 'videoPublishedAt' => $videos[ $id ]['snippet']['publishedAt'] ) ); }
 			$body = array( 'items' => $items, 'nextPageToken' => $repeat_cursor ? 'page-two' : ( 'page-two' === $page ? 'old-page' : ( 'old-page' === $page ? 'should-not-fetch' : 'page-two' ) ) );
@@ -122,6 +124,7 @@ import_check( 2 === $state['created'] && 1 === $state['updated'] && 'page-two' =
 import_check( 1 === count( array_filter( $requests, static function ( $path ) { return '/youtube/v3/playlistItems' === $path; } ) ), 'A background job processes just one source page' );
 $pool = BSC_TV_Player::media();
 import_check( 3 === count( $pool ) && 1200 === $pool['youtube:beer0000001']['duration'] && 3600 === $pool['youtube:beer0000002']['duration'], 'Only complete eligible videos with official durations reach the catalogue' );
+import_check( ! isset( BSC_TV_Player_Import::index()['youtube:beer0000020'] ), 'A public embeddable video with ytAgeRestricted is not imported as a replay' );
 import_check( 4444 === $pool['youtube:beer0000012']['duration'] && 'Titre éditorial 12' === get_the_title( $existing[12] ) && 'https://example.com/editorial.jpg' === BSC_TV_Content::data( $existing[12] )['image'] && 'Contenu éditorial à conserver.' === get_post( $existing[12] )->post_content && 'Introduction éditoriale.' === get_post( $existing[12] )->post_excerpt && 'emission-editoriale' === get_post( $existing[12] )->post_name, 'Existing editorial title, content, excerpt, slug, image and duration override are retained' );
 foreach ( array( 3, 4, 14, 15, 16, 17 ) as $number ) { import_check( ! isset( $pool[ 'youtube:' . sprintf( 'beer%07d', $number ) ] ), 'Draft, opt-out, unapproved feed archive, password, trash and cancellation remain excluded: ' . $number ); }
 import_check( 'draft' === get_post_status( $existing[3] ) && 'trash' === get_post_status( $existing[16] ), 'Recovery never republishes existing drafts or trash' );
@@ -296,4 +299,64 @@ import_check( 3 === substr_count( $live_html, 'class="bsc-player-grid-day"' ) &&
 update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => false ) );
 $request_count = count( $requests );
 import_check( 'disabled' === BSC_TV_Player_Daily::execute()['status'] && $request_count === count( $requests ), 'Disabling the antenna prevents external import work' );
+// Playback safety also applies to existing, manually included and overridden sources.
+$fail_youtube = $fail_resolve = false;
+update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => true, 'repeat_hours' => 0, 'live_priority' => true ) );
+$source = BSC_TV_Player_Import::index()['youtube:beer0000001'][0];
+$editorial = BSC_TV_Content::data( $source->ID );
+$manual = array( 'mode' => 'yes', 'duration' => 1200, 'published_at' => $now - DAY_IN_SECONDS );
+update_post_meta( $source->ID, BSC_TV_Player::MEDIA, $manual );
+$pool = BSC_TV_Player::media();
+update_option( BSC_TV_Player::STATE, BSC_TV_Player::advance( array(), array( 'youtube:beer0000001' => $pool['youtube:beer0000001'] ), array(), BSC_TV_Player::settings(), time() ), false );
+$videos['beer0000001']['contentDetails']['contentRating']['ytRating'] = 'ytAgeRestricted';
+$details = new ReflectionMethod( BSC_TV_Sync::class, 'yt_details' );
+list( $restricted ) = $details->invoke( null, 'fixture-youtube-key', array( 'beer0000001' ) );
+import_check( $restricted['beer0000001']['age_restricted'] && ! $restricted['beer0000001']['playable'] && 'ended' === $restricted['beer0000001']['status'], 'YouTube age ratings prevent playback without cancelling the editorial programme' );
+import_check( get_post_meta( $source->ID, BSC_TV_Player::ACCESS, true )['age_restricted'] && ! isset( BSC_TV_Player::media()['youtube:beer0000001'] ), 'An official rating removes an already imported manually included replay from the pool' );
+$complete_details = $videos['beer0000001']['contentDetails'];
+unset( $videos['beer0000001']['contentDetails'] );
+$details->invoke( null, 'fixture-youtube-key', array( 'beer0000001' ) );
+import_check( get_post_meta( $source->ID, BSC_TV_Player::ACCESS, true )['age_restricted'], 'Missing content details cannot clear a previously confirmed age restriction' );
+$videos['beer0000001']['contentDetails'] = $complete_details;
+$safe_snapshot = BSC_TV_Player::snapshot();
+import_check( 'youtube:beer0000001' !== ( $safe_snapshot['current']['key'] ?? '' ) && ! array_filter( $safe_snapshot['next'], static function ( $item ) { return 'youtube:beer0000001' === $item['key']; } ), 'The shared clock and saved queue drop a newly restricted current source' );
+import_check( $editorial === BSC_TV_Content::data( $source->ID ) && BSC_TV_Content::ARCHIVED === get_post_status( $source ), 'Playback restrictions preserve the existing show, creator association and editorial status' );
+ob_start(); BSC_TV_Player_Admin::box( get_post( $source->ID ) ); $age_box = ob_get_clean();
+import_check( false !== strpos( $age_box, 'YouTube signale une limite d’âge' ), 'Administration explains why a known age-restricted video is excluded' );
+unset( $videos['beer0000001']['contentDetails']['contentRating'] );
+$details->invoke( null, 'fixture-youtube-key', array( 'beer0000001' ) );
+import_check( isset( BSC_TV_Player::media()['youtube:beer0000001'] ), 'A later official removal of the rating clears the automatic restriction' );
+$old_source_state = get_post_meta( $source->ID, BSC_TV_Content::STATE, true );
+$stale_source_state = $old_source_state; $stale_source_state['video']['age_restricted'] = true;
+update_post_meta( $source->ID, BSC_TV_Content::STATE, $stale_source_state );
+import_check( isset( BSC_TV_Player::media()['youtube:beer0000001'] ), 'The latest official access result takes precedence over an older stored age flag' );
+update_post_meta( $source->ID, BSC_TV_Content::STATE, $old_source_state );
+$videos['beer0000021'] = youtube_fixture( 21 );
+$manual['url'] = 'https://youtu.be/beer0000021';
+update_post_meta( $source->ID, BSC_TV_Player::MEDIA, $manual );
+$videos['beer0000001']['contentDetails']['contentRating']['ytRating'] = 'ytAgeRestricted';
+$details->invoke( null, 'fixture-youtube-key', array( 'beer0000001' ) );
+import_check( isset( BSC_TV_Player::media()['youtube:beer0000021'] ), 'An old source restriction cannot block a different replacement URL' );
+$videos['beer0000021']['contentDetails']['contentRating']['ytRating'] = 'ytAgeRestricted';
+$details->invoke( null, 'fixture-youtube-key', array( 'beer0000021' ) );
+import_check( ! isset( BSC_TV_Player::media()['youtube:beer0000021'] ), 'A restriction on the actual overridden video cannot be bypassed by manual inclusion' );
+unset( $videos['beer0000021']['contentDetails']['contentRating'] );
+$details->invoke( null, 'fixture-youtube-key', array( 'beer0000021' ) );
+$_POST = array( 'bsc_player_nonce' => wp_create_nonce( 'bsc_tv_player_media' ), 'bsc_player' => $manual + array( 'age_restricted' => 1 ) );
+$_POST['bsc_player']['published_at'] = wp_date( 'Y-m-d\TH:i', $now - DAY_IN_SECONDS );
+BSC_TV_Player_Admin::save_media( $source->ID, get_post( $source->ID ) );
+$_POST = array();
+import_check( ! isset( BSC_TV_Player::media()['youtube:beer0000021'] ) && 'youtube:beer0000021' === get_post_meta( $source->ID, BSC_TV_Player::MEDIA, true )['restriction_key'], 'The administrator can exclude a blocked video independently of API flags' );
+$live_settings = BSC_TV_Sync::settings(); $live_settings['live_enabled'] = true;
+update_option( BSC_TV_Sync::SETTINGS, $live_settings );
+$youtube_data = BSC_TV_Content::data( $youtube );
+$live_key = BSC_TV_Content::channel_key( 'youtube', $youtube_data['url'] );
+$age_live = array( 'id' => 'beer0000021', 'title' => 'Beer age-restricted live', 'url' => 'https://youtu.be/beer0000021', 'start' => time() - 60, 'end' => 0, 'age_restricted' => true, 'embeddable' => true );
+update_post_meta( $youtube, BSC_TV_Content::STATE, array( 'key' => $live_key, 'live_at' => time(), 'live' => array( $age_live ) ) );
+import_check( empty( BSC_TV_Player::snapshot()['current']['live'] ), 'An age-restricted true live cannot preempt the replay clock' );
+$age_live['age_restricted'] = false;
+update_post_meta( $youtube, BSC_TV_Content::STATE, array( 'key' => $live_key, 'live_at' => time(), 'live' => array( $age_live ) ) );
+import_check( empty( BSC_TV_Player::snapshot()['current']['live'] ), 'A manually blocked video stays excluded even if an older channel cache describes it as unrestricted live' );
+import_check( ! wp_next_scheduled( BSC_TV_Player_Import::JOB ) && 0 === $unexpected, 'Restriction checks add no import job and use only existing official metadata endpoints' );
+
 echo "OK {$checks} historical replay and daily import checks (mocked source APIs).\n";
