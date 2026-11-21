@@ -13,17 +13,11 @@ final class BSC_TV_Player_Import {
 
 	public static function register() {
 		add_action( 'init', array( __CLASS__, 'schedule' ), 20 );
-		add_action( self::JOB, array( __CLASS__, 'run' ) );
-		foreach ( array( BSC_TV_Sync::DAILY, BSC_TV_Sync::DAILY_NOW ) as $hook ) { add_action( $hook, array( __CLASS__, 'request' ), 20 ); }
-		foreach ( array( 'added_option', 'updated_option' ) as $hook ) { add_action( $hook, array( __CLASS__, 'settings_changed' ) ); }
-		add_action( 'save_post_' . BSC_TV_Content::CHANNEL, array( __CLASS__, 'channel_changed' ) );
-		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) { add_action( $hook, array( __CLASS__, 'meta_changed' ), 10, 3 ); }
 	}
 
 	public static function schedule() {
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { self::deactivate(); return; }
-		$state = (array) get_option( self::STATE, array() );
-		if ( ! empty( $state['pending'] ) || time() - ( $state['checked_at'] ?? 0 ) >= DAY_IN_SECONDS ) { BSC_TV_Sync::queue( self::JOB ); }
+		// Migration: remove the old import continuation without touching other WordPress tasks.
+		self::deactivate();
 	}
 
 	public static function deactivate() {
@@ -31,23 +25,7 @@ final class BSC_TV_Player_Import {
 	}
 
 	public static function request() {
-		if ( BSC_TV_Player::settings()['enabled'] ) {
-			update_option( self::REVISION, wp_generate_uuid4(), false );
-			BSC_TV_Sync::queue( self::JOB );
-		}
-	}
-
-	public static function settings_changed( $option ) {
-		if ( BSC_TV_Player::SETTINGS === $option ) { self::schedule(); self::request(); }
-		if ( BSC_TV_Sync::SETTINGS === $option ) { self::request(); }
-	}
-
-	public static function channel_changed( $id ) {
-		if ( 'publish' === get_post_status( $id ) ) { self::request(); }
-	}
-
-	public static function meta_changed( $meta_id, $id, $key ) {
-		if ( in_array( $key, array( BSC_TV_Content::DATA, BSC_TV_Player::CHANNEL ), true ) && BSC_TV_Content::CHANNEL === get_post_type( $id ) ) { self::channel_changed( $id ); }
+		return false; // Kept for older callers: importing is now exclusively an external daily job.
 	}
 
 	public static function channels() {
@@ -105,26 +83,25 @@ final class BSC_TV_Player_Import {
 		return $post ? 'updated' : 'created';
 	}
 
-	/** One page per job; cursor and retry counts survive interrupted cron workers. */
-	public static function run() {
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { return; }
-		$lock = BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
-		if ( ! $lock ) { BSC_TV_Sync::queue( self::JOB, 60 ); return; }
+	/** One internal page; only the authenticated daily worker may call this from the application. */
+	public static function run( $external = false, $held_lock = null ) {
+		if ( ! $external ) { return new WP_Error( 'import_external', 'Utilisez la tâche quotidienne Infomaniak.' ); }
+		if ( ! BSC_TV_Player::settings()['enabled'] ) { return new WP_Error( 'import_disabled', 'Le lecteur est désactivé.' ); }
+		$lock = $held_lock ?: BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
+		if ( ! $lock ) { return new WP_Error( 'import_busy', 'Une synchronisation est déjà en cours.' ); }
 		$changed = false;
 		try {
 			wp_cache_delete( self::STATE, 'options' );
 			wp_cache_delete( 'notoptions', 'options' );
 			$state = (array) get_option( self::STATE, array() );
-			$revision = get_option( self::REVISION, '' );
 			$channels = self::channels();
 			$now = time();
 			if ( empty( $state['pending'] ) ) {
-				$state = array( 'revision' => $revision, 'since' => self::since( $now ), 'until' => $now, 'checked_at' => $now, 'pending' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => 0, 'total' => count( $channels ) );
+				$state = array( 'since' => self::since( $now ), 'until' => $now, 'checked_at' => $now, 'pending' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => 0, 'total' => count( $channels ) );
 				foreach ( $channels as $id => $channel ) { $state['pending'][ $id ] = array( 'key' => $channel['key'], 'cursor' => '', 'pages' => 0, 'attempts' => 0, 'seen' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0 ); }
 				update_option( self::STATE, $state, false );
 			}
 			if ( $state['pending'] ) {
-				BSC_TV_Sync::queue( self::JOB, 30 );
 				$id = array_key_first( $state['pending'] );
 				$job = $state['pending'][ $id ];
 				if ( ! isset( $channels[ $id ] ) || $channels[ $id ]['key'] !== $job['key'] ) {
@@ -163,14 +140,10 @@ final class BSC_TV_Player_Import {
 			}
 			if ( ! $state['pending'] ) {
 				$state['finished_at'] = $now;
-				self::deactivate();
-				// A source or credential changed during this scan: do not lose that request.
-				wp_cache_delete( self::REVISION, 'options' );
-				wp_cache_delete( 'notoptions', 'options' );
-				if ( get_option( self::REVISION, '' ) !== $state['revision'] ) { BSC_TV_Sync::queue( self::JOB ); }
 			}
 			update_option( self::STATE, $state, false );
-		} finally { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $lock ); }
+		} finally { if ( ! $held_lock ) { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $lock ); } }
 		if ( $changed ) { BSC_TV_Player_Schedule::refresh(); }
+		return $state;
 	}
 }

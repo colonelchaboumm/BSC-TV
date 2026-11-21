@@ -52,10 +52,10 @@ final class BSC_TV_Player_Schedule {
 	public static function signature( $pool, $settings ) {
 		$selection = array();
 		foreach ( $pool as $key => $media ) {
-			$selection[ $key ] = array( $media['show_id'], $media['duration'], $media['published_at'], $media['creator_key'], ! empty( $media['premiere'] ) );
+			$selection[ $key ] = array( $media['show_id'], $media['duration'], $media['published_at'], $media['channel_id'], $media['creator_key'], ! empty( $media['premiere'] ) );
 		}
 		ksort( $selection );
-		return hash( 'sha256', json_encode( array( $selection, $settings['recent'], $settings['repeat_hours'] ) ) );
+		return hash( 'sha256', json_encode( array( 'mixed-v1', $selection, $settings['recent'], $settings['repeat_hours'], $settings['timezone'] ?? 'UTC' ) ) );
 	}
 
 	public static function needs_refresh( $state, $pool, $settings, $now ) {
@@ -96,6 +96,42 @@ final class BSC_TV_Player_Schedule {
 
 	public static function fingerprint( $state ) {
 		return hash( 'sha256', json_encode( $state['plan'] ?? array() ) );
+	}
+
+	/** Three calendar days, including actual earlier broadcasts and programmes spanning midnight. */
+	public static function days( $state, $now, $timezone ) {
+		$bounds = BSC_TV_Player::day_bounds( $now, $timezone, 3 );
+		$date = ( new DateTimeImmutable( '@' . $bounds[0] ) )->setTimezone( new DateTimeZone( $timezone ?: 'UTC' ) );
+		$groups = array();
+		$rows = $state['aired'] ?? array();
+		$current = $state['live'] ?? $state['vod'] ?? null;
+		$found = false;
+		foreach ( $rows as $row ) { if ( $current && $row['key'] === $current['key'] && ( ! $row['end'] || $row['end'] > $now ) ) { $found = true; } }
+		if ( $current && ! $found ) { $rows[] = $current + array( 'live' => ! empty( $state['live'] ) ); }
+		foreach ( $state['plan'] ?? array() as $row ) { $rows[] = $row + array( 'scheduled' => true ); }
+		for ( $day = 0; $day < 3; ++$day ) {
+			$start = $date->getTimestamp();
+			$date = $date->modify( '+1 day' );
+			$end = $date->getTimestamp();
+			$key = ( new DateTimeImmutable( '@' . $start ) )->setTimezone( new DateTimeZone( $timezone ?: 'UTC' ) )->format( 'Y-m-d' );
+			$groups[ $key ] = array( 'start' => $start, 'end' => $end, 'rows' => array() );
+			$seen = array();
+			foreach ( $rows as $row ) {
+				if ( $row['end'] && $row['end'] <= $row['start'] ) { continue; }
+				$row_end = $row['end'] ?: $now + 1;
+				if ( $row['start'] >= $end || $row_end <= $start ) { continue; }
+				$id = $row['key'] . ':' . $row['start'];
+				if ( isset( $seen[ $id ] ) ) { continue; }
+				$seen[ $id ] = true;
+				$row['display_start'] = max( $start, $row['start'] );
+				$row['display_end'] = min( $end, $row_end );
+				$row['continued'] = $row['start'] < $start;
+				$row['phase'] = ! empty( $row['scheduled'] ) ? 'future' : ( $row['end'] && $row['end'] <= $now ? 'past' : 'current' );
+				$groups[ $key ]['rows'][] = $row;
+			}
+			usort( $groups[ $key ]['rows'], static function ( $a, $b ) { return $a['display_start'] <=> $b['display_start']; } );
+		}
+		return $groups;
 	}
 
 	/** Pure projection: use the same selection and transition rules as the real player. */
@@ -203,6 +239,7 @@ final class BSC_TV_Player_Schedule {
 			} elseif ( 'clear' === $operation ) {
 				$state['manual'] = array();
 				$state['plan'] = array();
+				$state['rotation_seed'] = bin2hex( random_bytes( 16 ) );
 			} else {
 				if ( ! empty( $state['live'] ) || empty( $state['vod'] ) || ! hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], $current_key ) ) {
 					update_option( BSC_TV_Player::STATE, $state, false );
@@ -211,6 +248,7 @@ final class BSC_TV_Player_Schedule {
 				BSC_TV_Player::shift_plan( $state, $now - $state['vod']['end'] );
 				$state['vod']['end'] = $now;
 				$state['history'][ $state['vod']['key'] ]['end'] = $now;
+				foreach ( $state['aired'] ?? array() as $index => $row ) { if ( empty( $row['live'] ) && $row['start'] <= $now && $row['end'] > $now ) { $state['aired'][ $index ]['end'] = $now; } }
 			}
 			$state['plan'] = self::build( $state, $pool, $settings, $now );
 			update_option( BSC_TV_Player::STATE, $state, false );
