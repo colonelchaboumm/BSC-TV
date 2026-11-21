@@ -22,7 +22,7 @@ class Element {
 }
 const root = new Element();
 root.dataset = { bscPlayer: 'https://bsc.example/wp-json/bsc-tv/v1/player', autoplay: '0', muted: '1' };
-const selectors = ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-times]', '[data-player-avatar]', '[data-player-profile]', '[data-player-next]', '[data-player-next-title]', '[data-player-next-time]', '[data-player-progress]'];
+const selectors = ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-times]', '[data-player-avatar]', '[data-player-poster]', '[data-player-profile]', '[data-player-next]', '[data-player-next-title]', '[data-player-next-time]', '[data-player-progress]'];
 root.nodes = new Map(selectors.map(selector => [selector, new Element()]));
 root.badges = ['on_air', 'live', 'new', 'premiere', 'replay'].map(name => { const badge = new Element(); badge.dataset.playerBadge = name; return badge; });
 const logo = new Element();
@@ -44,7 +44,7 @@ let blocked = false;
 const youtubePlayers = [];
 const twitchPlayers = [];
 const snapshot = current => ({ enabled: true, server_time: epoch + clockMs / 1000, timezone: 'Europe/Paris', tolerance: 8, next: [], current });
-const programme = (key, platform, id, changes = {}) => ({ key, resource: { platform, id }, title: 'Émission A', creator: 'Créateur A', avatar: 'https://bsc.example/avatar-a.png', profile_url: 'https://bsc.example/createur-a/', url: 'https://www.youtube.com/watch?v=M7lc1UVf-VE', live: false, new: true, premiere: false, start: epoch - 900, end: epoch + 2700, ...changes });
+const programme = (key, platform, id, changes = {}) => ({ key, resource: { platform, id }, title: 'Émission A', creator: 'Créateur A', avatar: 'https://bsc.example/avatar-a.png', image: 'https://bsc.example/show-a.jpg', profile_url: 'https://bsc.example/createur-a/', url: 'https://www.youtube.com/watch?v=M7lc1UVf-VE', live: false, new: true, premiere: false, start: epoch - 900, end: epoch + 2700, ...changes });
 let response = snapshot(programme('youtube:first', 'youtube', 'M7lc1UVf-VE'));
 let fetchCount = 0;
 class YouTubePlayer {
@@ -54,6 +54,7 @@ class YouTubePlayer {
   getPlayerState() { return this.state; }
   getCurrentTime() { return this.position; }
   mute() { this.muted = true; }
+  unMute() { this.muted = false; this.unmuted = true; }
   destroy() { this.destroyed = true; }
 }
 class TwitchPlayer {
@@ -80,6 +81,8 @@ let checks = 0;
 await settle();
 check(youtubePlayers.length === 0 && document.head.children.length === 0, 'No platform SDK or iframe before joining');
 check(root.nodes.get('[data-player-title]').textContent === 'Émission A', 'Metadata is populated without video playback');
+const poster = root.nodes.get('[data-player-poster]');
+check(!poster.hidden && poster.src === 'https://bsc.example/show-a.jpg', 'The programme image appears before joining without loading the video SDK');
 await root.nodes.get('[data-player-join]').fire('click');
 await settle();
 const first = youtubePlayers[0];
@@ -102,19 +105,28 @@ await root.nodes.get('[data-player-join]').fire('click');
 await settle();
 check(youtubePlayers.length === playersBeforeRetry + 1 && first.destroyed, 'Retry recreates a failed official player');
 clockMs = 2800000;
-response = snapshot(programme('youtube:second', 'youtube', 'aqz-KE-bpKQ', { title: 'Émission B', creator: 'Créateur B', avatar: 'https://bsc.example/avatar-b.png', start: epoch + 2700, end: epoch + 6300 }));
+root.dataset.muted = '0';
+response = snapshot(programme('youtube:second', 'youtube', 'aqz-KE-bpKQ', { title: 'Émission B', creator: 'Créateur B', avatar: 'https://bsc.example/avatar-b.png', image: 'https://bsc.example/show-b.jpg', start: epoch + 2700, end: epoch + 6300 }));
 await document.fire('visibilitychange'); await settle();
 check(youtubePlayers.at(-1).seeks[0] === 100, 'Next scheduled programme starts at the shared offset');
 check(root.nodes.get('[data-player-avatar]').src.endsWith('avatar-b.png') && root.nodes.get('[data-player-title]').textContent === 'Émission B', 'Avatar and title change with the programme');
-response = snapshot(programme('live:twitch:one', 'twitch', 'beerstream', { live: true, new: false, start: epoch + 2600, end: 0 }));
+check(youtubePlayers.at(-1).unmuted && !youtubePlayers.at(-1).muted, 'YouTube is explicitly unmuted when the default sound setting is active');
+check(poster.src === 'https://bsc.example/show-b.jpg', 'The poster follows the next programme instead of retaining the previous image');
+await poster.fire('error');
+await document.fire('visibilitychange'); await settle();
+check(poster.hidden, 'An unavailable image stays hidden on subsequent refreshes');
+response = snapshot(programme('live:twitch:one', 'twitch', 'beerstream', { live: true, new: false, image: 'javascript:alert(1)', start: epoch + 2600, end: 0 }));
 await document.fire('visibilitychange'); await settle();
 check(twitchPlayers.length === 1 && twitchPlayers[0].seeks.length === 0, 'Real live embeds a channel and never seeks');
 check(Array.from(twitchPlayers[0].options.parent).join() === 'bsc.example' && twitchPlayers[0].options.channel === 'beerstream', 'Twitch embed uses current parent and channel');
+check(twitchPlayers[0].options.muted === false, 'The sound-on default is also passed explicitly to Twitch');
+check(poster.hidden && !poster.src, 'Unsafe poster URLs are removed from the screen');
 check(!root.badges.find(node => node.dataset.playerBadge === 'live').hidden, 'LIVE badge follows server confirmation');
 check(root.nodes.get('[data-player-progress]').hidden, 'A true live does not show a fictitious VOD progress');
 response = snapshot(programme('youtube:second', 'youtube', 'aqz-KE-bpKQ', { start: epoch + 2700, end: epoch + 6300 }));
 await document.fire('visibilitychange'); await settle();
 check(twitchPlayers[0].paused && youtubePlayers.at(-1).seeks[0] === 100, 'Return from live restores server-provided replay position');
+check(!poster.hidden && poster.src === 'https://bsc.example/show-a.jpg', 'A valid programme image returns after a source without a usable image');
 root.nodes.get('.bsc-player__screen').clientWidth = 360;
 response = snapshot(programme('live:twitch:small', 'twitch', 'beerstream', { live: true, start: epoch, end: 0 }));
 await document.fire('visibilitychange'); await settle();
@@ -123,6 +135,7 @@ check(logo.src === 'https://bsc.example/bsc-fixed-logo.png', 'Channel branding r
 response = { ...snapshot(null), enabled: false };
 await document.fire('visibilitychange'); await settle();
 check(root.nodes.get('[data-player-meta]').hidden && root.nodes.get('[data-player-join]').disabled, 'Disabling the antenna stops playback and hides old metadata');
+check(poster.hidden && !poster.src, 'Disabling the antenna also removes its old poster');
 root.isConnected = false; intervals[0]();
 check(fetchCount > 0 && timeouts.size === 0, 'Detached Elementor widget releases its refresh timer');
 console.log(`OK ${checks} browser SDK contract checks (simulated YouTube/Twitch).`);

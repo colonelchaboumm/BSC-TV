@@ -234,7 +234,7 @@ final class BSC_TV_Player {
 				continue;
 			}
 			$key = 'live:' . self::resource_key( $resource ) . ':' . ( $event['id'] ?? $event['start'] );
-			$lives[ $key ] = array( 'key' => $key, 'resource' => $resource, 'channel_id' => $channel['id'], 'show_id' => $entry['show_id'] ?? 0, 'title' => $event['title'], 'start' => (int) $event['start'], 'end' => 0, 'priority' => (int) ( $channel['config']['priority'] ?? 50 ) );
+			$lives[ $key ] = array( 'key' => $key, 'resource' => $resource, 'channel_id' => $channel['id'], 'show_id' => $entry['show_id'] ?? 0, 'title' => $event['title'], 'image' => BSC_TV_Content::url( $event['image'] ?? '' ), 'start' => (int) $event['start'], 'end' => 0, 'priority' => (int) ( $channel['config']['priority'] ?? 50 ) );
 		}
 		return $lives;
 	}
@@ -450,6 +450,9 @@ final class BSC_TV_Player {
 		$channel = $catalogue['channels'][ $item['channel_id'] ?? 0 ] ?? array();
 		$show = ! empty( $item['show_id'] ) ? BSC_TV_Content::data( $item['show_id'] ) : array();
 		$profile = BSC_TV_Content::profile( $media['bdd_id'] ?? $show['bdd_id'] ?? 0 ) ?: BSC_TV_Content::profile( $channel['data']['bdd_id'] ?? 0 );
+		$image = ! empty( $item['show_id'] ) ? get_the_post_thumbnail_url( $item['show_id'], 'large' ) : '';
+		$image = $image ?: ( $show['image'] ?? '' ) ?: ( $item['image'] ?? '' );
+		$image = $image ?: ( $channel ? get_the_post_thumbnail_url( $channel['id'], 'large' ) : '' );
 		$resource = $item['resource'];
 		$url = 'youtube' === $resource['platform'] ? 'https://www.youtube.com/watch?v=' . $resource['id'] : ( $live ? 'https://www.twitch.tv/' . $resource['id'] : 'https://www.twitch.tv/videos/' . substr( $resource['id'], 1 ) );
 		return array(
@@ -457,6 +460,7 @@ final class BSC_TV_Player {
 			'title' => html_entity_decode( wp_strip_all_tags( $item['title'] ?? $media['title'] ?? 'BSC TV' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'creator' => html_entity_decode( wp_strip_all_tags( $profile['name'] ?? ( ( $media['creator'] ?? '' ) ?: ( $channel['name'] ?? '' ) ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'avatar' => BSC_TV_Content::url( $profile['avatar']['thumbnail'] ?? '' ), 'profile_url' => BSC_TV_Content::url( $profile['permalink'] ?? '' ),
+			'image' => BSC_TV_Content::url( $image ?: ( $profile['avatar']['thumbnail'] ?? '' ) ),
 			'start' => $item['start'], 'end' => $item['end'], 'offset' => $live ? 0 : max( 0, $now - $item['start'] ),
 			'new' => ! $live && $now >= ( $media['published_at'] ?? PHP_INT_MAX ) && $now - ( $media['published_at'] ?? 0 ) < DAY_IN_SECONDS,
 			'premiere' => ! $live && ! empty( $item['premiere'] ),
@@ -502,6 +506,7 @@ final class BSC_TV_Player {
 		$live = $state['live'] ?? null;
 		$vod = $state['vod'] ?? null;
 		if ( $live && isset( $lives[ $live['key'] ] ) ) {
+			$live['image'] = $lives[ $live['key'] ]['image'] ?? '';
 			$result['current'] = self::decorate( $live, $catalogue, $now, true );
 		} elseif ( $vod && isset( $catalogue['pool'][ $vod['key'] ] ) && $vod['start'] <= $now && $vod['end'] > $now ) {
 			$result['current'] = self::decorate( $vod, $catalogue, $now );
@@ -572,6 +577,7 @@ final class BSC_TV_Player {
 			$show = ! empty( $row['show_id'] ) ? BSC_TV_Content::data( $row['show_id'] ) : array();
 			$image = ! empty( $row['show_id'] ) ? get_the_post_thumbnail_url( $row['show_id'], 'medium' ) : '';
 			$image = $image ?: ( $show['image'] ?? '' );
+			$image = $image ?: ( $item['on_air'] && $live ? ( $snapshot['current']['image'] ?? '' ) : ( $row['image'] ?? '' ) );
 			$image = $image ?: ( $channel ? get_the_post_thumbnail_url( $channel['id'], 'thumbnail' ) : '' );
 			$item['image'] = BSC_TV_Content::url( $image ?: $item['avatar'] );
 			$result['items'][] = $item;
@@ -585,9 +591,10 @@ final class BSC_TV_Player {
 		wp_enqueue_style( 'bsc-tv-player' );
 		wp_enqueue_script( 'bsc-tv-player' );
 		$settings = (array) $settings;
-		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay', 'muted' ), 'yes' );
-		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'autoplay' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array() );
+		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay' ), 'yes' );
+		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'autoplay' => '', 'muted' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array() );
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );
+		$poster = 'yes' === $settings['show_poster'] ? ( self::snapshot()['current']['image'] ?? '' ) : '';
 		ob_start();
 		require BSC_TV_DIR . 'includes/player-view.php';
 		return ob_get_clean();

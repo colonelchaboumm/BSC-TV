@@ -9,7 +9,7 @@
 			<?php endforeach; ?>
 		</div>
 	</div>
-	<div class="bsc-player__screen-wrap"><div class="bsc-player__screen"><div class="bsc-player__mount" data-player-mount></div></div></div>
+	<div class="bsc-player__screen-wrap"><div class="bsc-player__screen"><?php if ( 'yes' === $settings['show_poster'] ) : ?><img class="bsc-player__poster" data-player-poster alt="" decoding="async"<?php if ( $poster ) : ?> src="<?php echo esc_url( $poster ); ?>"<?php else : ?> hidden<?php endif; ?>><?php endif; ?><div class="bsc-player__mount" data-player-mount></div></div></div>
 	<div class="bsc-player__actions">
 		<button class="bsc-player__join" type="button" data-player-join><?php echo esc_html( $settings['join_label'] ); ?></button>
 		<a class="bsc-player__source" data-player-source hidden>Regarder sur la plateforme</a>

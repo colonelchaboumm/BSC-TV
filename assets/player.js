@@ -64,6 +64,7 @@
 			this.lastSeek = 0;
 			this.button.addEventListener('click', () => this.join());
 			root.querySelector('[data-player-avatar]')?.addEventListener('error', event => { event.target.hidden = true; });
+			root.querySelector('[data-player-poster]')?.addEventListener('error', event => { event.target.hidden = true; });
 			this.visibility = () => { if (!document.hidden) this.request(); };
 			document.addEventListener('visibilitychange', this.visibility);
 			this.pulse = window.setInterval(() => this.tick(), 1000);
@@ -133,6 +134,12 @@
 				else if (avatar.getAttribute('src') !== url) { avatar.hidden = false; avatar.src = url; }
 			}
 			const profile = this.root.querySelector('[data-player-profile]');
+			const poster = this.root.querySelector('[data-player-poster]');
+			if (poster) {
+				const url = current ? safeURL(current.image) : '';
+				if (!url) { poster.hidden = true; poster.removeAttribute('src'); }
+				else if (poster.getAttribute('src') !== url) { poster.hidden = false; poster.src = url; }
+			}
 			if (profile) {
 				const url = current ? safeURL(current.profile_url) : '';
 				profile.hidden = !url;
@@ -213,7 +220,7 @@
 						width: '100%', height: '100%', videoId: id,
 						playerVars: { autoplay: 0, controls: 1, playsinline: 1, fs: 1, origin: location.origin, start: Math.floor(this.position()) },
 						events: {
-							onReady: () => { if (valid() && this.root.dataset.muted === '1') this.player.mute(); ready(); },
+							onReady: () => { if (!valid()) return; if (this.root.dataset.muted === '1') this.player.mute(); else this.player.unMute(); ready(); },
 							onStateChange: event => {
 								if (!valid()) return;
 								if (event.data === window.YT.PlayerState.PLAYING) this.status('');

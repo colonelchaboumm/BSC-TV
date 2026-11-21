@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.10.1, branche `feature/day-pagination-age`. La liste quotidienne affiche cinq programmes à venir par lot avec un bouton AJAX **Afficher plus**. Le lecteur 24/7 exclut les vidéos signalées par YouTube comme soumises à une limite d’âge et permet une exclusion manuelle des vidéos bloquées. L’import Infomaniak quotidien conserve sa fréquence. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.10.2, branche `feature/player-sound-poster`. Le lecteur démarre avec le son activé par défaut et affiche l’image de l’émission avant la lecture. La liste quotidienne conserve ses lots de cinq programmes avec **Afficher plus**, ainsi que le filtre des restrictions d’âge du lecteur. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -74,8 +74,9 @@ La file couvre jusqu’à 72 heures, dans une limite de 500 programmes. Elle se 
 
 ## Réglages Elementor
 
-- Contenu : titre, bouton, logo fixe, avatar et lien BSC BDD, créateur, émission, programme suivant, horaires, progression et badges.
-- Lecture : démarrage sur clic par défaut, autoplay facultatif, démarrage sans son. Les commandes du volume et du plein écran restent celles de la plateforme.
+- Contenu : titre, bouton, logo fixe, image de l’émission avant lecture, avatar et lien BSC BDD, créateur, émission, programme suivant, horaires, progression et badges.
+- Lecture : démarrage sur clic par défaut, autoplay facultatif, **son activé par défaut**. **Démarrer sans son** permet toujours une lecture silencieuse. Un widget déjà sauvegardé avec cette option activée conserve son choix : désactivez-la et enregistrez la page pour activer son audio. YouTube reçoit explicitement `unMute()` et Twitch `muted: false` lorsque le son est actif ; les commandes du volume et du plein écran restent celles de la plateforme. Un navigateur peut exiger un clic pour autoriser la lecture avec le son. [Événement YouTube de lecture automatique bloquée](https://developers.google.com/youtube/iframe_api_reference#onAutoplayBlocked).
+- **Image de l’émission avant lecture**, activée par défaut : l’aperçu est présent dès le HTML initial, puis suit le programme courant lors des rafraîchissements. Il reprend l’image mise en avant de l’émission, son visuel enregistré ou le visuel du vrai direct ; à défaut, le logo de la chaîne ou l’avatar BSC BDD. Sans image disponible, l’écran conserve son fond. Une image qui échoue au chargement est masquée. Le lecteur officiel apparaît au-dessus dès sa création ; ses commandes restent accessibles. L’aperçu ne charge aucun SDK ni iframe. Dans **Style → Cadrage de l’image avant lecture**, choisir **Remplir l’écran** ou **Afficher l’image entière**.
 - Style : format 16:9, couleurs, typographies, marges, espacements et arrondis. Le logo et l’avatar disposent de dimensions et positions par appareil.
 - **Style → Écran bombé et CRT** : deux options indépendantes, désactivées par défaut. Reflets, ombres du verre et lignes de balayage sont placés devant l’image avec `pointer-events: none`. Relief, courbure, intensité, espacement et lueur sont personnalisables par appareil. L’effet bombé simule un verre, sans déformation géométrique de la vidéo.
 - **Couleur à l’extérieur des arrondis** : le lecteur et les filtres sont rognés dans les coins selon la courbure ; la couleur choisie remplit les parties extérieures. Les grandes courbures peuvent rogner les éléments proches des coins.
@@ -125,7 +126,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.10.1 : **73 contrôles d’horloge et de grille, 73 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 20 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne et 26 contrôles JavaScript de son rafraîchissement**, soit 310 contrôles locaux.
+Version 1.10.2 : **73 contrôles d’horloge et de grille, 79 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 28 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne et 26 contrôles JavaScript de son rafraîchissement**, soit 324 contrôles locaux.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 
