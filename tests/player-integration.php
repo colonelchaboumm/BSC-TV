@@ -193,7 +193,7 @@ player_check( $nonce_rejected && $security_before === get_option( BSC_TV_Player:
 $editor_state = get_option( BSC_TV_Player::STATE );
 $_GET = array( 'bsc_player_slot' => $editor_state['plan'][0]['id'], 'bsc_player_edit' => 'replace', 'player_days' => 2 );
 ob_start(); BSC_TV_Player_Admin::section(); $schedule_admin = ob_get_clean();
-player_check( false !== strpos( $schedule_admin, 'prochaines 48 heures' ) && false !== strpos( $schedule_admin, 'name="plan_fingerprint"' ) && false !== strpos( $schedule_admin, 'Enregistrer le remplacement' ), 'Actual admin view offers a secured replacement editor and two-day grid' );
+player_check( false !== strpos( $schedule_admin, 'aujourd’hui et les deux journées à venir' ) && 3 === substr_count( $schedule_admin, 'class="bsc-player-grid-day"' ) && false !== strpos( $schedule_admin, 'name="plan_fingerprint"' ) && false !== strpos( $schedule_admin, 'Enregistrer le remplacement' ), 'The live administration shows three calendar days and a secured replacement editor' );
 $_GET['bsc_player_edit'] = 'move';
 ob_start(); BSC_TV_Player_Admin::section(); $schedule_move = ob_get_clean();
 player_check( false !== strpos( $schedule_move, 'type="datetime-local" name="starts_at"' ) && false !== strpos( $schedule_move, 'Enregistrer le décalage' ), 'Actual admin view offers the time editor in the site timezone' );

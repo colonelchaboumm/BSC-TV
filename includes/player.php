@@ -32,6 +32,7 @@ final class BSC_TV_Player {
 			'live_priority' => ! empty( $input['live_priority'] ),
 			'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ),
 			'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ),
+			'timezone' => wp_timezone_string(),
 		);
 	}
 
@@ -250,12 +251,52 @@ final class BSC_TV_Player {
 				}
 			}
 		}
-		$other_creators = array_filter( $candidates, static function ( $item ) use ( $state ) { return $item['creator_key'] !== ( $state['last_creator'] ?? '' ); } );
-		$candidates = $other_creators ?: $candidates;
-		usort( $candidates, static function ( $a, $b ) use ( $settings, $first_time ) {
-			return self::bucket( $a['published_at'], $first_time, $settings['recent'] ) <=> self::bucket( $b['published_at'], $first_time, $settings['recent'] ) ?: $a['last'] <=> $b['last'] ?: $b['published_at'] <=> $a['published_at'] ?: $a['show_id'] <=> $b['show_id'];
+		$bounds = self::day_bounds( $first_time, $settings['timezone'] ?? 'UTC' );
+		$usage = array();
+		$plays = array();
+		$records = $state['aired'] ?? array();
+		if ( ! $records && ! empty( $state['vod'] ) ) { $records[] = $state['vod']; }
+		foreach ( $records as $row ) {
+			if ( ! empty( $row['live'] ) ) { continue; }
+			$seconds = max( 0, min( $row['end'], $bounds[1], $first_time ) - max( $row['start'], $bounds[0] ) );
+			if ( ! $seconds ) { continue; }
+			$channel = $row['mix_channel'] ?? self::mix_channel( $pool[ $row['key'] ] ?? $row );
+			$usage[ $channel ] = ( $usage[ $channel ] ?? 0 ) + $seconds;
+			$plays[ $row['key'] ] = ( $plays[ $row['key'] ] ?? 0 ) + 1;
+		}
+		$seed = ( $state['rotation_seed'] ?? 'bsc-tv' ) . ':' . $bounds[0] . ':' . $first_time;
+		$ranks = array();
+		foreach ( $candidates as $candidate ) { $ranks[ $candidate['key'] ] = hash( 'sha256', $seed . $candidate['key'] ); }
+		$last_show = $state['last_show'] ?? $state['vod']['key'] ?? '';
+		usort( $candidates, static function ( $a, $b ) use ( $settings, $first_time, $plays, $ranks, $last_show ) {
+			return ( $plays[ $a['key'] ] ?? 0 ) <=> ( $plays[ $b['key'] ] ?? 0 ) ?: ( $a['key'] === $last_show ) <=> ( $b['key'] === $last_show ) ?: ( $a['last'] > 0 ) <=> ( $b['last'] > 0 ) ?: self::bucket( $a['published_at'], $first_time, $settings['recent'] ) <=> self::bucket( $b['published_at'], $first_time, $settings['recent'] ) ?: strcmp( $ranks[ $a['key'] ], $ranks[ $b['key'] ] );
 		} );
-		return $candidates[0];
+		$channels = array();
+		foreach ( $candidates as $candidate ) { $channel = self::mix_channel( $candidate ); if ( ! isset( $channels[ $channel ] ) ) { $channels[ $channel ] = $candidate; } }
+		uksort( $channels, static function ( $a, $b ) use ( $usage, $channels, $settings, $first_time, $seed, $state ) {
+			return ( $usage[ $a ] ?? 0 ) <=> ( $usage[ $b ] ?? 0 ) ?: ( $a === ( $state['last_channel'] ?? '' ) ) <=> ( $b === ( $state['last_channel'] ?? '' ) ) ?: ( $channels[ $a ]['creator_key'] === ( $state['last_creator'] ?? '' ) ) <=> ( $channels[ $b ]['creator_key'] === ( $state['last_creator'] ?? '' ) ) ?: self::bucket( $channels[ $a ]['published_at'], $first_time, $settings['recent'] ) <=> self::bucket( $channels[ $b ]['published_at'], $first_time, $settings['recent'] ) ?: ( $channels[ $a ]['last'] > 0 ) <=> ( $channels[ $b ]['last'] > 0 ) ?: strcmp( hash( 'sha256', $seed . $a ), hash( 'sha256', $seed . $b ) );
+		} );
+		return reset( $channels );
+	}
+
+	public static function mix_channel( $media ) {
+		return ! empty( $media['channel_id'] ) ? 'channel:' . $media['channel_id'] : 'creator:' . ( $media['creator_key'] ?? $media['key'] );
+	}
+
+	public static function day_bounds( $timestamp, $timezone = 'UTC', $days = 1 ) {
+		$date = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( new DateTimeZone( $timezone ?: 'UTC' ) )->setTime( 0, 0 );
+		return array( $date->getTimestamp(), $date->modify( '+' . (int) $days . ' days' )->getTimestamp() );
+	}
+
+	private static function log_slot( &$state, $slot, $start = null, $end = null, $live = false ) {
+		$row = $slot;
+		$row['start'] = $start ?? $slot['start'];
+		$row['end'] = $end ?? $slot['end'];
+		$row['live'] = $live;
+		$row['mix_channel'] = $slot['mix_channel'] ?? self::mix_channel( $slot );
+		$state['aired'][] = $row;
+		$cutoff = $row['start'] - 3 * DAY_IN_SECONDS;
+		$state['aired'] = array_slice( array_values( array_filter( $state['aired'], static function ( $entry ) use ( $cutoff ) { return ! $entry['end'] || $entry['end'] >= $cutoff; } ) ), -500 );
 	}
 
 	/** A persisted future slot has priority over the automatic rotation. */
@@ -296,6 +337,7 @@ final class BSC_TV_Player {
 		$slot['start'] = $media['available'];
 		$slot['end'] = $slot['start'] + $media['duration'];
 		$slot['fixed'] = ! empty( $media['fixed'] );
+		$slot['mix_channel'] = self::mix_channel( $media );
 		if ( isset( $media['plan_id'] ) ) {
 			$slot['id'] = $media['plan_id'];
 			$index = array_search( $media['plan_id'], array_column( $state['plan'], 'id' ), true );
@@ -308,6 +350,9 @@ final class BSC_TV_Player {
 		$state['premiered'][ $media['key'] ] = true;
 		$state['history'][ $media['key'] ] = array( 'end' => $slot['end'] );
 		$state['last_creator'] = $media['creator_key'];
+		$state['last_channel'] = self::mix_channel( $media );
+		$state['last_show'] = $media['key'];
+		self::log_slot( $state, $slot );
 		$state['manual'] = array_values( array_diff( $state['manual'] ?? array(), array( $media['show_id'] ) ) );
 		return $slot;
 	}
@@ -315,17 +360,24 @@ final class BSC_TV_Player {
 	/** Only this state, stored under a database lock, determines the common antenna. */
 	public static function advance( $state, $pool, $lives, $settings, $now ) {
 		$state += array( 'vod' => null, 'live' => null, 'paused_at' => 0, 'history' => array(), 'manual' => array(), 'plan' => array(), 'last_creator' => '', 'premiered' => array() );
+		if ( empty( $state['rotation_seed'] ) ) { $state['rotation_seed'] = bin2hex( random_bytes( 16 ) ); }
+		if ( empty( $state['aired'] ) && ! empty( $state['vod'] ) ) { self::log_slot( $state, $state['vod'] ); }
 		$state['plan'] = array_values( array_filter( $state['plan'], static function ( $row ) use ( $pool ) { return isset( $pool[ $row['key'] ] ); } ) );
 		if ( $state['vod'] && ! isset( $pool[ $state['vod']['key'] ] ) ) {
+			foreach ( $state['aired'] ?? array() as $index => $row ) { if ( $row['key'] === $state['vod']['key'] && $row['end'] > $now ) { $state['aired'][ $index ]['end'] = $now; } }
 			$state['vod'] = null;
 		}
 		if ( $state['live'] && ! isset( $lives[ $state['live']['key'] ] ) ) {
+			foreach ( $state['aired'] ?? array() as $index => $row ) {
+				if ( ! empty( $row['live'] ) && $row['key'] === $state['live']['key'] && ! $row['end'] ) { $state['aired'][ $index ]['end'] = $now; }
+			}
 			$pause = $state['paused_at'] ? max( 0, $now - $state['paused_at'] ) : 0;
 			self::shift_plan( $state, $pause );
 			if ( $state['vod'] && $state['paused_at'] ) {
 				$state['vod']['start'] += $pause;
 				$state['vod']['end'] += $pause;
 				$state['history'][ $state['vod']['key'] ]['end'] = $state['vod']['end'];
+				self::log_slot( $state, $state['vod'], $now );
 			}
 			$state['live'] = null;
 			$state['paused_at'] = 0;
@@ -357,6 +409,10 @@ final class BSC_TV_Player {
 			usort( $lives, static function ( $a, $b ) { return $b['priority'] <=> $a['priority'] ?: $a['start'] <=> $b['start'] ?: strcmp( $a['key'], $b['key'] ); } );
 			$state['live'] = $lives[0];
 			$state['paused_at'] = $now;
+			foreach ( $state['aired'] ?? array() as $index => $row ) {
+				if ( empty( $row['live'] ) && $row['start'] <= $now && $row['end'] > $now ) { $state['aired'][ $index ]['end'] = $now; }
+			}
+			self::log_slot( $state, $state['live'], $now, 0, true );
 		}
 		$state['history'] = array_filter( $state['history'], static function ( $entry ) use ( $now ) { return $entry['end'] >= $now - 8 * DAY_IN_SECONDS; } );
 		return $state;

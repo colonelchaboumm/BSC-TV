@@ -518,9 +518,6 @@ final class BSC_TV_Sync {
 				$manual_shows[ $post->ID ] = $video;
 			}
 		}
-		if ( ! $live_only && class_exists( 'BSC_TV_Player' ) ) {
-			$manual_shows += BSC_TV_Player::enrichment_ids( $now );
-		}
 		return $manual_shows;
 	}
 

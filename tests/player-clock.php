@@ -73,7 +73,7 @@ tv_check( null === BSC_TV_Player::advance( array(), array( $future['key'] => $fu
 $rotation = $settings;
 $rotation['recent'] = 'rotation';
 $rotation_state = array( 'history' => array( $a['key'] => array( 'end' => $now - DAY_IN_SECONDS ) ) );
-tv_check( 2 === BSC_TV_Player::select( $pool, $rotation_state, $rotation, $now )['show_id'], 'Rotation favors an unseen source over a recent repeat' );
+tv_check( 1 !== BSC_TV_Player::select( $pool, $rotation_state, $rotation, $now )['show_id'], 'Rotation favors an unseen source over a recent repeat' );
 foreach ( array( 2, 5, 10, 20, 40 ) as $days ) {
 	$age_media = tv_media( 10 + $days, 'other', $now - $days * DAY_IN_SECONDS );
 	$age_pool = array( $age_media['key'] => $age_media, $a['key'] => $a );
@@ -173,4 +173,70 @@ tv_check( ! BSC_TV_Player_Schedule::needs_refresh( $short_consumed, $short_pool,
 tv_check( $state === BSC_TV_Player_Schedule::replenish( $state, $pool, array_replace( $automatic_settings, array( 'enabled' => false ) ), $now ), 'Automatic filling does nothing when the player is disabled' );
 tv_check( array() === BSC_TV_Player_Schedule::replenish( array(), array(), $automatic_settings, $now ), 'An empty catalogue never invents programmes or durations' );
 tv_check( BSC_TV_Player_Schedule::signature( $pool, $automatic_settings ) === BSC_TV_Player_Schedule::signature( array_reverse( $pool, true ), $automatic_settings ), 'Unchanged catalogue ordering does not reshuffle the schedule' );
+$mixed_pool = array();
+foreach ( array( 100 => 30, 200 => 4, 300 => 4 ) as $channel_id => $number ) {
+	for ( $i = 0; $i < $number; ++$i ) {
+		$item = tv_media( $channel_id + $i, 'creator-' . $channel_id, $now - 1000, 1800 );
+		$item['channel_id'] = $channel_id;
+		$mixed_pool[ $item['key'] ] = $item;
+	}
+}
+$mixed_settings = array( 'recent' => 'strong', 'repeat_hours' => 1, 'enabled' => true, 'timezone' => 'Europe/Paris' );
+$mixed_state = BSC_TV_Player::advance( array( 'rotation_seed' => 'repeatable-mix' ), $mixed_pool, array(), $mixed_settings, $now );
+$mixed_state = BSC_TV_Player_Schedule::replenish( $mixed_state, $mixed_pool, $mixed_settings, $now );
+$mixed_rows = array_merge( array( $mixed_state['vod'] ), $mixed_state['plan'] );
+$counts = array();
+$channel_shows = array();
+$previous_channel = 0;
+$alternates = true;
+$mix_today = BSC_TV_Player::day_bounds( $now, 'Europe/Paris' );
+$mix_tomorrow = BSC_TV_Player::day_bounds( $mix_today[1], 'Europe/Paris' );
+foreach ( $mixed_rows as $row ) {
+	if ( $row['start'] < $mix_tomorrow[0] ) { continue; }
+	if ( $row['start'] >= $mix_tomorrow[1] ) { break; }
+	$channel = $row['channel_id'];
+	$counts[ $channel ] = ( $counts[ $channel ] ?? 0 ) + 1;
+	$channel_shows[ $channel ][] = $row['show_id'];
+	$alternates = $alternates && $previous_channel !== $channel;
+	$previous_channel = $channel;
+}
+tv_check( 3 === count( $counts ) && max( $counts ) - min( $counts ) <= 1, 'A channel with thirty videos does not monopolize a day over channels with four videos' );
+tv_check( $alternates, 'Available channels alternate throughout a full day' );
+tv_check( 4 === count( array_unique( array_slice( $channel_shows[200], 0, 4 ) ) ), 'A channel varies its episodes before repeating one in the same day' );
+$unequal_pool = $mixed_pool;
+foreach ( $unequal_pool as &$item ) { $item['duration'] = 100 === $item['channel_id'] ? 3 * HOUR_IN_SECONDS : 1800; }
+unset( $item );
+$unequal_state = BSC_TV_Player::advance( array( 'rotation_seed' => 'different-durations' ), $unequal_pool, array(), $mixed_settings, $now );
+$unequal_state['plan'] = BSC_TV_Player_Schedule::build( $unequal_state, $unequal_pool, $mixed_settings, $now );
+$unequal_days = array_values( BSC_TV_Player_Schedule::days( $unequal_state, $now, 'Europe/Paris' ) );
+$airtime = array();
+foreach ( $unequal_days[1]['rows'] as $row ) { $airtime[ $row['channel_id'] ] = ( $airtime[ $row['channel_id'] ] ?? 0 ) + $row['display_end'] - $row['display_start']; }
+tv_check( 3 === count( $airtime ) && max( $airtime ) - min( $airtime ) <= 3 * HOUR_IN_SECONDS, 'Balancing accounts for actual airtime instead of favoring channels with longer programmes' );
+tv_check( $mixed_state['plan'] === BSC_TV_Player_Schedule::build( $mixed_state, $mixed_pool, $mixed_settings, $now ), 'Randomized planning stays identical to its saved grid across refreshes' );
+$another_mix = $mixed_state;
+$another_mix['rotation_seed'] = 'another-mix';
+$another_mix['plan'] = array();
+$another_mix['plan'] = BSC_TV_Player_Schedule::build( $another_mix, $mixed_pool, $mixed_settings, $now );
+tv_check( array_column( array_slice( $mixed_state['plan'], 0, 20 ), 'key' ) !== array_column( array_slice( $another_mix['plan'], 0, 20 ), 'key' ) && $another_mix['vod'] === $mixed_state['vod'], 'A new mix varies the future sequence while preserving the current broadcast' );
+$single_mix = BSC_TV_Player::advance( array( 'rotation_seed' => 'single' ), $single, array(), $zero_cooldown, $now );
+tv_check( $single_mix['vod'], 'A single eligible channel remains playable without inventing other sources' );
+$calendar = BSC_TV_Player_Schedule::days( $mixed_state, $now, 'Europe/Paris' );
+tv_check( 3 === count( $calendar ), 'The live administration shows exactly three calendar days' );
+$calendar_values = array_values( $calendar );
+tv_check( array_column( array_slice( $calendar_values[1]['rows'], 0, 20 ), 'key' ) !== array_column( array_slice( $calendar_values[2]['rows'], 0, 20 ), 'key' ), 'Successive days use different programme sequences rather than repeating a fixed daily playlist' );
+$dst_days = BSC_TV_Player_Schedule::days( array(), strtotime( '2026-03-29 10:00 UTC' ), 'Europe/Paris' );
+$dst_first = reset( $dst_days );
+tv_check( 23 * HOUR_IN_SECONDS === $dst_first['end'] - $dst_first['start'] && array_keys( $dst_days ) === array( '2026-03-29', '2026-03-30', '2026-03-31' ), 'Calendar-day planning respects the daylight-saving transition' );
+$crossing = array( 'key' => 'crossing', 'show_id' => 99, 'channel_id' => 100, 'start' => $dst_first['start'] - 1800, 'end' => $dst_first['start'] + 1800 );
+$cross_days = BSC_TV_Player_Schedule::days( array( 'aired' => array( $crossing ) ), $dst_first['start'] + 100, 'Europe/Paris' );
+$cross_first = reset( $cross_days );
+tv_check( $cross_first['rows'][0]['continued'] && $cross_first['rows'][0]['display_start'] === $dst_first['start'], 'A programme begun the previous evening appears as a continuation today' );
+$played_mix = BSC_TV_Player::advance( $mixed_state, $mixed_pool, array(), $mixed_settings, $now + HOUR_IN_SECONDS );
+$played_days = BSC_TV_Player_Schedule::days( $played_mix, $now + HOUR_IN_SECONDS, 'Europe/Paris' );
+$past_rows = array_filter( array_merge( ...array_column( $played_days, 'rows' ) ), static function ( $row ) { return 'past' === $row['phase']; } );
+tv_check( count( $past_rows ) >= 2, 'The live page retains the programmes already broadcast today' );
+$live_log = BSC_TV_Player::advance( $mixed_state, $mixed_pool, array( $live1['key'] => $live1 ), $mixed_settings, $now + 100 );
+$live_log = BSC_TV_Player::advance( $live_log, $mixed_pool, array(), $mixed_settings, $now + 200 );
+$logged_lives = array_values( array_filter( $live_log['aired'], static function ( $row ) { return ! empty( $row['live'] ); } ) );
+tv_check( 1 === count( $logged_lives ) && $logged_lives[0]['start'] === $now + 100 && $logged_lives[0]['end'] === $now + 200, 'A real live is recorded once with its actual antenna interval' );
 echo "OK {$checks} player clock and schedule checks.\n";

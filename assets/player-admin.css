@@ -12,3 +12,7 @@
 .bsc-player-editor h4 { margin: 0 0 8px; font-size: 16px; }
 .bsc-player-editor select { width: min(100%, 650px); }
 .bsc-player-admin-grid .notice { margin: 12px 0; padding: 10px 12px; }
+.bsc-player-phase-current td { background: #e5f8f4; font-weight: 600; }
+.bsc-player-phase-past td { color: #646970; }
+.bsc-player-empty-day { padding: 0 12px 12px; }
+#bsc-player-import { padding: 16px; margin-top: 24px; max-width: 1166px; border: 1px solid #c3c4c7; background: #fff; }
