@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.12.0, branche `feature/badge-current-player`. La **Pastille Live** suit maintenant l’émission en cours sur l’antenne 24/7 et propose **Regarder Le live** dans son déroulant. Le lecteur conserve le son actif par défaut, l’aperçu et l’animation entre les programmes ; la liste quotidienne conserve ses lots de cinq programmes. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.12.1, branche `feature/badge-live-style`. La **Pastille Live** affiche le mot **LIVE en rouge et en gras** à côté du point rouge clignotant, activé par défaut. Elle suit l’émission en cours sur l’antenne 24/7 et propose **Regarder Le live** dans son déroulant. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -119,6 +119,8 @@ Références : [indicateur d’âge YouTube](https://developers.google.com/youtu
 
 Le widget existant **BSC TV – Pastille Live** lit la même horloge locale que le lecteur de **Le live**. Lorsqu’un programme est à l’antenne, son titre et son horaire apparaissent dans le bouton à côté du point rouge **LIVE**. Ce libellé indique la diffusion actuelle sur BSC TV ; la carte dans le déroulant distingue explicitement **DIRECT** et **REDIFFUSION**. Elle reprend le visuel et le lien vers le créateur BSC BDD. Un véritable direct déjà diffusé dans l’antenne est retiré de la section des autres directs pour éviter un doublon.
 
+Le libellé **LIVE** utilise par défaut le rouge du point et une graisse de 900. Le point clignote toutes les 1,4 seconde ; le texte reste fixe. **Animer le point du direct** est activé par défaut dans Elementor et se désactive au besoin. Un widget qui avait explicitement enregistré cette option désactivée conserve son choix. Le raccourci `pulse="no"` permet aussi de le désactiver. La préférence système de réduction des animations laisse le point fixe. Les couleurs et typographies personnalisées dans Elementor restent prioritaires.
+
 Le bouton **Regarder Le live**, ainsi que le titre de cette carte, mènent par défaut à `https://brewerssocialclub.com/le-live/`. Dans Elementor → **Bouton et ouverture**, régler **Afficher l’émission BSC TV en cours**, **Bouton pour regarder Le live**, **Lien vers la page Le live** et **Texte du bouton Le live**. Sa typographie se règle dans **Style → Bouton et pastille**. Le lien vers l’agenda complet reste disponible séparément. Le filtre de plateforme porte sur les annonces ; l’émission BSC TV représente l’antenne commune.
 
 Lorsque l’antenne est désactivée, attend un créneau ou ne possède aucun programme utilisable, la pastille reprend les directs et annonces des plateformes. Désactiver **Afficher l’émission BSC TV en cours** conserve également ce fonctionnement. Une source retirée ne peut pas laisser son ancien titre dans la pastille. Le raccourci `[bsc_tv format="badge" watch_label="Regarder la chaîne"]` propose la même fonction ; `show_player_current="no"` désactive la priorité à l’antenne et `show_watch_link="no"` masque le bouton supplémentaire.
@@ -139,7 +141,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.12.0 : **73 contrôles d’horloge et de grille, 84 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 49 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne, 26 contrôles JavaScript de son rafraîchissement, 25 contrôles WordPress/Elementor de la pastille et 22 contrôles JavaScript de son menu**, soit 397 contrôles locaux.
+Version 1.12.1 : les **25 contrôles WordPress/Elementor de la pastille et 22 contrôles JavaScript de son menu** ont été exécutés, avec vérification de la syntaxe PHP et du diff. La suite complète de la version 1.12.0 comprenait **397 contrôles locaux** : 73 d’horloge et de grille, 84 WordPress/Elementor du lecteur, 81 d’import et de restrictions vidéo, 49 JavaScript du lecteur, 37 WordPress/Elementor de la liste quotidienne, 26 JavaScript de son rafraîchissement et les 47 contrôles de pastille.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 

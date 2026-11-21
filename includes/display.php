@@ -15,7 +15,7 @@ final class BSC_TV_Display {
 			$attributes = (array) $attributes;
 			$format = $attributes['format'] ?? 'programme';
 			$compact = in_array( $format, array( 'menu', 'badge' ), true );
-			return self::render( shortcode_atts( array( 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes' ), $attributes ) );
+			return self::render( shortcode_atts( array( 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'pulse' => 'yes', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes' ), $attributes ) );
 		} );
 	}
 
@@ -373,7 +373,7 @@ final class BSC_TV_Display {
 		$show_title = ! isset( $settings['show_highlight_title'] ) || 'yes' === $settings['show_highlight_title'];
 		$show_date = ! isset( $settings['show_highlight_date'] ) || 'yes' === $settings['show_highlight_date'];
 		$inline = 'inline' === ( $settings['panel_mode'] ?? '' );
-		$animate = 'yes' === ( $settings['pulse'] ?? '' );
+		$animate = 'yes' === ( $settings['pulse'] ?? 'yes' );
 		ob_start();
 		?>
 		<div class="bsc-tv bsc-tv--badge" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
