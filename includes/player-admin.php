@@ -99,35 +99,9 @@ final class BSC_TV_Player_Admin {
 		self::authorize( 'bsc_tv_player_queue' );
 		$id = absint( $_POST['show_id'] ?? 0 );
 		$operation = sanitize_key( $_POST['operation'] ?? '' );
-		$pool = BSC_TV_Player::media();
-		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
-		if ( ! $lock ) {
-			self::message( 'La programmation est en cours de mise à jour. Réessayez.' );
-			self::redirect();
-		}
-		try {
-			wp_cache_delete( BSC_TV_Player::STATE, 'options' );
-			wp_cache_delete( 'notoptions', 'options' );
-			$state = (array) get_option( BSC_TV_Player::STATE, array() );
-			if ( 'next' === $operation && in_array( $id, array_column( $pool, 'show_id' ), true ) ) {
-				$manual = array_values( array_diff( $state['manual'] ?? array(), array( $id ) ) );
-				array_unshift( $manual, $id );
-				$state['manual'] = array_slice( $manual, 0, 20 );
-			} elseif ( 'clear' === $operation ) {
-				$state['manual'] = array();
-				$state['plan'] = array();
-			} elseif ( 'skip' === $operation && empty( $state['live'] ) && ! empty( $state['vod'] ) && hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], sanitize_text_field( wp_unslash( $_POST['current_key'] ?? '' ) ) ) ) {
-				$now = time();
-				BSC_TV_Player::shift_plan( $state, $now - $state['vod']['end'] );
-				$state['vod']['end'] = $now;
-				$state['history'][ $state['vod']['key'] ]['end'] = $now;
-			}
-			$state['plan'] = BSC_TV_Player_Schedule::build( $state, $pool, BSC_TV_Player::settings(), time() );
-			update_option( BSC_TV_Player::STATE, $state, false );
-		} finally {
-			BSC_TV_Content::unlock( BSC_TV_Player::LOCK, $lock );
-		}
-		self::message( 'Programmation enregistrée. Les visiteurs la recevront au prochain rafraîchissement.' );
+		$current_key = sanitize_text_field( wp_unslash( $_POST['current_key'] ?? '' ) );
+		$result = BSC_TV_Player_Schedule::queue( $operation, $id, $current_key );
+		self::message( is_wp_error( $result ) ? $result->get_error_message() : 'Programmation enregistrée. Les visiteurs la recevront au prochain rafraîchissement.' );
 		self::redirect();
 	}
 

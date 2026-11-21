@@ -378,6 +378,14 @@ final class BSC_TV_Player {
 		);
 	}
 
+	/** Reconcile a freshly read clock while the caller holds the shared database lock. */
+	public static function advance_clock( $state, $now ) {
+		$settings = self::settings();
+		if ( ! $settings['enabled'] ) { return $state; }
+		$catalogue = self::catalogue();
+		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now ), $settings, $now );
+	}
+
 	public static function snapshot( $now = null ) {
 		$now = $now ?? time();
 		$settings = self::settings();

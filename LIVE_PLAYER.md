@@ -4,6 +4,8 @@ Lecteur ajouté dans BSC TV 1.5.0. Filtres rétro superposés à l’image et co
 
 La version 1.6.0 ajoute la grille d’administration modifiable sur 48 ou 72 heures, sur la branche `feature/player-schedule`.
 
+La version 1.6.1 réconcilie l’horloge sous le verrou partagé avant de modifier les priorités, de recréer la grille ou d’éditer un créneau. Une page d’administration laissée ouverte après une transition ne redémarre plus le replay déjà commencé ni ne repousse artificiellement les suivants. Un ancien bouton « Passer au programme suivant » est refusé si le programme courant a changé.
+
 Le nouveau widget compose une antenne commune à partir des émissions existantes et des confirmations de direct déjà enregistrées. Il conserve un début et une fin de diffusion côté WordPress. Un visiteur qui rejoint une émission commencée depuis quinze minutes demande au lecteur officiel une lecture à quinze minutes. Les replays alternent avec les vrais directs prioritaires, puis reprennent au point d’interruption lorsque le direct se termine.
 
 ## Mise en service
@@ -69,6 +71,8 @@ Les filtres restent dans la page : le plein écran déclenché dans le lecteur o
 ## Validation
 
 Version 1.6.0 : **45 contrôles d’horloge et de grille, 56 contrôles WordPress/Elementor, 20 contrôles JavaScript avec SDK simulés**. Les nouveaux scénarios couvrent la conservation de trois jours, les décalages, les remplacements et le recalage des durées, la diffusion réelle d’un créneau modifié, l’arrivée après une pause, les délais de rediffusion, les longs directs, la limite de 500 créneaux, les conflits de formulaires, les droits d’accès, les nonces et l’identité entre la file stockée et la réponse REST. Aucun appel API externe pour ces opérations.
+
+Version 1.6.1 : **45 contrôles d’horloge et de grille, 62 contrôles WordPress/Elementor et 20 contrôles JavaScript**, soit 127 contrôles. Les six nouveaux contrôles vérifient notamment une priorité soumise quinze minutes après une transition sans visite publique : le replay courant conserve son début prévu et son décalage de lecture. Ils couvrent aussi la recréation automatique, le refus d’un ancien bouton de saut, la préparation d’une grille sur une horloge périmée, les permissions et l’absence d’appels externes.
 
 Les formulaires de remplacement et de décalage ont également été soumis dans un navigateur sur une copie locale de WordPress : les changements sont enregistrés, les horaires suivants décalés et la pause de programmation affichée, avec le programme courant conservé. Ce test utilise une base SQLite jetable exportée par sauvegarde, sans accès à la production.
 

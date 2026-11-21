@@ -82,10 +82,11 @@ final class BSC_TV_Player_Schedule {
 		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
 		try {
-			$state = self::clock();
-			$plan = self::build( $state, $pool, $settings, time() );
-			if ( $plan !== ( $state['plan'] ?? array() ) ) {
-				$state['plan'] = $plan;
+			$now = time();
+			$stored = self::clock();
+			$state = BSC_TV_Player::advance_clock( $stored, $now );
+			$state['plan'] = self::build( $state, $pool, $settings, $now );
+			if ( $state !== $stored ) {
 				update_option( BSC_TV_Player::STATE, $state, false );
 			}
 			return $state;
@@ -94,16 +95,55 @@ final class BSC_TV_Player_Schedule {
 		}
 	}
 
+	public static function queue( $operation, $id, $current_key = '', $now = null ) {
+		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'schedule_forbidden', 'Action réservée aux administrateurs.' ); }
+		$pool = BSC_TV_Player::media();
+		$settings = BSC_TV_Player::settings();
+		if ( ! in_array( $operation, array( 'next', 'clear', 'skip' ), true ) || ( 'next' === $operation && ! in_array( $id, array_column( $pool, 'show_id' ), true ) ) ) {
+			return new WP_Error( 'schedule_invalid', 'Action ou replay de programmation indisponible.' );
+		}
+		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
+		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
+		try {
+			$now = $now ?? time();
+			// Consume overdue slots before changing priorities, even if the admin page was left open.
+			$state = BSC_TV_Player::advance_clock( self::clock(), $now );
+			if ( 'next' === $operation ) {
+				$manual = array_values( array_diff( $state['manual'] ?? array(), array( $id ) ) );
+				array_unshift( $manual, $id );
+				$state['manual'] = array_slice( $manual, 0, 20 );
+			} elseif ( 'clear' === $operation ) {
+				$state['manual'] = array();
+				$state['plan'] = array();
+			} else {
+				if ( ! empty( $state['live'] ) || empty( $state['vod'] ) || ! hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], $current_key ) ) {
+					update_option( BSC_TV_Player::STATE, $state, false );
+					return new WP_Error( 'schedule_stale', 'Le programme en cours a changé. Rechargez la page avant de passer au suivant.' );
+				}
+				BSC_TV_Player::shift_plan( $state, $now - $state['vod']['end'] );
+				$state['vod']['end'] = $now;
+				$state['history'][ $state['vod']['key'] ]['end'] = $now;
+			}
+			$state['plan'] = self::build( $state, $pool, $settings, $now );
+			update_option( BSC_TV_Player::STATE, $state, false );
+			return true;
+		} finally {
+			BSC_TV_Content::unlock( BSC_TV_Player::LOCK, $lock );
+		}
+	}
+
 	public static function update( $operation, $slot_id, $value, $fingerprint ) {
 		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'schedule_forbidden', 'Action réservée aux administrateurs.' ); }
-		// Advance the actual clock before validating the form: an on-air slot cannot be edited.
-		BSC_TV_Player::snapshot();
 		$pool = BSC_TV_Player::media();
 		$settings = BSC_TV_Player::settings();
 		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
 		try {
-			$state = self::change( self::clock(), $pool, $settings, time(), $operation, $slot_id, $value, $fingerprint );
+			$now = time();
+			$stored = self::clock();
+			$state = BSC_TV_Player::advance_clock( $stored, $now );
+			if ( $state !== $stored ) { update_option( BSC_TV_Player::STATE, $state, false ); }
+			$state = self::change( $state, $pool, $settings, $now, $operation, $slot_id, $value, $fingerprint );
 			update_option( BSC_TV_Player::STATE, $state, false );
 			return true;
 		} catch ( InvalidArgumentException $exception ) {
