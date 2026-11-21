@@ -158,7 +158,8 @@
 	inline-size: var(--bsc-tv-badge-dot, 8px);
 }
 
-[data-bsc-tv-state="live"] .bsc-tv-badge__status { background: var(--bsc-tv-badge-live-background, #ffe7eb); color: var(--bsc-tv-badge-live-text, #982137); }
+[data-bsc-tv-state="live"] .bsc-tv-badge__status { background: var(--bsc-tv-badge-live-background, #ffe7eb); color: var(--bsc-tv-badge-live-text, var(--bsc-tv-live)); }
+[data-bsc-tv-state="live"] .bsc-tv-badge__label { font-weight: 900; }
 [data-bsc-tv-state="live"] .bsc-tv-badge__dot { display: block; }
 .bsc-tv-badge__details { display: grid; gap: 2px; min-inline-size: 0; }
 .bsc-tv-badge__details[hidden] { display: none; }
@@ -201,10 +202,11 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	[data-bsc-tv-state="live"] .bsc-tv-badge--pulse .bsc-tv-badge__dot { animation: bsc-tv-badge-pulse 1.8s ease-out infinite; }
+	[data-bsc-tv-state="live"] .bsc-tv-badge--pulse .bsc-tv-badge__dot { animation: bsc-tv-badge-pulse 1.4s ease-in-out infinite; }
 }
 
 @keyframes bsc-tv-badge-pulse {
-	0% { box-shadow: 0 0 0 0 var(--bsc-tv-live); }
-	65%, 100% { box-shadow: 0 0 0 6px transparent; }
+	0% { opacity: 1; box-shadow: 0 0 0 0 var(--bsc-tv-live); }
+	50% { opacity: .2; }
+	65%, 100% { opacity: 1; box-shadow: 0 0 0 6px transparent; }
 }

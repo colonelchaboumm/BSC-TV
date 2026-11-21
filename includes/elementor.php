@@ -73,7 +73,7 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 			$this->add_control( $key . '_label', array( 'label' => $label[0], 'type' => Controls_Manager::TEXT, 'default' => $label[1] ) );
 		}
 		foreach ( array( 'show_highlight_title' => 'Titre de l’émission dans le bouton', 'show_highlight_date' => 'Date et heure dans le bouton', 'pulse' => 'Animer le point du direct' ) as $key => $label ) {
-			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'pulse' === $key ? '' : 'yes' ) );
+			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		}
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
 		$this->add_control( 'show_player_current', array( 'label' => 'Afficher l’émission BSC TV en cours', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'description' => 'Priorité à l’émission diffusée dans Le live, y compris un replay. Sans programme en cours, reprend les directs et annonces des plateformes.' ) );
