@@ -20,12 +20,13 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 		$root = '{{WRAPPER}} .bsc-day';
 		$this->start_controls_section( 'day_content', array( 'label' => 'Programme de la journée' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre du widget', 'type' => Controls_Manager::TEXT, 'default' => 'Au programme aujourd’hui' ) );
+		$this->add_control( 'page_size', array( 'label' => 'Programmes par chargement', 'type' => Controls_Manager::NUMBER, 'default' => 5, 'min' => 1, 'max' => 50, 'description' => 'Le programme en cours reste visible en plus de cette limite.' ) );
 		foreach ( array( 'show_past' => 'Programmes déjà diffusés', 'show_date' => 'Date et fuseau du site', 'show_times' => 'Horaires', 'show_images' => 'Vignettes des émissions', 'show_channel' => 'Nom de la chaîne', 'show_creator' => 'Nom du créateur', 'show_profile' => 'Lien vers sa fiche BSC BDD', 'show_badges' => 'État de diffusion et point LIVE' ) as $key => $label ) {
-			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'show_past' === $key ? '' : 'yes' ) );
 		}
 		$this->add_control( 'link_mode', array( 'label' => 'Lien sur le titre de l’émission', 'type' => Controls_Manager::SELECT, 'default' => 'source', 'options' => array( 'source' => 'Plateforme d’origine', 'watch' => 'Page du live sur votre site', 'none' => 'Aucun lien' ) ) );
 		$this->add_control( 'watch_url', array( 'label' => 'Page du live', 'type' => Controls_Manager::URL, 'condition' => array( 'link_mode' => 'watch' ) ) );
-		foreach ( array( 'current_label' => 'En cours', 'live_label' => 'LIVE', 'past_label' => 'Diffusé', 'future_label' => 'À venir', 'empty_label' => 'Aucun programme prévu aujourd’hui.', 'disabled_label' => 'Le lecteur est désactivé.' ) as $key => $value ) {
+		foreach ( array( 'current_label' => 'En cours', 'live_label' => 'LIVE', 'past_label' => 'Diffusé', 'future_label' => 'À venir', 'more_label' => 'Afficher plus', 'empty_label' => 'Aucun programme prévu aujourd’hui.', 'disabled_label' => 'Le lecteur est désactivé.' ) as $key => $value ) {
 			$this->add_control( $key, array( 'label' => $value, 'type' => Controls_Manager::TEXT, 'default' => $value ) );
 		}
 		$this->add_control( 'day_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'Cette liste suit BSC TV → Le live dans le fuseau du site. Elle s’actualise automatiquement sans rechercher de nouvelles vidéos.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
@@ -46,7 +47,7 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'day_typography', array( 'label' => 'Typographies', 'tab' => Controls_Manager::TAB_STYLE ) );
-		foreach ( array( 'heading' => 'Titre du widget', 'date' => 'Date du jour', 'title' => 'Titres des émissions', 'times' => 'Horaires', 'channel' => 'Chaînes', 'creator' => 'Créateurs', 'badge' => 'Badges' ) as $key => $label ) {
+		foreach ( array( 'heading' => 'Titre du widget', 'date' => 'Date du jour', 'title' => 'Titres des émissions', 'times' => 'Horaires', 'channel' => 'Chaînes', 'creator' => 'Créateurs', 'badge' => 'Badges', 'more' => 'Bouton Afficher plus' ) as $key => $label ) {
 			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'day_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-day__' . $key ) );
 		}
 		$this->end_controls_section();

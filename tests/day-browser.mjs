@@ -4,15 +4,20 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
 class Element {
-  constructor() { this.dataset = {}; this.innerHTML = ''; this.textContent = ''; this.attributes = {}; this.isConnected = true; }
+  constructor() { this.dataset = {}; this.innerHTML = ''; this.textContent = ''; this.attributes = {}; this.isConnected = true; this.events = new Map(); }
   querySelector(selector) { return this.nodes?.[selector] ?? null; }
   setAttribute(name, value) { this.attributes[name] = value; }
   contains(element) { return element?.parent === this; }
+  addEventListener(name, callback) { this.events.set(name, callback); }
+  removeEventListener(name) { this.events.delete(name); }
+  click() { this.events.get('click')?.(); }
+  focus() { document.activeElement = this; }
 }
 function root(url = 'https://bsc.example/wp-json/bsc-tv/v1/day') {
   const value = new Element();
   value.dataset.bscDay = url;
-  value.nodes = { '[data-day-content]': new Element(), '[data-day-status]': new Element() };
+  value.dataset.dayDate = '2026-11-21';
+  value.nodes = { '[data-day-content]': new Element(), '[data-day-status]': new Element(), '[data-day-more]': new Element() };
   value.nodes['[data-day-content]'].innerHTML = 'Initial programme';
   return value;
 }
@@ -39,6 +44,7 @@ let timerId = 0;
 let clock = 0;
 let response = { html: '<p>Programme du jour</p>', poll_after: 10 };
 let failed = false;
+let fixtureDate = '2026-11-21';
 const window = {
   IntersectionObserver: Observer,
   elementorFrontend: { hooks: { addAction(name, callback) { hooks.set(name, callback); } } },
@@ -50,7 +56,9 @@ const context = {
   async fetch(url, options) {
     calls.push({ url, options });
     if (failed) throw new Error('Offline');
-    return { ok: true, async json() { return new URL(url).searchParams.get('show_images') === 'no' ? { html: '<p>Compact programme</p>', poll_after: 60 } : response; } };
+    const query = new URL(url).searchParams;
+    const page = query.get('date') && query.get('date') !== fixtureDate ? 1 : Number(query.get('page'));
+    return { ok: true, async json() { return { page, date: fixtureDate, has_more: true, ...(query.get('show_images') === 'no' ? { html: '<p>Compact programme</p>', poll_after: 60 } : response) }; } };
   }
 };
 let checks = 0;
@@ -96,6 +104,33 @@ check(first.nodes['[data-day-content]'].innerHTML === retained, 'Updating does n
 document.activeElement = null;
 await advance(30000);
 check(first.nodes['[data-day-content]'].innerHTML === response.html, 'Content resumes updating after the focused link is left');
+const more = first.nodes['[data-day-more]'];
+response = { html: '<p>Les dix prochaines émissions</p>', poll_after: 30 };
+const beforeMore = calls.length;
+more.click();
+more.click();
+await flush();
+check(calls.length === beforeMore + 1 && new URL(calls.at(-1).url).searchParams.get('page') === '2', 'A double click loads exactly one extra page immediately through AJAX');
+check(first.nodes['[data-day-content]'].innerHTML === response.html && !more.disabled, 'AJAX replaces the cumulative list and re-enables its button');
+await advance(30000);
+check(new URL(calls.at(-1).url).searchParams.get('page') === '2', 'Automatic refresh preserves the visitor’s expanded page');
+failed = true;
+more.click();
+await flush();
+check(!more.disabled && first.nodes['[data-day-content]'].innerHTML === response.html, 'A failed expansion retains rows and permits retrying');
+failed = false;
+response = { html: '<p>Toute la journée</p>', has_more: false, poll_after: 30 };
+document.activeElement = more;
+more.click();
+await flush();
+check(new URL(calls.at(-1).url).searchParams.get('page') === '3' && more.hidden && document.activeElement === first.nodes['[data-day-status]'], 'Retry uses the same next page and the exhausted button hands focus to the status');
+document.activeElement = null;
+fixtureDate = '2026-11-22';
+response = { html: '<p>Nouvelle journée · cinq prochaines émissions</p>', poll_after: 30 };
+await advance(30000);
+check(!more.hidden && first.nodes['[data-day-content]'].innerHTML === response.html, 'Midnight restores the initial page and load-more availability');
+await advance(30000);
+check(new URL(calls.at(-1).url).searchParams.get('page') === '1' && new URL(calls.at(-1).url).searchParams.get('date') === fixtureDate, 'Polling uses the new day and resets the previously expanded page');
 const beforeRapid = calls.length;
 observers[0].visible(false);
 observers[0].visible();

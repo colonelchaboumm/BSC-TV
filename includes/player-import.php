@@ -55,7 +55,7 @@ final class BSC_TV_Player_Import {
 
 	public static function store( $channel, $event, $now, &$index ) {
 		$resource = BSC_TV_Player::resource( $event['url'] ?? '' );
-		if ( ! $resource || empty( $event['playable'] ) || 'ended' !== $event['status'] || $event['duration'] < 1 || $event['duration'] > DAY_IN_SECONDS ) { return 'skipped'; }
+		if ( ! $resource || ! empty( $event['age_restricted'] ) || empty( $event['playable'] ) || 'ended' !== $event['status'] || $event['duration'] < 1 || $event['duration'] > DAY_IN_SECONDS ) { return 'skipped'; }
 		$key = BSC_TV_Player::resource_key( $resource );
 		$matches = $index[ $key ] ?? array();
 		foreach ( $matches as $candidate ) {

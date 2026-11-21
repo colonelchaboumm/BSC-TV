@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.10.0, branche `feature/day-programme-list`. Cette livraison ajoute le widget **BSC TV — Programme du jour (liste)**, qui reprend la programmation quotidienne de **Le live**. L’import Infomaniak quotidien et la rotation entre chaînes et épisodes restent disponibles depuis la version 1.9.0. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.10.1, branche `feature/day-pagination-age`. La liste quotidienne affiche cinq programmes à venir par lot avec un bouton AJAX **Afficher plus**. Le lecteur 24/7 exclut les vidéos signalées par YouTube comme soumises à une limite d’âge et permet une exclusion manuelle des vidéos bloquées. L’import Infomaniak quotidien conserve sa fréquence. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -83,11 +83,13 @@ La file couvre jusqu’à 72 heures, dans une limite de 500 programmes. Elle se 
 
 ## Widget Programme du jour en liste
 
-Dans Elementor, ajouter **BSC TV — Programme du jour (liste)** à la page souhaitée. Ce widget affiche les diffusions du jour de l’antenne 24/7 gérée dans **BSC TV → Le live**, avec les programmes déjà diffusés, celui en cours et les créneaux suivants. Il utilise les mêmes horaires et la même grille enregistrée que le lecteur. Une visite ne déclenche pas de recherche de nouvelles vidéos.
+Dans Elementor, ajouter **BSC TV — Programme du jour (liste)** à la page souhaitée. Ce widget affiche par défaut le programme en cours et les **cinq prochaines diffusions de la journée** de l’antenne 24/7 gérée dans **BSC TV → Le live**. Le bouton **Afficher plus** charge les cinq suivantes en AJAX. Il disparaît lorsqu’aucun autre programme n’est disponible aujourd’hui. Le nombre de programmes par chargement est personnalisable de 1 à 50 ; le programme courant reste visible en plus de cette limite. Les programmes déjà diffusés peuvent être réactivés dans les réglages et participent alors aux lots affichés dans l’ordre chronologique.
+
+Le rafraîchissement conserve le nombre de lots ouverts, reprend une liste à cinq programmes lors du changement de journée et recalcule les créneaux depuis la grille commune. Il remplace la liste cumulative pour éviter les doublons après un changement d’horaire. Un double clic ne lance pas deux chargements ; une erreur conserve les lignes déjà visibles et permet de réessayer. Il utilise les mêmes horaires et la même grille enregistrée que le lecteur. Une visite ne déclenche pas de recherche de nouvelles vidéos.
 
 Chaque ligne peut afficher les heures, le visuel de l’émission, le titre, la chaîne, le créateur et sa fiche BSC BDD. Le visuel reprend l’image mise en avant de l’émission ou son URL de visuel, puis le logo de chaîne ou l’avatar BSC BDD à défaut. Un pictogramme apparaît si aucune image n’est disponible. Les sources retirées, privées et les brouillons non approuvés sont exclus du rendu public, y compris de l’historique.
 
-- **Contenu** : titre, date, horaires, images, chaîne, créateur, lien BSC BDD, badges, programmes passés et libellés personnalisés. Le titre de chaque émission peut mener à la plateforme d’origine, à la page du live choisie ou rester sans lien.
+- **Contenu** : nombre de programmes par chargement, texte du bouton, titre, date, horaires, images, chaîne, créateur, lien BSC BDD, badges, programmes passés et libellés personnalisés. Le titre de chaque émission peut mener à la plateforme d’origine, à la page du live choisie ou rester sans lien.
 - **Style** : fonds, couleurs du programme courant et du point LIVE, séparateurs, typographies, bordure et ombre. La largeur des horaires et des vignettes, les arrondis, marges et espacements se règlent par appareil.
 - Un replay courant porte **En cours** ; un vrai direct confirmé porte un point rouge et **LIVE**. Les créneaux après un direct sont signalés comme prévisionnels.
 
@@ -96,6 +98,18 @@ La journée suit le fuseau WordPress, de minuit à minuit, y compris lors du cha
 La liste s’actualise toutes les 60 secondes depuis `GET /wp-json/bsc-tv/v1/day`, avec un délai plus court à l’approche des transitions et du changement de journée. Le rafraîchissement est suspendu lorsque l’onglet est masqué ou le widget éloigné de la zone visible. Il conserve l’affichage en cas d’erreur et préserve le lien ayant le focus clavier. Ce widget charge ses propres petits fichiers CSS et JavaScript ; il ne charge aucun lecteur ou SDK vidéo et n’ajoute aucune tâche d’import.
 
 Sans Elementor, utiliser `[bsc_tv_day]`, ou par exemple `[bsc_tv_day title="La journée sur BSC TV" show_past="no" show_images="yes" link_mode="watch" watch_url="https://votre-site.fr/le-live/"]`.
+
+## Vidéos soumises à une limite d’âge
+
+Les lecteurs officiels conservent leurs restrictions. L’indicateur YouTube `contentDetails.contentRating.ytRating = ytAgeRestricted` est lu dans les réponses `videos.list` déjà utilisées par le plugin. Une vidéo signalée est écartée des nouveaux imports de replays et du catalogue du lecteur, y compris si son mode est **Inclure**. Un vrai direct signalé ne prend pas la priorité à l’antenne. Les fiches d’émission, chaînes, liens BSC BDD et annonces restent conservés.
+
+Lorsqu’une collecte relit une vidéo déjà connue, elle mémorise la restriction avant de filtrer les résultats de l’import. La vidéo sort alors du catalogue, du programme courant et de la file à la prochaine actualisation de l’horloge. Les sources déjà présentes avant cette version nécessitent cette relecture pour connaître leur restriction ; aucune recherche supplémentaire n’est déclenchée par un visiteur. L’import historique reste limité au passage quotidien Infomaniak et à sa fenêtre habituelle de deux mois. Les vidéos anciennes hors de cette fenêtre et les URL de remplacement ne sont vérifiées automatiquement que lorsqu’une collecte existante demande leurs métadonnées.
+
+Dans **Émission → Diffusion BSC TV 24/7**, la case **Exclure cette vidéo du lecteur : limite d’âge ou lecture bloquée** permet de retirer immédiatement une source connue comme bloquée, notamment pour Twitch dont l’API VOD ne fournit pas cet indicateur. Cette exclusion suit l’identifiant de la vidéo choisie et peut être décochée après vérification. Une restriction officielle reste prioritaire même si la case est décochée ; elle est levée après une nouvelle réponse complète de YouTube indiquant sa suppression. Une réponse incomplète ou une erreur réseau conserve une restriction déjà confirmée. Le changement vers une autre URL ne lui transmet pas la restriction de l’ancienne vidéo.
+
+Les erreurs du lecteur d’un visiteur ne modifient pas la programmation globale : elles peuvent provenir de sa connexion, de sa région ou de son navigateur. Le lien vers la plateforme reste proposé. Ce filtre ne garantit pas la lecture de toutes les vidéos dans tous les navigateurs.
+
+Références : [indicateur d’âge YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos#contentDetails.contentRating.ytRating), [restrictions des vidéos intégrées](https://support.google.com/youtube/answer/171780), [champs de l’API des vidéos Twitch](https://dev.twitch.tv/docs/api/reference/videos).
 
 ## Fonctionnement et limites
 
@@ -111,7 +125,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.10.0 : **73 contrôles d’horloge et de grille, 73 contrôles WordPress/Elementor du lecteur, 66 contrôles d’import historique et quotidien, 20 contrôles JavaScript du lecteur, 28 contrôles WordPress/Elementor de la liste quotidienne et 19 contrôles JavaScript de son rafraîchissement**, soit 279 contrôles locaux.
+Version 1.10.1 : **73 contrôles d’horloge et de grille, 73 contrôles WordPress/Elementor du lecteur, 81 contrôles d’import historique, quotidien et de restrictions vidéo, 20 contrôles JavaScript du lecteur, 37 contrôles WordPress/Elementor de la liste quotidienne et 26 contrôles JavaScript de son rafraîchissement**, soit 310 contrôles locaux.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 

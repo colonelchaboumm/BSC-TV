@@ -543,6 +543,9 @@ final class BSC_TV_Sync {
 				$videos[ $item['id'] ] = self::yt_event( $item );
 			}
 		}
+		// Retain authoritative playback restrictions on already-known sources too,
+		// including videos filtered out of a replay import before store() is called.
+		BSC_TV_Player::remember_access( $videos, time() );
 		return array( $videos, $failed );
 	}
 
@@ -812,6 +815,7 @@ final class BSC_TV_Sync {
 			$duration = 0;
 		}
 		$published = max( BSC_TV_Content::parse_date( $snippet['publishedAt'] ?? '', false ), BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? '', false ) );
+		$age_restricted = 'ytAgeRestricted' === ( $item['contentDetails']['contentRating']['ytRating'] ?? '' ) ? true : ( isset( $item['contentDetails']['duration'] ) ? false : null );
 		$playable = $duration > 0 && ! empty( $item['status']['embeddable'] ) && 'public' === ( $item['status']['privacyStatus'] ?? '' ) && 'processed' === ( $item['status']['uploadStatus'] ?? 'processed' ) && 'none' === $flag;
 		// A complete public upload remains a replay when the daily metadata refresh reads it again.
 		if ( $playable ) { $status = 'ended'; $start = $start ?: $published; }
@@ -819,7 +823,8 @@ final class BSC_TV_Sync {
 			'status' => $status, 'channel_id' => $snippet['channelId'] ?? '', 'duration' => $duration,
 			'published_at' => $published,
 			'embeddable' => isset( $item['status']['embeddable'] ) ? (bool) $item['status']['embeddable'] : null,
-			'playable' => $playable,
+			'age_restricted' => $age_restricted,
+			'playable' => $playable && ! $age_restricted,
 		);
 	}
 }
