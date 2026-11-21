@@ -94,6 +94,26 @@ player_check( $widget instanceof BSC_TV_Player_Widget, 'One new Elementor player
 $controls = $widget->get_stack( false );
 $controls = $controls['controls'] + ( $controls['style_controls'] ?? array() );
 player_check( isset( $controls['logo'], $controls['logo_size'], $controls['avatar_size'], $controls['player_avatar_border_border'], $controls['show_premiere'] ) && ( ! empty( $controls['logo_size']['is_responsive'] ) || isset( $controls['logo_size_mobile'] ) ) && ( ! empty( $controls['avatar_size']['is_responsive'] ) || isset( $controls['avatar_size_tablet'] ) ), 'Responsive, branding, BDD and badges controls registered' );
+player_check( '' === $controls['curve_enabled']['default'] && '' === $controls['crt_enabled']['default'], 'Retro effects are off on existing widgets' );
+$retro_settings = array( 'curve_enabled' => 'yes', 'crt_enabled' => 'yes', 'curve_depth' => array( 'size' => 22, 'unit' => 'px' ), 'curve_depth_mobile' => array( 'size' => 12, 'unit' => 'px' ), 'curve_radius' => array( 'size' => 44, 'unit' => 'px' ), 'curve_color' => '#292c30', 'curve_corner_color' => '#a53e71', 'curve_radius_mobile' => array( 'size' => 24, 'unit' => 'px' ), 'crt_intensity' => array( 'size' => 55, 'unit' => '%' ), 'crt_intensity_mobile' => array( 'size' => 25, 'unit' => '%' ), 'crt_spacing' => array( 'size' => 4, 'unit' => 'px' ), 'crt_glow' => array( 'size' => 24, 'unit' => 'px' ), 'crt_color' => '#66efbc', 'logo' => array( 'url' => 'https://example.com/bsc-logo.png' ) );
+$retro_variants = array( 'a100001' => array( 'curve_enabled' => '', 'crt_enabled' => '' ), 'a100002' => array( 'curve_enabled' => 'yes', 'crt_enabled' => '' ), 'a100003' => array( 'curve_enabled' => '', 'crt_enabled' => 'yes' ), 'a100004' => array( 'curve_enabled' => 'yes', 'crt_enabled' => 'yes' ) );
+$elements = array();
+foreach ( $retro_variants as $id => $toggles ) {
+	$elements[] = array( 'id' => $id, 'elType' => 'widget', 'widgetType' => 'bsc-tv-player', 'settings' => array_replace( $retro_settings, $toggles ), 'elements' => array() );
+}
+$retro_page = wp_insert_post( array( 'post_type' => 'page', 'post_title' => 'Elementor retro effects fixture', 'post_status' => 'publish' ) );
+update_post_meta( $retro_page, '_elementor_edit_mode', 'builder' );
+update_post_meta( $retro_page, '_elementor_data', wp_slash( wp_json_encode( $elements ) ) );
+$retro_css = ( new Elementor\Core\Files\CSS\Post( $retro_page ) )->get_content();
+$styles_for = static function ( $id ) use ( $retro_css ) {
+	preg_match_all( '/\.elementor-element-' . $id . ' \.bsc-player\{([^}]*)\}/', $retro_css, $rules );
+	return implode( '', $rules[1] );
+};
+player_check( false === strpos( $styles_for( 'a100001' ), '--bsc-player-curve:' ) && false === strpos( $styles_for( 'a100001' ), '--bsc-player-crt:' ), 'Saved disabled effects emit no activation CSS' );
+player_check( false !== strpos( $styles_for( 'a100002' ), '--bsc-player-curve:1;' ) && false === strpos( $styles_for( 'a100002' ), '--bsc-player-crt:' ), 'Saved curved glass activates independently in Elementor CSS' );
+player_check( false === strpos( $styles_for( 'a100003' ), '--bsc-player-curve:' ) && false !== strpos( $styles_for( 'a100003' ), '--bsc-player-crt:1;' ), 'Saved CRT activates independently in Elementor CSS' );
+player_check( false !== strpos( $styles_for( 'a100004' ), '--bsc-player-corner-color:#a53e71;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-curve-color:#292c30;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-color:#66efbc;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-spacing:4px;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-glow:24px;' ), 'Saved effect colours, scanline spacing and glow render through Elementor' );
+player_check( preg_match( '/@media[^{}]+max-width:[^{}]+\{[^@]*--bsc-player-curve-depth:12px;[^@]*--bsc-player-crt-intensity:25;/s', $retro_css ), 'Elementor emits separate mobile relief and intensity settings' );
 foreach ( array( 'bsc-tv-programme', 'bsc-tv-mega-menu', 'bsc-tv-badge', 'bsc-tv-guide' ) as $name ) { player_check( Elementor\Plugin::instance()->widgets_manager->get_widget_types( $name ), 'Existing widget retained: ' . $name ); }
 $requests = 0;
 $request_hosts = array();
@@ -141,5 +161,7 @@ if ( ! is_dir( $fixture_dir ) ) { mkdir( $fixture_dir ); }
 delete_option( BSC_TV_Player::STATE );
 $preview = str_replace( rest_url( 'bsc-tv/v1/player' ), '/tv-player-qa/state.json', $html );
 file_put_contents( $fixture_dir . '/index.html', '<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BSC TV 24/7 · aperçu local</title><link rel="stylesheet" href="/bsc-tv/assets/player.css"><style>body{margin:24px auto;max-width:1000px;background:#0b0b0e;padding:12px}</style><script defer src="/bsc-tv/assets/player.js"></script>' . $preview . '</html>' );
+$retro_preview = str_replace( rest_url( 'bsc-tv/v1/player' ), '/tv-player-qa/state.json', BSC_TV_Player::render( $retro_settings ) );
+file_put_contents( $fixture_dir . '/retro.html', '<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BSC TV · écran bombé et CRT</title><link rel="stylesheet" href="/bsc-tv/assets/player.css"><style>body{margin:24px auto;max-width:1000px;background:#0b0b0e;padding:12px}' . $retro_css . '</style><script defer src="/bsc-tv/assets/player.js"></script><main class="elementor-' . $retro_page . '"><div class="elementor-element elementor-element-a100004">' . $retro_preview . '</div></main></html>' );
 file_put_contents( $fixture_dir . '/state.json', wp_json_encode( BSC_TV_Player::snapshot() ) );
 echo "OK {$checks} WordPress/Elementor player checks, zero external API calls.\n";

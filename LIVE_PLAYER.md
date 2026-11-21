@@ -1,6 +1,6 @@
 # BSC TV — Live Player 24/7
 
-Ajout dans BSC TV 1.5.0, sur la branche `feature/live-player-24-7`. Aucun déploiement en production.
+Lecteur ajouté dans BSC TV 1.5.0. Filtres rétro superposés à l’image et couleur des coins arrondis dans la version 1.5.3 sur la branche `feature/player-crt`. Aucun déploiement en production.
 
 Le nouveau widget compose une antenne commune à partir des émissions existantes et des confirmations de direct déjà enregistrées. Il conserve un début et une fin de diffusion côté WordPress. Un visiteur qui rejoint une émission commencée depuis quinze minutes demande au lecteur officiel une lecture à quinze minutes. Les replays alternent avec les vrais directs prioritaires, puis reprennent au point d’interruption lorsque le direct se termine.
 
@@ -19,7 +19,10 @@ Le nouveau widget compose une antenne commune à partir des émissions existante
 - Contenu : titre, libellé du bouton, logo fixe, affichage de l’avatar BSC BDD, créateur, titre d’émission, lien BSC BDD, programme suivant, horaires, progression et cinq badges.
 - Lecture : démarrage sur clic par défaut, tentative d’autoplay facultative et démarrage sans son. Les contrôles du volume et du plein écran restent ceux de la plateforme.
 - Style : format 16:9 par défaut, couleurs, typographies, marges, espacements et arrondis. Dimensions et positions du logo et de l’avatar disposent de réglages responsive ordinateur/tablette/mobile. Le logo a une opacité, un fond, des marges et une bordure. L’avatar peut être rond ou carré, avec bordure et ombre.
-- Logo, avatar et habillage restent hors de l’image du lecteur officiel. Ils ne masquent ni les commandes, ni les publicités, ni la marque de la plateforme. L’avatar et le lien viennent de la fiche BSC BDD publique existante. Il n’y a pas de deuxième base d’avatars.
+- **Style → Écran bombé et CRT** : deux activations indépendantes, désactivées par défaut. Le verre bombé propose une profondeur de relief, une courbure et une teinte d’ombre. Le filtre CRT propose une intensité de 0 à 100 %, un espacement des lignes, un rayon de lueur et une teinte. Relief, courbure, intensité, espacement et lueur ont des réglages ordinateur/tablette/mobile. L’aperçu et la page publiée utilisent les mêmes styles générés par Elementor.
+- Les filtres sont placés **devant l’image** : reflets et ombres du verre sur une première couche, lignes de balayage et trame RVB sur une seconde. Le précédent cadre extérieur est retiré, sans ajout de marges autour de la vidéo. Le rendu bombé est une simulation de verre par ombrage et reflet, sans déformation géométrique de la vidéo. Les calques laissent traverser tous les clics grâce à `pointer-events: none`. Ils ne demandent ni animation, ni script, ni requête supplémentaire. Le shortcode conserve son apparence par défaut ; cette personnalisation est disponible dans Elementor.
+- **Couleur à l’extérieur des arrondis** : lorsque le verre bombé est activé, la vidéo et les filtres sont rognés dans les coins suivant la **Courbure du verre**. La couleur choisie remplit uniquement ces zones extérieures ; par défaut, elle reprend le fond du widget. Aucun espacement ni cadre supplémentaire. Les grandes courbures peuvent rogner les éléments proches des coins du lecteur. La courbure reste réglable par appareil.
+- Logo, avatar et badges restent hors de l’image du lecteur officiel. L’avatar et le lien viennent de la fiche BSC BDD publique existante. Il n’y a pas de deuxième base d’avatars.
 - Les métadonnées et le programme sont prévisualisés dans l’éditeur Elementor. Le bouton permet de charger le véritable lecteur dans l’aperçu.
 
 ## Fonctionnement et performances
@@ -45,6 +48,8 @@ Pour une émission YouTube terminée, la priorité de fraîcheur utilise la plus
 
 Sources : [YouTube IFrame API](https://developers.google.com/youtube/iframe_api_reference), [exigences du lecteur YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality), [lecteur Twitch officiel](https://dev.twitch.tv/docs/embed/video-and-clips/).
 
+Les filtres restent dans la page : le plein écran déclenché dans le lecteur officiel n’emporte pas les calques CSS de BSC TV. Les règles d’intégration restreignent les superpositions devant les lecteurs : [exigences YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality) et [conditions d’intégration Twitch, § 1.3](https://dev.twitch.tv/docs/embed/). L’option visuelle demandée n’est pas présentée comme un mode d’intégration approuvé par ces plateformes.
+
 ## Validation
 
 ```sh
@@ -57,7 +62,13 @@ Le test WordPress utilise une installation locale contenant Elementor, BSC BDD e
 
 Les tests de l’horloge couvrent les visiteurs successifs, les changements de programmes, les six tranches de nouveauté, l’alternance, les priorités manuelles et de direct, l’absence de basculements répétés, la reprise d’un replay, les délais, les futures publications, les premières et les longues inactivités. L’intégration vérifie les profils BSC BDD, les exclusions, les contrôles Elementor et les anciens widgets, la route REST et l’absence d’appels externes. Les tests JavaScript emploient des doubles des SDK officiels pour simuler blocage d’autoplay, refus de vidéo, changement d’avatar et passage YouTube/Twitch ; ils ne valident pas les publicités ou autorisations réelles de chaque compte.
 
-Validation de cette livraison : 24 contrôles d’horloge, 38 contrôles WordPress/Elementor et 20 contrôles du navigateur avec SDK simulés. Les scénarios existants de grille, collecte quotidienne et découverte passent également. Une véritable lecture YouTube a été observée dans deux onglets locaux, rejoignant le même programme à des positions initiales différentes selon l’heure d’arrivée. L’affichage a été vérifié à 390 px de largeur, sans débordement et sans superposition des logos sur la vidéo. Les basculements vers de véritables comptes Twitch restent à valider en préproduction HTTPS. L’installation de test émet deux avertissements de dépréciation Elementor sous PHP 8.4, indépendants du nouveau lecteur.
+Validation : les 44 contrôles WordPress/Elementor sauvegardent un document Elementor puis génèrent son CSS pour chaque combinaison d’effets, les couleurs et dimensions, et les réglages mobiles distincts. La version 1.5.3 vérifie également la couleur des coins enregistrée, le rognage de la vidéo et des filtres sur ordinateur et à 390 px, ainsi que le retour à des coins carrés lorsque le verre bombé est désactivé. La couleur d’exemple est rose, avec une courbure de 44 px sur ordinateur et 24 px sur mobile.
+
+La vérification visuelle 1.5.3 utilise un aperçu des styles enregistrés avec le lecteur YouTube intégré directement ; elle ne reteste pas l’horloge ou le SDK de synchronisation.
+
+Les 24 contrôles d’horloge et 20 contrôles du navigateur avec SDK simulés ont passé pour la version 1.5.2. Une lecture YouTube réelle avec les calques devant l’image a confirmé la transmission des clics, la pause et la reprise. La profondeur passe de 22 à 12 px et l’intensité de 55 à 25 % selon les réglages mobiles enregistrés. La désactivation rend les deux filtres transparents. Aucun cadre extérieur n’est ajouté.
+
+La livraison initiale 1.5.0 a également vérifié les scénarios de grille, collecte quotidienne et découverte, ainsi qu’une véritable lecture YouTube dans deux onglets locaux rejoignant le même programme à des positions différentes selon l’heure d’arrivée. Les basculements vers de véritables comptes Twitch restent à valider en préproduction HTTPS. L’installation de test émet deux avertissements de dépréciation Elementor sous PHP 8.4, indépendants du nouveau lecteur.
 
 Avant mise en service, tester les véritables sources YouTube et Twitch sur le domaine de préproduction HTTPS et vérifier les politiques de consentement et de cache du site. La production n’est pas modifiée par la livraison.
 

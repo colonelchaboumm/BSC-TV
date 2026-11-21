@@ -16,8 +16,11 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 	public function get_script_depends() { return array( 'bsc-tv-player' ); }
 	protected function is_dynamic_content(): bool { return true; }
 
-	private function size( $name, $label, $variable, $min, $max, $default = null ) {
+	private function size( $name, $label, $variable, $min, $max, $default = null, $condition = array() ) {
 		$args = array( 'label' => $label, 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => $min, 'max' => $max ) ), 'selectors' => array( '{{WRAPPER}} .bsc-player' => $variable . ': {{SIZE}}{{UNIT}};' ) );
+		if ( $condition ) {
+			$args['condition'] = $condition;
+		}
 		if ( null !== $default ) {
 			$args['default'] = array( 'size' => $default, 'unit' => 'px' );
 		}
@@ -49,6 +52,20 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'player_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-player__' . $key ) );
 		}
 		$this->add_responsive_control( 'padding', array( 'label' => 'Marges intérieures', 'type' => Controls_Manager::DIMENSIONS, 'size_units' => array( 'px', 'em', '%' ), 'selectors' => array( $root => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};' ) ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'player_crt_style', array( 'label' => 'Écran bombé et CRT', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->add_control( 'curve_enabled', array( 'label' => 'Activer le verre bombé sur l’image', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => '', 'selectors' => array( $root => '--bsc-player-curve: 1;' ) ) );
+		$this->size( 'curve_depth', 'Profondeur du relief', '--bsc-player-curve-depth', 4, 48, 22, array( 'curve_enabled' => 'yes' ) );
+		$this->size( 'curve_radius', 'Courbure du verre', '--bsc-player-curve-radius', 0, 100, 44, array( 'curve_enabled' => 'yes' ) );
+		$this->add_control( 'curve_corner_color', array( 'label' => 'Couleur à l’extérieur des arrondis', 'description' => 'Rogne l’image dans les coins selon la courbure choisie. Sans couleur définie, reprend le fond du widget.', 'type' => Controls_Manager::COLOR, 'condition' => array( 'curve_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-corner-color: {{VALUE}};' ) ) );
+		$this->add_control( 'curve_color', array( 'label' => 'Teinte de l’ombre du verre', 'type' => Controls_Manager::COLOR, 'condition' => array( 'curve_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-curve-color: {{VALUE}};' ) ) );
+		$this->add_control( 'crt_enabled', array( 'label' => 'Activer le filtre CRT sur l’image', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => '', 'selectors' => array( $root => '--bsc-player-crt: 1;' ) ) );
+		$this->add_responsive_control( 'crt_intensity', array( 'label' => 'Intensité de l’effet', 'type' => Controls_Manager::SLIDER, 'size_units' => array( '%' ), 'range' => array( '%' => array( 'min' => 0, 'max' => 100 ) ), 'default' => array( 'size' => 35, 'unit' => '%' ), 'condition' => array( 'crt_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-crt-intensity: {{SIZE}};' ) ) );
+		$this->size( 'crt_spacing', 'Espacement des lignes', '--bsc-player-crt-spacing', 2, 10, 4, array( 'crt_enabled' => 'yes' ) );
+		$this->size( 'crt_glow', 'Rayon de la lueur', '--bsc-player-crt-glow', 0, 60, 18, array( 'crt_enabled' => 'yes' ) );
+		$this->add_control( 'crt_color', array( 'label' => 'Teinte de la lueur', 'type' => Controls_Manager::COLOR, 'condition' => array( 'crt_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-crt-color: {{VALUE}};' ) ) );
+		$this->add_control( 'crt_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'Effets fixes superposés à l’image, désactivés par défaut. Le verre bombé ajoute des reflets et des ombres ; le filtre CRT ajoute des lignes et une trame RVB. Les clics traversent ces effets pour atteindre les commandes du lecteur. Le plein écran propre à YouTube ou Twitch ne conserve pas ces calques.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'player_logo_style', array( 'label' => 'Logo fixe BSC TV', 'tab' => Controls_Manager::TAB_STYLE, 'condition' => array( 'show_logo' => 'yes' ) ) );
