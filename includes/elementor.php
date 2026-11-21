@@ -151,7 +151,7 @@ final class BSC_TV_Guide_Widget extends Elementor\Widget_Base {
 
 		$this->start_controls_section( 'style', array( 'label' => 'Mise en page et couleurs', 'tab' => Controls_Manager::TAB_STYLE ) );
 		$root = '{{WRAPPER}} .bsc-guide';
-		foreach ( array( 'channel-width' => array( 'Largeur de la colonne des chaînes', 80, 300 ), 'hour-width' => array( 'Largeur d’une heure', 140, 360 ), 'logo-size' => array( 'Taille des logos', 20, 64 ), 'radius' => array( 'Arrondi des angles', 0, 24 ) ) as $key => list( $label, $min, $max ) ) {
+		foreach ( array( 'channel-width' => array( 'Largeur de la colonne des chaînes', 80, 300 ), 'hour-width' => array( 'Largeur d’une heure', 140, 360 ), 'logo-size' => array( 'Taille des logos', 20, 64 ), 'image-width' => array( 'Largeur des vignettes', 32, 160 ), 'radius' => array( 'Arrondi des angles', 0, 24 ) ) as $key => list( $label, $min, $max ) ) {
 			$this->add_responsive_control( 'guide_' . $key, array(
 				'label' => $label, 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => $min, 'max' => $max ) ),
 				'selectors' => array( $root => '--bsc-guide-' . $key . ': {{SIZE}}{{UNIT}};' ),

@@ -10,6 +10,7 @@
 	--bsc-guide-hour-width: 196px;
 	--bsc-guide-row-height: 96px;
 	--bsc-guide-logo-size: 48px;
+	--bsc-guide-image-width: 86px;
 	--bsc-guide-radius: 6px;
 	box-sizing: border-box;
 	min-inline-size: 0;
@@ -197,7 +198,6 @@
 	background: var(--bsc-guide-card);
 	color: var(--bsc-guide-ink);
 	text-decoration: none;
-	container-type: inline-size;
 }
 
 .bsc-guide .bsc-guide__programme--live { border-color: var(--bsc-guide-live); }
@@ -232,17 +232,15 @@
 
 .bsc-guide__live::before { inline-size: 7px; block-size: 7px; border-radius: 50%; background: currentColor; content: ''; }
 
-.bsc-guide .bsc-guide__image { display: none; }
-
-@container (min-width: 205px) {
-	.bsc-guide .bsc-guide__image {
-		display: block;
-		flex: 0 0 86px;
-		inline-size: 86px;
-		aspect-ratio: 16 / 9;
-		border-radius: max(0px, calc(var(--bsc-guide-radius) - 2px));
-		object-fit: cover;
-	}
+.bsc-guide .bsc-guide__image {
+	display: block;
+	flex: 0 0 auto;
+	inline-size: min(var(--bsc-guide-image-width), 34%);
+	block-size: auto;
+	max-block-size: 100%;
+	aspect-ratio: 16 / 9;
+	border-radius: max(0px, calc(var(--bsc-guide-radius) - 2px));
+	object-fit: cover;
 }
 
 .bsc-guide__empty {
