@@ -1,6 +1,6 @@
 # BSC TV — Live Player 24/7
 
-Ajout dans BSC TV 1.5.0, sur la branche `feature/live-player-24-7`. Aucun déploiement en production.
+Lecteur ajouté dans BSC TV 1.5.0. Habillage rétro ajouté dans la version 1.5.1 sur la branche `feature/player-crt`. Aucun déploiement en production.
 
 Le nouveau widget compose une antenne commune à partir des émissions existantes et des confirmations de direct déjà enregistrées. Il conserve un début et une fin de diffusion côté WordPress. Un visiteur qui rejoint une émission commencée depuis quinze minutes demande au lecteur officiel une lecture à quinze minutes. Les replays alternent avec les vrais directs prioritaires, puis reprennent au point d’interruption lorsque le direct se termine.
 
@@ -19,6 +19,8 @@ Le nouveau widget compose une antenne commune à partir des émissions existante
 - Contenu : titre, libellé du bouton, logo fixe, affichage de l’avatar BSC BDD, créateur, titre d’émission, lien BSC BDD, programme suivant, horaires, progression et cinq badges.
 - Lecture : démarrage sur clic par défaut, tentative d’autoplay facultative et démarrage sans son. Les contrôles du volume et du plein écran restent ceux de la plateforme.
 - Style : format 16:9 par défaut, couleurs, typographies, marges, espacements et arrondis. Dimensions et positions du logo et de l’avatar disposent de réglages responsive ordinateur/tablette/mobile. Le logo a une opacité, un fond, des marges et une bordure. L’avatar peut être rond ou carré, avec bordure et ombre.
+- **Style → Écran bombé et CRT** : deux activations indépendantes, désactivées par défaut. Le cadre bombé propose une épaisseur de relief, une courbure et une couleur. L’habillage CRT propose une intensité de 0 à 100 %, un espacement des lignes, un rayon de lueur et une teinte. Relief, courbure, intensité, espacement et lueur ont des réglages ordinateur/tablette/mobile. L’aperçu et la page publiée utilisent les mêmes styles générés par Elementor.
+- Les effets cathodiques concernent le cadre extérieur : les lignes, reflets et lueurs sont placés derrière la surface opaque du lecteur. Il n’y a aucun filtre ou effet de distorsion sur la vidéo, aucun masque aux angles et aucun calque devant les commandes, publicités ou marques des lecteurs officiels. Ces effets fixes ne demandent ni animation, ni script, ni requête supplémentaire. Le shortcode conserve son apparence par défaut ; cette personnalisation est disponible dans Elementor.
 - Logo, avatar et habillage restent hors de l’image du lecteur officiel. Ils ne masquent ni les commandes, ni les publicités, ni la marque de la plateforme. L’avatar et le lien viennent de la fiche BSC BDD publique existante. Il n’y a pas de deuxième base d’avatars.
 - Les métadonnées et le programme sont prévisualisés dans l’éditeur Elementor. Le bouton permet de charger le véritable lecteur dans l’aperçu.
 
@@ -45,6 +47,8 @@ Pour une émission YouTube terminée, la priorité de fraîcheur utilise la plus
 
 Sources : [YouTube IFrame API](https://developers.google.com/youtube/iframe_api_reference), [exigences du lecteur YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality), [lecteur Twitch officiel](https://dev.twitch.tv/docs/embed/video-and-clips/).
 
+Les règles d’intégration interdisent de recouvrir le lecteur : [exigences YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality) et [conditions d’intégration Twitch, § 1.3](https://dev.twitch.tv/docs/embed/). L’effet bombé est donc un relief du cadre, et l’effet CRT un habillage autour de l’image.
+
 ## Validation
 
 ```sh
@@ -57,7 +61,9 @@ Le test WordPress utilise une installation locale contenant Elementor, BSC BDD e
 
 Les tests de l’horloge couvrent les visiteurs successifs, les changements de programmes, les six tranches de nouveauté, l’alternance, les priorités manuelles et de direct, l’absence de basculements répétés, la reprise d’un replay, les délais, les futures publications, les premières et les longues inactivités. L’intégration vérifie les profils BSC BDD, les exclusions, les contrôles Elementor et les anciens widgets, la route REST et l’absence d’appels externes. Les tests JavaScript emploient des doubles des SDK officiels pour simuler blocage d’autoplay, refus de vidéo, changement d’avatar et passage YouTube/Twitch ; ils ne valident pas les publicités ou autorisations réelles de chaque compte.
 
-Validation de cette livraison : 24 contrôles d’horloge, 38 contrôles WordPress/Elementor et 20 contrôles du navigateur avec SDK simulés. Les scénarios existants de grille, collecte quotidienne et découverte passent également. Une véritable lecture YouTube a été observée dans deux onglets locaux, rejoignant le même programme à des positions initiales différentes selon l’heure d’arrivée. L’affichage a été vérifié à 390 px de largeur, sans débordement et sans superposition des logos sur la vidéo. Les basculements vers de véritables comptes Twitch restent à valider en préproduction HTTPS. L’installation de test émet deux avertissements de dépréciation Elementor sous PHP 8.4, indépendants du nouveau lecteur.
+Validation 1.5.1 : 24 contrôles d’horloge, 44 contrôles WordPress/Elementor et 20 contrôles du navigateur avec SDK simulés. Les nouveaux contrôles sauvegardent un document Elementor puis génèrent son CSS : effets désactivés, cadre seul, CRT seul, effets combinés, couleurs et dimensions, réglages mobiles distincts. Une véritable lecture YouTube avec le cadre rétro a été observée sur ordinateur et à 390 px, sans débordement. Le cadre passe de 22 à 12 px et l’intensité de 55 à 25 % selon le réglage mobile enregistré. La désactivation des effets laisse un cadre de 0 px et des couches décoratives invisibles. La vidéo conserve ses commandes, sans filtre ni transformation CSS.
+
+La livraison initiale 1.5.0 a également vérifié les scénarios de grille, collecte quotidienne et découverte, ainsi qu’une véritable lecture YouTube dans deux onglets locaux rejoignant le même programme à des positions différentes selon l’heure d’arrivée. Les basculements vers de véritables comptes Twitch restent à valider en préproduction HTTPS. L’installation de test émet deux avertissements de dépréciation Elementor sous PHP 8.4, indépendants du nouveau lecteur.
 
 Avant mise en service, tester les véritables sources YouTube et Twitch sur le domaine de préproduction HTTPS et vérifier les politiques de consentement et de cache du site. La production n’est pas modifiée par la livraison.
 

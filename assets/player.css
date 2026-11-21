@@ -9,6 +9,15 @@
 	--bsc-player-logo-size: 84px;
 	--bsc-player-logo-opacity: 1;
 	--bsc-player-avatar-size: 54px;
+	--bsc-player-curve: 0;
+	--bsc-player-curve-depth: 22px;
+	--bsc-player-curve-radius: 44px;
+	--bsc-player-frame-color: #25272b;
+	--bsc-player-crt: 0;
+	--bsc-player-crt-intensity: 35;
+	--bsc-player-crt-spacing: 4px;
+	--bsc-player-crt-glow: 18px;
+	--bsc-player-crt-color: #66efbc;
 	box-sizing: border-box;
 	max-inline-size: 100%;
 	min-inline-size: 0;
@@ -29,7 +38,27 @@
 .bsc-player__badge { border: 1px solid currentColor; border-radius: 4px; padding: 4px 7px; color: var(--bsc-player-accent); font-size: .6875rem; font-weight: 800; letter-spacing: .04em; }
 .bsc-player__badge--live { color: var(--bsc-player-live); }
 .bsc-player__badge--live::before { content: ''; display: inline-block; inline-size: 7px; block-size: 7px; margin-inline-end: 5px; border-radius: 50%; background: currentColor; }
-.bsc-player__screen { position: relative; inline-size: 100%; aspect-ratio: var(--bsc-player-ratio, 16 / 9); min-block-size: 200px; background: #050506; border-radius: 4px; overflow: hidden; }
+/* The opaque screen sits above both decorative layers; effects never cover the official iframe. */
+.bsc-player__cabinet {
+	position: relative;
+	isolation: isolate;
+	padding: max(calc(var(--bsc-player-curve) * var(--bsc-player-curve-depth)), calc(var(--bsc-player-crt) * 12px));
+	border-radius: calc(4px + var(--bsc-player-curve) * var(--bsc-player-curve-radius));
+	background: var(--bsc-player-frame-color);
+	box-shadow: 0 12px 28px rgb(0 0 0 / calc(var(--bsc-player-curve) * .4));
+}
+.bsc-player__cabinet::before, .bsc-player__cabinet::after { content: ''; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; }
+.bsc-player__cabinet::before {
+	opacity: var(--bsc-player-curve);
+	background: radial-gradient(ellipse at 50% 0, #ffffff38, transparent 68%), linear-gradient(135deg, #ffffff24, transparent 25%, #00000078 78%, #ffffff16);
+	box-shadow: inset 2px 2px 3px #ffffff38, inset -3px -4px 8px #000000b0;
+}
+.bsc-player__cabinet::after {
+	opacity: calc(var(--bsc-player-crt) * var(--bsc-player-crt-intensity) / 100);
+	background: repeating-linear-gradient(to bottom, var(--bsc-player-crt-color) 0 1px, #000 1px 2px, transparent 2px var(--bsc-player-crt-spacing));
+	box-shadow: 0 0 var(--bsc-player-crt-glow) var(--bsc-player-crt-color), inset 0 0 var(--bsc-player-crt-glow) var(--bsc-player-crt-color);
+}
+.bsc-player__screen { position: relative; z-index: 1; inline-size: 100%; aspect-ratio: var(--bsc-player-ratio, 16 / 9); min-block-size: 200px; background: #050506; }
 .bsc-player__screen[data-platform="twitch"] { min-block-size: 300px; }
 .bsc-player__mount, .bsc-player__mount > div, .bsc-player__mount iframe { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; border: 0; }
 .bsc-player__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-block-start: var(--bsc-player-gap); }
