@@ -110,9 +110,9 @@ $styles_for = static function ( $id ) use ( $retro_css ) {
 	return implode( '', $rules[1] );
 };
 player_check( false === strpos( $styles_for( 'a100001' ), '--bsc-player-curve:' ) && false === strpos( $styles_for( 'a100001' ), '--bsc-player-crt:' ), 'Saved disabled effects emit no activation CSS' );
-player_check( false !== strpos( $styles_for( 'a100002' ), '--bsc-player-curve:1;' ) && false === strpos( $styles_for( 'a100002' ), '--bsc-player-crt:' ), 'Saved curved frame activates independently in Elementor CSS' );
+player_check( false !== strpos( $styles_for( 'a100002' ), '--bsc-player-curve:1;' ) && false === strpos( $styles_for( 'a100002' ), '--bsc-player-crt:' ), 'Saved curved glass activates independently in Elementor CSS' );
 player_check( false === strpos( $styles_for( 'a100003' ), '--bsc-player-curve:' ) && false !== strpos( $styles_for( 'a100003' ), '--bsc-player-crt:1;' ), 'Saved CRT activates independently in Elementor CSS' );
-player_check( false !== strpos( $styles_for( 'a100004' ), '--bsc-player-frame-color:#292c30;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-color:#66efbc;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-spacing:4px;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-glow:24px;' ), 'Saved effect colours, scanline spacing and glow render through Elementor' );
+player_check( false !== strpos( $styles_for( 'a100004' ), '--bsc-player-curve-color:#292c30;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-color:#66efbc;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-spacing:4px;' ) && false !== strpos( $styles_for( 'a100004' ), '--bsc-player-crt-glow:24px;' ), 'Saved effect colours, scanline spacing and glow render through Elementor' );
 player_check( preg_match( '/@media[^{}]+max-width:[^{}]+\{[^@]*--bsc-player-curve-depth:12px;[^@]*--bsc-player-crt-intensity:25;/s', $retro_css ), 'Elementor emits separate mobile relief and intensity settings' );
 foreach ( array( 'bsc-tv-programme', 'bsc-tv-mega-menu', 'bsc-tv-badge', 'bsc-tv-guide' ) as $name ) { player_check( Elementor\Plugin::instance()->widgets_manager->get_widget_types( $name ), 'Existing widget retained: ' . $name ); }
 $requests = 0;
