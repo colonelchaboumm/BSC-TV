@@ -103,7 +103,7 @@ holdYouTube = false; first.playVideo();
 check(transition.hidden && clip.paused, 'YouTube PLAYING immediately hides and pauses the transition');
 first.options.events.onStateChange({ data: 3 });
 check(transition.hidden, 'Buffering an already started programme does not cover its picture or advertisements');
-check(first.options.playerVars.controls === 1 && first.options.playerVars.origin === 'https://bsc.example', 'Official controls and host identity retained');
+check(first.options.playerVars.controls === 0 && first.options.playerVars.disablekb === 1 && first.options.playerVars.origin === 'https://bsc.example', 'Documented YouTube parameters remove the timeline and seeking shortcuts while retaining host identity');
 blocked = true;
 await root.nodes.get('[data-player-join]').fire('click');
 check(root.nodes.get('[data-player-message]').textContent.includes('navigateur'), 'Autoplay blocking gives actionable join message');
