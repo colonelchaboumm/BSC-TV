@@ -38,7 +38,8 @@
 .bsc-player__badge { border: 1px solid currentColor; border-radius: 4px; padding: 4px 7px; color: var(--bsc-player-accent); font-size: .6875rem; font-weight: 800; letter-spacing: .04em; }
 .bsc-player__badge--live { color: var(--bsc-player-live); }
 .bsc-player__badge--live::before { content: ''; display: inline-block; inline-size: 7px; block-size: 7px; margin-inline-end: 5px; border-radius: 50%; background: currentColor; }
-.bsc-player__screen { position: relative; isolation: isolate; inline-size: 100%; aspect-ratio: var(--bsc-player-ratio, 16 / 9); min-block-size: 200px; background: #050506; }
+.bsc-player__screen-wrap { background: var(--bsc-player-corner-color, var(--bsc-player-surface)); }
+.bsc-player__screen { position: relative; isolation: isolate; inline-size: 100%; aspect-ratio: var(--bsc-player-ratio, 16 / 9); min-block-size: 200px; border-radius: calc(var(--bsc-player-curve) * var(--bsc-player-curve-radius)); overflow: hidden; background: #050506; }
 /* Decorative glass and scanlines sit above the image and let all pointer input reach the official player. */
 .bsc-player__screen::before, .bsc-player__screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
 .bsc-player__screen::before {
