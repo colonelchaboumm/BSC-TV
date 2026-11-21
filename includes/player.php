@@ -511,6 +511,52 @@ final class BSC_TV_Player {
 		} ) );
 	}
 
+	/** Public, approved programmes for today, using the shared clock without collection. */
+	public static function day_snapshot( $now = null ) {
+		$now = $now ?? time();
+		$snapshot = self::snapshot( $now );
+		$bounds = self::day_bounds( $now, $snapshot['timezone'] );
+		$result = array( 'enabled' => $snapshot['enabled'], 'server_time' => $now, 'timezone' => $snapshot['timezone'], 'date' => wp_date( 'Y-m-d', $now ), 'date_label' => wp_date( 'l j F Y', $now ), 'day_start' => $bounds[0], 'day_end' => $bounds[1], 'poll_after' => 60, 'items' => array() );
+		if ( ! $snapshot['enabled'] ) { return $result; }
+		$catalogue = self::catalogue();
+		$state = (array) get_option( self::STATE, array() );
+		$days = BSC_TV_Player_Schedule::days( $state, $now, $snapshot['timezone'] );
+		$today = reset( $days );
+		$boundary = $bounds[1];
+		foreach ( $today['rows'] as $row ) {
+			$live = ! empty( $row['live'] );
+			if ( ! $live && isset( $catalogue['pool'][ $row['key'] ] ) ) { $row['channel_id'] = $catalogue['pool'][ $row['key'] ]['channel_id']; }
+			$channel = $catalogue['channels'][ $row['channel_id'] ?? 0 ] ?? array();
+			if ( ! $live && ! isset( $catalogue['pool'][ $row['key'] ] ) ) { continue; }
+			if ( $live ) {
+				if ( ! $channel || ( isset( $channel['config']['live'] ) && ! $channel['config']['live'] ) ) { continue; }
+				if ( ! empty( $row['show_id'] ) ) {
+					$post = get_post( $row['show_id'] );
+					$approved = $post && ( 'publish' === $post->post_status || ( BSC_TV_Content::ARCHIVED === $post->post_status && ( get_post_meta( $post->ID, self::APPROVED, true ) || ( get_post_meta( $post->ID, BSC_TV_Library::ORIGIN, true ) && ! get_post_meta( $post->ID, BSC_TV_Library::FEED, true ) ) ) ) );
+					if ( ! $approved || $post->post_password ) { continue; }
+				}
+			}
+			$item = self::decorate( $row, $catalogue, $now, $live );
+			$item['phase'] = $row['phase'];
+			$item['on_air'] = 'current' === $row['phase'] && ( $snapshot['current']['key'] ?? '' ) === $row['key'];
+			if ( $live && 'current' === $row['phase'] && ! $item['on_air'] ) { continue; }
+			$item['display_start'] = $row['display_start'];
+			$item['display_end'] = $row['display_end'];
+			$item['continued'] = $row['continued'];
+			$item['provisional'] = 'future' === $row['phase'] && ! empty( $snapshot['current']['live'] );
+			$item['channel'] = html_entity_decode( wp_strip_all_tags( $channel['name'] ?? '' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$show = ! empty( $row['show_id'] ) ? BSC_TV_Content::data( $row['show_id'] ) : array();
+			$image = ! empty( $row['show_id'] ) ? get_the_post_thumbnail_url( $row['show_id'], 'medium' ) : '';
+			$image = $image ?: ( $show['image'] ?? '' );
+			$image = $image ?: ( $channel ? get_the_post_thumbnail_url( $channel['id'], 'thumbnail' ) : '' );
+			$item['image'] = BSC_TV_Content::url( $image ?: $item['avatar'] );
+			$result['items'][] = $item;
+			foreach ( array( $row['start'], $row['end'] ) as $transition ) { if ( $transition > $now ) { $boundary = min( $boundary, $transition ); } }
+		}
+		$result['poll_after'] = max( 5, min( 60, $boundary - $now + 1 ) );
+		return $result;
+	}
+
 	public static function render( $settings = array() ) {
 		wp_enqueue_style( 'bsc-tv-player' );
 		wp_enqueue_script( 'bsc-tv-player' );
