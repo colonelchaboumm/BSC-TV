@@ -63,9 +63,32 @@
 			this.loading = false;
 			this.timer = null;
 			this.readyTimer = null;
-			this.lastSeek = 0;
+			this.lastSeek = -Infinity;
+			this.volume = 100;
+			this.muted = root.dataset.muted === '1';
 			this.transitionAttempt = 0;
 			this.button.addEventListener('click', () => this.join());
+			root.querySelector('[data-player-pause]')?.addEventListener('click', () => {
+				if (!this.ready || this.data?.current?.resource.platform !== 'youtube') return;
+				if (this.player.getPlayerState() === window.YT.PlayerState.PLAYING) this.player.pauseVideo();
+				else { this.seek(true); this.play(); }
+				this.controls();
+			});
+			root.querySelector('[data-player-mute]')?.addEventListener('click', () => { this.audioCustomized = true; this.muted = !this.muted; this.audio(); });
+			root.querySelector('[data-player-volume]')?.addEventListener('input', event => {
+				this.audioCustomized = true;
+				this.volume = Math.max(0, Math.min(100, Number(event.target.value) || 0));
+				this.muted = this.volume === 0;
+				this.audio();
+			});
+			root.querySelector('[data-player-fullscreen]')?.addEventListener('click', async () => {
+				try {
+					if (document.fullscreenElement === root) await document.exitFullscreen();
+					else await root.requestFullscreen();
+				} catch { this.status('Le plein écran est indisponible dans ce navigateur.'); }
+			});
+			this.fullscreen = () => this.controls();
+			document.addEventListener('fullscreenchange', this.fullscreen);
 			root.querySelector('[data-player-avatar]')?.addEventListener('error', event => { event.target.hidden = true; });
 			root.querySelector('[data-player-poster]')?.addEventListener('error', event => { event.target.hidden = true; });
 			this.transitionVideo?.addEventListener('error', () => { this.transitionBroken = true; this.stopTransition(); });
@@ -124,8 +147,45 @@
 			try { this.transitionVideo?.pause(); } catch { /* A disabled animation has no media element. */ }
 		}
 		stopTransition() { this.waitingForPlayback = false; this.pauseTransition(); }
-		playing() { this.stopTransition(); this.status(''); }
-		ended(message) { this.startTransition(); this.status(message); this.request(); }
+		playing() { this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
+		ended(message) {
+			// Seeking to the end of a replay must not skip the shared programme.
+			try {
+				if (!this.data?.current?.live && this.now() < this.data.current.end && this.player.getCurrentTime() > this.position() + 3) {
+					this.rejoinAfterSeek = true;
+					this.rejoin();
+					return;
+				}
+			} catch { /* An unavailable player follows the normal end fallback. */ }
+			this.startTransition(); this.status(message); this.request();
+		}
+
+		audio() {
+			if (!this.ready || this.data?.current?.resource.platform !== 'youtube') return;
+			try {
+				if (!this.muted && this.volume === 0) this.volume = 100;
+				this.player.setVolume?.(this.volume);
+				if (this.muted) this.player.mute(); else this.player.unMute();
+			} catch { /* Volume remains subject to the browser and official player. */ }
+			this.controls();
+		}
+
+		controls() {
+			const controls = this.root.querySelector('[data-player-controls]');
+			if (!controls) return;
+			controls.hidden = !this.ready || this.failedToken === this.token || this.data?.current?.resource.platform !== 'youtube';
+			if (controls.hidden) return;
+			try {
+				this.text('[data-player-pause]', this.player.getPlayerState() === window.YT.PlayerState.PLAYING ? 'Pause' : 'Reprendre le direct');
+				const mute = this.root.querySelector('[data-player-mute]');
+				mute.textContent = this.muted ? 'Activer le son' : 'Couper le son';
+				mute.setAttribute('aria-pressed', String(this.muted));
+				this.root.querySelector('[data-player-volume]').value = this.volume;
+				const fullscreen = this.root.querySelector('[data-player-fullscreen]');
+				fullscreen.hidden = !document.fullscreenEnabled || !this.root.requestFullscreen;
+				fullscreen.textContent = document.fullscreenElement === this.root ? 'Quitter le plein écran' : 'Plein écran';
+			} catch { /* SDK state may be unavailable during replacement. */ }
+		}
 
 		async request() {
 			if (!this.root.isConnected) { this.dispose(); return; }
@@ -261,18 +321,27 @@
 					const iframe = this.mount.querySelector('iframe');
 					if (iframe) { iframe.title = `${current.title} · ${platform}`; iframe.referrerPolicy = 'strict-origin-when-cross-origin'; }
 					this.seek(true);
+					if (!this.audioCustomized) this.muted = this.root.dataset.muted === '1';
+					this.audio();
+					this.controls();
 					this.play();
 				};
 				if (platform === 'youtube') {
 					this.player = new window.YT.Player(mount.id, {
 						width: '100%', height: '100%', videoId: id,
-						playerVars: { autoplay: 0, controls: 1, playsinline: 1, fs: 1, origin: location.origin, start: Math.floor(this.position()) },
+						playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1, fs: 1, origin: location.origin, start: Math.floor(this.position()) },
 						events: {
-							onReady: () => { if (!valid()) return; if (this.root.dataset.muted === '1') this.player.mute(); else this.player.unMute(); ready(); },
+							onReady: ready,
 							onStateChange: event => {
 								if (!valid()) return;
 								if (event.data === window.YT.PlayerState.PLAYING) this.playing();
 								if (event.data === window.YT.PlayerState.ENDED) this.ended('Cette vidéo est terminée. Actualisation du programme…');
+								this.controls();
+							},
+							onPlaybackRateChange: event => {
+								if (valid() && !current.live && event.data !== 1) {
+									try { this.player.setPlaybackRate(1); this.seek(false, true); } catch { /* The provider may refuse a rate change. */ }
+								}
 							},
 							onAutoplayBlocked: () => { if (valid()) { this.stopTransition(); this.status('Votre navigateur demande un clic sur « Rejoindre le direct TV » pour démarrer.'); } },
 							onError: event => { if (valid()) this.fail(`Cette vidéo ne peut pas être lue ici (YouTube ${event.data}). Utilisez le lien vers YouTube ou réessayez. Le prochain programme démarrera à son horaire.`); },
@@ -285,6 +354,9 @@
 					});
 					this.player.addEventListener(window.Twitch.Player.READY, ready);
 					this.player.addEventListener(window.Twitch.Player.PLAYING, () => { if (valid()) this.playing(); });
+					this.player.addEventListener(window.Twitch.Player.SEEK, () => {
+						if (valid() && !current.live && !this.seeking) { this.pendingSeek = true; this.seek(false, true); }
+					});
 					this.player.addEventListener(window.Twitch.Player.PLAYBACK_BLOCKED, () => { if (valid()) { this.stopTransition(); this.status('Cliquez sur « Rejoindre le direct TV » ou sur Lecture dans Twitch pour démarrer.'); } });
 					this.player.addEventListener(window.Twitch.Player.OFFLINE, () => { if (valid()) this.ended('Ce direct est terminé ou indisponible. BSC TV vérifie son état.'); });
 					this.player.addEventListener(window.Twitch.Player.ENDED, () => { if (valid()) this.ended('Vidéo terminée. Actualisation du programme…'); });
@@ -312,22 +384,30 @@
 			} catch { this.status('Utilisez les commandes du lecteur officiel pour démarrer.'); }
 		}
 
-		seek(force = false) {
-			if (!this.ready || !this.player || !this.data?.current || this.data.current.live || this.failedToken === this.token) return;
+		seek(force = false, interaction = false) {
+			if (!this.ready || !this.player || !this.data?.current || this.data.current.live || this.failedToken === this.token || this.seeking || this.now() >= this.data.current.end) return false;
 			const youtube = this.data.current.resource.platform === 'youtube';
 			try {
-				// Limit positioning requests. The provider retains control of advertisements,
-				// buffering, seek availability and playback delays.
+				// Official SDK calls only; never cover or intercept the provider's controls.
+				// Set the cooldown before seeking: Twitch also emits SEEK for our own calls.
 				const playing = youtube ? this.player.getPlayerState() === window.YT.PlayerState.PLAYING : !this.player.isPaused();
-				if (!force && (!playing || performance.now() - this.lastSeek < 60000)) return;
+				if (!force && ((!interaction && !playing) || performance.now() - this.lastSeek < 2000)) return false;
 				const actual = this.player.getCurrentTime();
 				const target = this.position();
-				if (force || Math.abs(actual - target) > this.data.tolerance) {
-					if (youtube) this.player.seekTo(target, true); else this.player.seek(target);
+				if (!force && !Number.isFinite(actual)) return false;
+				if (force || Math.abs(actual - target) > 3) {
 					this.lastSeek = performance.now();
+					this.seeking = true;
+					if (youtube) this.player.seekTo(target, true); else this.player.seek(target);
+					this.pendingSeek = false;
+					return true;
 				}
+				this.pendingSeek = false;
 			} catch { /* A platform may temporarily refuse positioning. */ }
+			finally { this.seeking = false; }
+			return false;
 		}
+		rejoin() { if (this.rejoinAfterSeek && this.seek(false, true)) { this.rejoinAfterSeek = false; this.play(); } }
 
 		tick() {
 			if (!this.root.isConnected) { this.dispose(); return; }
@@ -338,6 +418,7 @@
 				if (current && !current.live) progress.value = Math.min(100, Math.max(0, 100 * (this.now() - current.start) / (current.end - current.start)));
 			}
 			if (document.hidden || !current) return;
+			this.controls();
 			if (current.end && this.now() >= current.end) {
 				const boundary = `${current.key}/${current.start}/${current.end}`;
 				if (boundary !== this.boundaryToken) {
@@ -347,10 +428,11 @@
 					this.status('Synchronisation avec le programme suivant…');
 					this.request();
 				}
-			} else if (Math.floor(performance.now() / 1000) % 10 === 0) this.seek();
+			} else if (this.rejoinAfterSeek) this.rejoin();
+			else this.seek(false, this.pendingSeek);
 		}
 
-		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.status(message); }
+		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.controls(); this.status(message); }
 		destroy() {
 			this.stopTransition();
 			window.clearTimeout(this.readyTimer);
@@ -363,11 +445,16 @@
 			this.player = null;
 			this.ready = false;
 			this.starting = false;
+			this.lastSeek = -Infinity;
+			this.rejoinAfterSeek = false;
+			this.pendingSeek = false;
+			this.controls();
 		}
 		dispose() {
 			window.clearTimeout(this.timer);
 			window.clearInterval(this.pulse);
 			document.removeEventListener('visibilitychange', this.visibility);
+			document.removeEventListener('fullscreenchange', this.fullscreen);
 			this.observer.disconnect();
 			this.destroy();
 		}

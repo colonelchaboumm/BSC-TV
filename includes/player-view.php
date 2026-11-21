@@ -12,6 +12,13 @@
 	<div class="bsc-player__screen-wrap"><div class="bsc-player__screen"><?php if ( 'yes' === $settings['show_poster'] ) : ?><img class="bsc-player__poster" data-player-poster alt="" decoding="async"<?php if ( $poster ) : ?> src="<?php echo esc_url( $poster ); ?>"<?php else : ?> hidden<?php endif; ?>><?php endif; ?><div class="bsc-player__mount" data-player-mount></div>
 		<?php if ( 'yes' === $settings['transition_enabled'] ) : ?><div class="bsc-player__transition" data-player-transition data-timeout="<?php echo esc_attr( $transition_timeout ); ?>" aria-hidden="true" hidden><img src="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" alt="" decoding="async"><video data-player-transition-video data-src="<?php echo esc_url( $transition_url ); ?>" poster="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture></video></div><?php endif; ?>
 	</div></div>
+	<div class="bsc-player__controls" data-player-controls role="group" aria-label="Commandes de la diffusion" hidden>
+		<button type="button" data-player-pause>Pause</button>
+		<button type="button" data-player-mute aria-pressed="false">Couper le son</button>
+		<label class="bsc-player__volume">Volume <input type="range" data-player-volume min="0" max="100" step="1" value="100"></label>
+		<button type="button" data-player-fullscreen hidden>Plein écran</button>
+		<span class="bsc-player__linear">Diffusion synchronisée · sans avance ni retour</span>
+	</div>
 	<div class="bsc-player__actions">
 		<button class="bsc-player__join" type="button" data-player-join aria-label="<?php echo esc_attr( $join_label ?: 'Lire le programme BSC TV' ); ?>"><svg class="bsc-player__play-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7 4v16l13-8z"/></svg><?php if ( $join_label ) : ?><span><?php echo esc_html( $join_label ); ?></span><?php endif; ?></button>
 		<a class="bsc-player__source" data-player-source hidden>Regarder sur la plateforme</a>

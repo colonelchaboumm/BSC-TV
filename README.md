@@ -42,6 +42,8 @@ Le lecteur 24/7 exclut les vidéos que YouTube signale comme soumises à une lim
 
 Le lecteur utilise l’animation Brewers Social Club incluse entre les émissions et pendant le chargement de la suivante. Elle boucle sans son et s’efface dès que YouTube ou Twitch confirme la lecture. Dans Elementor, **Contenu → Animation entre les programmes** permet de la désactiver, choisir une autre vidéo ou modifier l’attente maximale de 20 secondes. Une erreur ou un blocage de lecture la retire pour montrer les commandes du lecteur. La préférence de réduction des animations utilise une image fixe. [Réglages du lecteur](LIVE_PLAYER.md#réglages-elementor).
 
+Le lecteur suit l’antenne commune : barre de navigation et raccourcis de déplacement masqués sur YouTube, correction automatique des déplacements sur les replays Twitch. Après une pause, la reprise rejoint l’horaire courant. Le son, le volume, la pause et le plein écran restent disponibles. Twitch conserve sa barre officielle ; le retour à l’antenne peut prendre une à deux secondes et dépend du lecteur. [Lecture synchronisée et limites](LIVE_PLAYER.md#lecture-à-lheure-de-lantenne).
+
 ## Collecte et vérification des directs
 
 | Plateforme | Programme à venir | Direct en cours |
