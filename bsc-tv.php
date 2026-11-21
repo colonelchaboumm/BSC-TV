@@ -2,7 +2,7 @@
 /**
  * Plugin Name: BSC TV
  * Description: Programme des directs craft beer, fiches BSC BDD et widgets Elementor.
- * Version: 1.9.0
+ * Version: 1.10.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author: BSC
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BSC_TV_VERSION', '1.9.0' );
+define( 'BSC_TV_VERSION', '1.10.0' );
 define( 'BSC_TV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BSC_TV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -28,6 +28,8 @@ require_once BSC_TV_DIR . 'includes/player-import.php';
 BSC_TV_Player_Import::register();
 require_once BSC_TV_DIR . 'includes/player-daily.php';
 BSC_TV_Player_Daily::register();
+require_once BSC_TV_DIR . 'includes/day.php';
+add_action( 'init', array( 'BSC_TV_Day', 'register' ) );
 
 add_action( 'init', array( 'BSC_TV_Content', 'register' ) );
 add_action( 'init', array( 'BSC_TV_Display', 'register' ) );
@@ -49,11 +51,13 @@ register_deactivation_hook( __FILE__, array( 'BSC_TV_Player_Import', 'deactivate
 add_action( 'elementor/widgets/register', static function ( $manager ) {
 	require_once BSC_TV_DIR . 'includes/elementor.php';
 	require_once BSC_TV_DIR . 'includes/player-widget.php';
+	require_once BSC_TV_DIR . 'includes/day-widget.php';
 	$manager->register( new BSC_TV_Programme_Widget() );
 	$manager->register( new BSC_TV_Menu_Widget() );
 	$manager->register( new BSC_TV_Badge_Widget() );
 	$manager->register( new BSC_TV_Guide_Widget() );
 	$manager->register( new BSC_TV_Player_Widget() );
+	$manager->register( new BSC_TV_Day_Widget() );
 } );
 
 if ( is_admin() ) {

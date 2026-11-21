@@ -38,7 +38,7 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		}
 		$this->add_control( 'autoplay', array( 'label' => 'Tenter la lecture automatique quand le widget est visible', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => '' ) );
 		$this->add_control( 'muted', array( 'label' => 'Démarrer sans son', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
-		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation et les autorisations se règlent dans BSC TV → Réglages et imports. Les logos et métadonnées restent hors du lecteur officiel. Le bouton Lecture peut être nécessaire selon le navigateur.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
+		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation se règle dans BSC TV → Le live et les autorisations dans les fiches des chaînes et émissions. Les logos et métadonnées restent hors du lecteur officiel. Le bouton Lecture peut être nécessaire selon le navigateur.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'player_style', array( 'label' => 'Lecteur et habillage', 'tab' => Controls_Manager::TAB_STYLE ) );

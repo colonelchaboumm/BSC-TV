@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.9.0, branche `feature/live-daily-infomaniak`. Cette livraison ajoute la page d’administration **BSC TV → Le live**, un import quotidien réservé à Infomaniak et une rotation mélangée entre chaînes et épisodes. Elle ne déploie aucune modification sur WordPress ou sur l’hébergement.
+Version 1.10.0, branche `feature/day-programme-list`. Cette livraison ajoute le widget **BSC TV — Programme du jour (liste)**, qui reprend la programmation quotidienne de **Le live**. L’import Infomaniak quotidien et la rotation entre chaînes et épisodes restent disponibles depuis la version 1.9.0. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -81,6 +81,22 @@ La file couvre jusqu’à 72 heures, dans une limite de 500 programmes. Elle se 
 - **Couleur à l’extérieur des arrondis** : le lecteur et les filtres sont rognés dans les coins selon la courbure ; la couleur choisie remplit les parties extérieures. Les grandes courbures peuvent rogner les éléments proches des coins.
 - Logo, avatar et badges restent hors de l’image du lecteur officiel. L’avatar et le lien sont ceux de la fiche publique BSC BDD existante.
 
+## Widget Programme du jour en liste
+
+Dans Elementor, ajouter **BSC TV — Programme du jour (liste)** à la page souhaitée. Ce widget affiche les diffusions du jour de l’antenne 24/7 gérée dans **BSC TV → Le live**, avec les programmes déjà diffusés, celui en cours et les créneaux suivants. Il utilise les mêmes horaires et la même grille enregistrée que le lecteur. Une visite ne déclenche pas de recherche de nouvelles vidéos.
+
+Chaque ligne peut afficher les heures, le visuel de l’émission, le titre, la chaîne, le créateur et sa fiche BSC BDD. Le visuel reprend l’image mise en avant de l’émission ou son URL de visuel, puis le logo de chaîne ou l’avatar BSC BDD à défaut. Un pictogramme apparaît si aucune image n’est disponible. Les sources retirées, privées et les brouillons non approuvés sont exclus du rendu public, y compris de l’historique.
+
+- **Contenu** : titre, date, horaires, images, chaîne, créateur, lien BSC BDD, badges, programmes passés et libellés personnalisés. Le titre de chaque émission peut mener à la plateforme d’origine, à la page du live choisie ou rester sans lien.
+- **Style** : fonds, couleurs du programme courant et du point LIVE, séparateurs, typographies, bordure et ombre. La largeur des horaires et des vignettes, les arrondis, marges et espacements se règlent par appareil.
+- Un replay courant porte **En cours** ; un vrai direct confirmé porte un point rouge et **LIVE**. Les créneaux après un direct sont signalés comme prévisionnels.
+
+La journée suit le fuseau WordPress, de minuit à minuit, y compris lors du changement d’heure. Un programme commencé la veille apparaît comme une suite. L’historique est celui enregistré depuis la version 1.9.0 ; les diffusions antérieures ne sont pas inventées. Si l’antenne est désactivée ou la grille vide, un message personnalisable apparaît.
+
+La liste s’actualise toutes les 60 secondes depuis `GET /wp-json/bsc-tv/v1/day`, avec un délai plus court à l’approche des transitions et du changement de journée. Le rafraîchissement est suspendu lorsque l’onglet est masqué ou le widget éloigné de la zone visible. Il conserve l’affichage en cas d’erreur et préserve le lien ayant le focus clavier. Ce widget charge ses propres petits fichiers CSS et JavaScript ; il ne charge aucun lecteur ou SDK vidéo et n’ajoute aucune tâche d’import.
+
+Sans Elementor, utiliser `[bsc_tv_day]`, ou par exemple `[bsc_tv_day title="La journée sur BSC TV" show_past="no" show_images="yes" link_mode="watch" watch_url="https://votre-site.fr/le-live/"]`.
+
 ## Fonctionnement et limites
 
 Les replays restent sur leurs plateformes : aucun téléchargement, stockage, réencodage ou proxy vidéo. Les références et métadonnées utilisent les émissions et chaînes BSC TV existantes. Le catalogue local examine au plus les 1 000 émissions publiées ou archivées les plus récemment modifiées et reste en cache une minute, avec invalidation à la modification des sources.
@@ -95,7 +111,7 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.9.0 : **73 contrôles d’horloge et de grille, 73 contrôles WordPress/Elementor, 66 contrôles d’import historique et quotidien, 20 contrôles JavaScript avec SDK simulés**, soit 232 contrôles locaux.
+Version 1.10.0 : **73 contrôles d’horloge et de grille, 73 contrôles WordPress/Elementor du lecteur, 66 contrôles d’import historique et quotidien, 20 contrôles JavaScript du lecteur, 28 contrôles WordPress/Elementor de la liste quotidienne et 19 contrôles JavaScript de son rafraîchissement**, soit 279 contrôles locaux.
 
 Les scénarios couvrent les trois jours calendaires, les changements d’heure, les programmes traversant minuit, l’historique du jour, la stabilité de la grille, la diversité malgré un catalogue déséquilibré, les durées différentes, les épisodes successifs et les interventions manuelles. L’import vérifie une exécution quotidienne authentifiée traitant plusieurs pages, les appels répétés sans travail API, les limites après interruption, la reprise du lendemain, les erreurs et verrous, les nonces, la rotation du secret et l’absence de tâches WP-Cron d’import.
 
@@ -104,6 +120,8 @@ php tests/player-clock.php
 php tests/player-integration.php /chemin/vers/wordpress-de-test
 php tests/player-import.php /chemin/vers/wordpress-de-test
 node tests/player-browser.mjs
+php tests/day-integration.php /chemin/vers/wordpress-de-test
+node tests/day-browser.mjs
 ```
 
 Les tests WordPress copient une base SQLite jetable avant toute écriture. Les API et SDK sont simulés : ils ne prouvent pas l’accès réel à chaque chaîne ni la configuration d’une tâche Infomaniak. La fixture émet deux avertissements Elementor préexistants sous PHP 8.4. La livraison doit être installée et la tâche quotidienne configurée dans le Manager pour être active sur le site.
