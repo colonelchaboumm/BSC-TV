@@ -666,6 +666,7 @@ final class BSC_TV_Admin {
 		?>
 		<div class="wrap">
 			<h1>BSC TV</h1>
+			<?php do_action( 'bsc_tv_admin_player' ); ?>
 			<p>Dans Elementor, ajoutez <strong>BSC TV – Grille TV</strong> ou <strong>BSC TV – Programme</strong> à votre page. Utilisez <strong>BSC TV – Méga-menu</strong> ou <strong>BSC TV – Pastille Live</strong> dans votre menu.</p>
 			<h2>Synchronisation</h2>
 			<p>Toutes les 24 heures, BSC TV recherche les émissions des chaînes publiées pour les 45 prochains jours. Les émissions confirmées par une source autorisée alimentent la grille. Les annonces à vérifier restent en brouillon.</p>

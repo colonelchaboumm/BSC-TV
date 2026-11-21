@@ -518,6 +518,9 @@ final class BSC_TV_Sync {
 				$manual_shows[ $post->ID ] = $video;
 			}
 		}
+		if ( ! $live_only && class_exists( 'BSC_TV_Player' ) ) {
+			$manual_shows += BSC_TV_Player::enrichment_ids( $now );
+		}
 		return $manual_shows;
 	}
 
@@ -534,7 +537,7 @@ final class BSC_TV_Sync {
 		$videos = array();
 		$failed = array();
 		foreach ( array_chunk( array_unique( $video_ids ), 50 ) as $group ) {
-			$result = self::yt_request( 'videos', $key, array( 'part' => 'snippet,liveStreamingDetails', 'id' => implode( ',', $group ) ) );
+			$result = self::yt_request( 'videos', $key, array( 'part' => 'snippet,liveStreamingDetails,contentDetails,status', 'id' => implode( ',', $group ) ) );
 			if ( is_wp_error( $result ) ) {
 				$failed += array_fill_keys( $group, $result->get_error_message() );
 				continue;
@@ -706,7 +709,7 @@ final class BSC_TV_Sync {
 		$snippet = $item['snippet'] ?? array();
 		$flag = $snippet['liveBroadcastContent'] ?? '';
 		$status = ! empty( $detail['actualEndTime'] ) ? 'ended' : 'cancelled';
-		$start = BSC_TV_Content::parse_date( $detail['scheduledStartTime'] ?? '', false );
+		$start = BSC_TV_Content::parse_date( $detail['actualStartTime'] ?? $detail['scheduledStartTime'] ?? '', false );
 		$end = BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? $detail['scheduledEndTime'] ?? '', false );
 		if ( ! empty( $detail['actualStartTime'] ) && empty( $detail['actualEndTime'] ) && 'live' === $flag ) {
 			$status = 'live';
@@ -716,6 +719,21 @@ final class BSC_TV_Sync {
 		}
 		$thumbnails = $snippet['thumbnails'] ?? array();
 		$thumbnail = $thumbnails['maxres']['url'] ?? $thumbnails['standard']['url'] ?? $thumbnails['high']['url'] ?? $thumbnails['medium']['url'] ?? $thumbnails['default']['url'] ?? '';
-		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start, $end > $start ? $end : 0 ) + array( 'status' => $status, 'channel_id' => $snippet['channelId'] ?? '' );
+		$duration = 0;
+		try {
+			$duration_code = $item['contentDetails']['duration'] ?? '';
+			if ( preg_match( '/^P(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$/D', $duration_code ) ) {
+				$interval = new DateInterval( $duration_code );
+				$duration = $interval->d * DAY_IN_SECONDS + $interval->h * HOUR_IN_SECONDS + $interval->i * MINUTE_IN_SECONDS + $interval->s;
+			}
+		} catch ( Exception $exception ) {
+			$duration = 0;
+		}
+		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start, $end > $start ? $end : 0 ) + array(
+			'status' => $status, 'channel_id' => $snippet['channelId'] ?? '', 'duration' => $duration,
+			'published_at' => max( BSC_TV_Content::parse_date( $snippet['publishedAt'] ?? '', false ), BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? '', false ) ),
+			'embeddable' => isset( $item['status']['embeddable'] ) ? (bool) $item['status']['embeddable'] : null,
+			'playable' => $duration > 0 && ! empty( $item['status']['embeddable'] ) && 'public' === ( $item['status']['privacyStatus'] ?? '' ) && 'none' === $flag,
+		);
 	}
 }
