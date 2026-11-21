@@ -6,6 +6,93 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Player_Schedule {
 	const MAX_SLOTS = 500;
 	const HOURS = 72;
+	const HOURLY = 'bsc_tv_player_schedule_hourly';
+	const NOW = 'bsc_tv_player_schedule_now';
+
+	public static function register() {
+		add_action( 'init', array( __CLASS__, 'schedule' ) );
+		add_action( self::HOURLY, array( __CLASS__, 'refresh' ) );
+		add_action( self::NOW, array( __CLASS__, 'refresh' ) );
+		add_action( 'bsc_tv_player_catalogue_changed', array( __CLASS__, 'request' ) );
+		add_action( 'updated_option', array( __CLASS__, 'configuration_changed' ) );
+		add_action( 'added_option', array( __CLASS__, 'configuration_changed' ) );
+	}
+
+	public static function schedule() {
+		if ( ! BSC_TV_Player::settings()['enabled'] ) { self::deactivate(); return; }
+		if ( ! wp_next_scheduled( self::HOURLY ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', self::HOURLY );
+			self::request();
+		}
+	}
+
+	public static function deactivate() {
+		foreach ( array( self::HOURLY, self::NOW ) as $hook ) {
+			if ( wp_next_scheduled( $hook ) ) { wp_clear_scheduled_hook( $hook ); }
+		}
+	}
+
+	public static function request() {
+		if ( BSC_TV_Player::settings()['enabled'] && ! wp_next_scheduled( self::NOW ) ) {
+			wp_schedule_single_event( time() + 15, self::NOW );
+		}
+	}
+
+	public static function configuration_changed( $option ) {
+		if ( BSC_TV_Player::SETTINGS === $option ) { self::schedule(); self::request(); }
+	}
+
+	public static function refresh() {
+		if ( ! BSC_TV_Player::settings()['enabled'] ) { return; }
+		$result = self::prepare();
+		if ( is_wp_error( $result ) ) { self::request(); }
+	}
+
+	/** Only values which affect selection; presentation updates do not reshuffle the queue. */
+	public static function signature( $pool, $settings ) {
+		$selection = array();
+		foreach ( $pool as $key => $media ) {
+			$selection[ $key ] = array( $media['show_id'], $media['duration'], $media['published_at'], $media['creator_key'], ! empty( $media['premiere'] ) );
+		}
+		ksort( $selection );
+		return hash( 'sha256', json_encode( array( $selection, $settings['recent'], $settings['repeat_hours'] ) ) );
+	}
+
+	public static function needs_refresh( $state, $pool, $settings, $now ) {
+		if ( empty( $settings['enabled'] ) || ! $pool ) { return false; }
+		if ( ( $state['plan_source'] ?? '' ) !== self::signature( $pool, $settings ) ) { return true; }
+		if ( $now - ( $state['plan_checked_at'] ?? 0 ) < 5 * MINUTE_IN_SECONDS || count( $state['plan'] ?? array() ) >= self::MAX_SLOTS ) { return false; }
+		$rows = $state['plan'] ?? array();
+		$last = $rows ? end( $rows ) : array();
+		return ( $last['end'] ?? 0 ) < $now + 48 * HOUR_IN_SECONDS;
+	}
+
+	/** Refresh new catalogue choices before a transition, never after a saved slot has already begun. */
+	public static function before_advance( $state, $pool, $settings, $now ) {
+		$safe = ! empty( $state['live'] ) || ( ! empty( $state['vod'] ) && $state['vod']['end'] >= $now ) || ( empty( $state['vod'] ) && ! empty( $state['plan'] ) && $state['plan'][0]['start'] >= $now );
+		if ( $safe && ! empty( $settings['enabled'] ) && ( $state['plan_source'] ?? '' ) !== self::signature( $pool, $settings ) ) {
+			return self::replenish( $state, $pool, $settings, $now );
+		}
+		return $state;
+	}
+
+	/** Pure automatic fill. A catalogue change may refresh only the tail after the last manual choice. */
+	public static function replenish( $state, $pool, $settings, $now, $force = false ) {
+		if ( ! $force && ! self::needs_refresh( $state, $pool, $settings, $now ) ) { return $state; }
+		$source = self::signature( $pool, $settings );
+		if ( ( $state['plan_source'] ?? '' ) !== $source ) {
+			$keep = 0;
+			foreach ( $state['plan'] ?? array() as $index => $row ) {
+				// Entries saved by older versions have no marker: preserve them conservatively.
+				if ( $row['fixed'] ?? true ) { $keep = $index + 1; }
+			}
+			$state['plan'] = array_slice( $state['plan'] ?? array(), 0, $keep );
+		}
+		$state['plan'] = self::build( $state, $pool, $settings, $now );
+		$state['plan_source'] = $source;
+		$state['plan_checked_at'] = $now;
+		return $state;
+	}
 
 	public static function fingerprint( $state ) {
 		return hash( 'sha256', json_encode( $state['plan'] ?? array() ) );
@@ -58,6 +145,7 @@ final class BSC_TV_Player_Schedule {
 		} else {
 			throw new InvalidArgumentException( 'Action de programmation inconnue.' );
 		}
+		$state['plan'][ $index ]['fixed'] = true;
 		for ( $next = $index + 1; $next < count( $state['plan'] ); ++$next ) {
 			$state['plan'][ $next ]['start'] += $delta;
 			$state['plan'][ $next ]['end'] += $delta;
@@ -75,7 +163,7 @@ final class BSC_TV_Player_Schedule {
 		return (array) get_option( BSC_TV_Player::STATE, array() );
 	}
 
-	/** Called only by the administration. Public visitors consume the saved queue. */
+	/** Administration and background refresh share the same locked clock and catalogue. */
 	public static function prepare() {
 		$pool = BSC_TV_Player::media();
 		$settings = BSC_TV_Player::settings();
@@ -85,7 +173,7 @@ final class BSC_TV_Player_Schedule {
 			$now = time();
 			$stored = self::clock();
 			$state = BSC_TV_Player::advance_clock( $stored, $now );
-			$state['plan'] = self::build( $state, $pool, $settings, $now );
+			$state = self::replenish( $state, $pool, $settings, $now, true );
 			if ( $state !== $stored ) {
 				update_option( BSC_TV_Player::STATE, $state, false );
 			}

@@ -38,12 +38,14 @@ final class BSC_TV_Player {
 	public static function invalidate_post( $id, $post ) {
 		if ( in_array( $post->post_type, array( BSC_TV_Content::SHOW, BSC_TV_Content::CHANNEL ), true ) ) {
 			delete_transient( self::CACHE );
+			do_action( 'bsc_tv_player_catalogue_changed' );
 		}
 	}
 
 	public static function invalidate_meta( $meta_id, $post_id, $key ) {
 		if ( in_array( $key, array( self::MEDIA, self::CHANNEL, self::APPROVED, BSC_TV_Content::DATA, BSC_TV_Content::STATE ), true ) ) {
 			delete_transient( self::CACHE );
+			do_action( 'bsc_tv_player_catalogue_changed' );
 		}
 	}
 
@@ -243,7 +245,7 @@ final class BSC_TV_Player {
 		foreach ( $state['manual'] ?? array() as $show_id ) {
 			foreach ( $candidates as $candidate ) {
 				if ( $show_id === $candidate['show_id'] ) {
-					return $candidate;
+					return $candidate + array( 'fixed' => true );
 				}
 			}
 		}
@@ -262,6 +264,7 @@ final class BSC_TV_Player {
 				continue;
 			}
 			$media = $pool[ $row['key'] ];
+			$fixed = $row['fixed'] ?? true;
 			$last = $state['history'][ $row['key'] ]['end'] ?? 0;
 			$available = max( $cursor, $row['start'], $media['published_at'], $last ? $last + (int) ( $settings['repeat_hours'] * HOUR_IN_SECONDS ) : 0 );
 			foreach ( $state['manual'] ?? array() as $show_id ) {
@@ -270,12 +273,12 @@ final class BSC_TV_Player {
 					$previous = $state['history'][ $priority['key'] ]['end'] ?? 0;
 					$start = max( $cursor, $priority['published_at'], $previous ? $previous + (int) ( $settings['repeat_hours'] * HOUR_IN_SECONDS ) : 0 );
 					if ( $start <= $available && $priority['key'] !== $row['key'] ) {
-						return $priority + array( 'available' => $start );
+						return $priority + array( 'available' => $start, 'fixed' => true );
 					}
-					if ( $start <= $available ) { break 2; }
+					if ( $start <= $available ) { $fixed = true; break 2; }
 				}
 			}
-			return $media + array( 'available' => $available, 'plan_id' => $row['id'], 'plan_end' => $row['end'] );
+			return $media + array( 'available' => $available, 'plan_id' => $row['id'], 'plan_end' => $row['end'], 'fixed' => $fixed );
 		}
 		return self::select( $pool, $state, $settings, $cursor );
 	}
@@ -291,6 +294,7 @@ final class BSC_TV_Player {
 		$slot = array_intersect_key( $media, array_fill_keys( array( 'show_id', 'key', 'resource', 'channel_id', 'premiere' ), true ) );
 		$slot['start'] = $media['available'];
 		$slot['end'] = $slot['start'] + $media['duration'];
+		$slot['fixed'] = ! empty( $media['fixed'] );
 		if ( isset( $media['plan_id'] ) ) {
 			$slot['id'] = $media['plan_id'];
 			$index = array_search( $media['plan_id'], array_column( $state['plan'], 'id' ), true );
@@ -383,6 +387,7 @@ final class BSC_TV_Player {
 		$settings = self::settings();
 		if ( ! $settings['enabled'] ) { return $state; }
 		$catalogue = self::catalogue();
+		$state = BSC_TV_Player_Schedule::before_advance( $state, $catalogue['pool'], $settings, $now );
 		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now ), $settings, $now );
 	}
 
@@ -397,14 +402,16 @@ final class BSC_TV_Player {
 		$lives = self::lives( $catalogue, $settings, $now );
 		$state = (array) get_option( self::STATE, array() );
 		$updated = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
-		if ( $updated !== $state ) {
+		if ( $updated !== $state || BSC_TV_Player_Schedule::needs_refresh( $updated, $catalogue['pool'], $settings, $now ) ) {
 			$lock = BSC_TV_Content::lock( self::LOCK );
 			if ( $lock ) {
 				try {
 					// Another request may have filled the clock after our first read.
 					wp_cache_delete( self::STATE, 'options' );
 					wp_cache_delete( 'notoptions', 'options' );
-					$state = self::advance( (array) get_option( self::STATE, array() ), $catalogue['pool'], $lives, $settings, $now );
+					$state = BSC_TV_Player_Schedule::before_advance( (array) get_option( self::STATE, array() ), $catalogue['pool'], $settings, $now );
+					$state = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
+					$state = BSC_TV_Player_Schedule::replenish( $state, $catalogue['pool'], $settings, $now );
 					update_option( self::STATE, $state, false );
 				} finally {
 					BSC_TV_Content::unlock( self::LOCK, $lock );
