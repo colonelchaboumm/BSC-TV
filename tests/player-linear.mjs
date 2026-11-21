@@ -91,7 +91,7 @@ check(player.muted && node('mute').getAttribute('aria-pressed') === 'true', 'Mut
 node('volume').value = '35'; await node('volume').fire('input');
 check(!player.muted && player.volume === 35, 'Volume can be changed and unmutes the programme');
 await node('fullscreen').fire('click');
-check(document.fullscreenElement === root && node('fullscreen').textContent.includes('Quitter'), 'Fullscreen includes the external controls');
+check(document.fullscreenElement === root && node('fullscreen').getAttribute('aria-label').includes('Quitter'), 'Fullscreen includes the external controls');
 await node('fullscreen').fire('click');
 check(!document.fullscreenElement, 'Fullscreen can be exited from the same control');
 clock = 38000; player.position = 1100; player.state = 0; player.options.events.onStateChange({ data: 0 });

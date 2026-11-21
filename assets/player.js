@@ -170,20 +170,30 @@
 			this.controls();
 		}
 
+		control(selector, label, state) {
+			const button = this.root.querySelector(selector);
+			if (!button) return;
+			button.setAttribute('aria-label', label);
+			button.setAttribute('title', label);
+			button.dataset.state = state;
+		}
+
 		controls() {
 			const controls = this.root.querySelector('[data-player-controls]');
 			if (!controls) return;
 			controls.hidden = !this.ready || this.failedToken === this.token || this.data?.current?.resource.platform !== 'youtube';
 			if (controls.hidden) return;
 			try {
-				this.text('[data-player-pause]', this.player.getPlayerState() === window.YT.PlayerState.PLAYING ? 'Pause' : 'Reprendre le direct');
+				const playing = this.player.getPlayerState() === window.YT.PlayerState.PLAYING;
+				this.control('[data-player-pause]', playing ? 'Pause' : 'Reprendre le direct', playing ? 'pause' : 'play');
 				const mute = this.root.querySelector('[data-player-mute]');
-				mute.textContent = this.muted ? 'Activer le son' : 'Couper le son';
+				this.control('[data-player-mute]', this.muted ? 'Activer le son' : 'Couper le son', this.muted ? 'muted' : 'sound');
 				mute.setAttribute('aria-pressed', String(this.muted));
 				this.root.querySelector('[data-player-volume]').value = this.volume;
 				const fullscreen = this.root.querySelector('[data-player-fullscreen]');
 				fullscreen.hidden = !document.fullscreenEnabled || !this.root.requestFullscreen;
-				fullscreen.textContent = document.fullscreenElement === this.root ? 'Quitter le plein écran' : 'Plein écran';
+				const expanded = document.fullscreenElement === this.root;
+				this.control('[data-player-fullscreen]', expanded ? 'Quitter le plein écran' : 'Plein écran', expanded ? 'collapse' : 'expand');
 			} catch { /* SDK state may be unavailable during replacement. */ }
 		}
 

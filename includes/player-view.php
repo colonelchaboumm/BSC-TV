@@ -13,11 +13,10 @@
 		<?php if ( 'yes' === $settings['transition_enabled'] ) : ?><div class="bsc-player__transition" data-player-transition data-timeout="<?php echo esc_attr( $transition_timeout ); ?>" aria-hidden="true" hidden><img src="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" alt="" decoding="async"><video data-player-transition-video data-src="<?php echo esc_url( $transition_url ); ?>" poster="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture></video></div><?php endif; ?>
 	</div></div>
 	<div class="bsc-player__controls" data-player-controls role="group" aria-label="Commandes de la diffusion" hidden>
-		<button type="button" data-player-pause>Pause</button>
-		<button type="button" data-player-mute aria-pressed="false">Couper le son</button>
+		<button type="button" data-player-pause data-state="pause" aria-label="Pause" title="Pause"><svg data-control-icon="pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14M16 5v14"/></svg><svg data-control-icon="play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7Z"/></svg></button>
+		<button type="button" data-player-mute aria-pressed="false" data-state="sound" aria-label="Couper le son" title="Couper le son"><svg data-control-icon="sound" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m11 5-5 4H3v6h3l5 4Zm4 3a5 5 0 0 1 0 8m3-11a9 9 0 0 1 0 14"/></svg><svg data-control-icon="muted" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m11 5-5 4H3v6h3l5 4Zm5 4 5 6m0-6-5 6"/></svg></button>
 		<label class="bsc-player__volume">Volume <input type="range" data-player-volume min="0" max="100" step="1" value="100"></label>
-		<button type="button" data-player-fullscreen hidden>Plein écran</button>
-		<span class="bsc-player__linear">Diffusion synchronisée · sans avance ni retour</span>
+		<button type="button" data-player-fullscreen data-state="expand" aria-label="Plein écran" title="Plein écran" hidden><svg data-control-icon="expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></svg><svg data-control-icon="collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></svg></button>
 	</div>
 	<div class="bsc-player__actions">
 		<button class="bsc-player__join" type="button" data-player-join aria-label="<?php echo esc_attr( $join_label ?: 'Lire le programme BSC TV' ); ?>"><svg class="bsc-player__play-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7 4v16l13-8z"/></svg><?php if ( $join_label ) : ?><span><?php echo esc_html( $join_label ); ?></span><?php endif; ?></button>

@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.14.0, branche `feature/player-autoplay-icon`. Le lecteur suit l’antenne commune : navigation masquée sur YouTube et correction des déplacements sur les replays Twitch. La reprise après une pause rejoint l’horaire courant. Il tente la lecture automatique dès qu’il est visible et utilise une icône SVG, même si le texte du bouton est vide. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.14.1, branche `feature/player-control-icons`. Les commandes pause/reprise, son et plein écran utilisent des icônes SVG avec noms accessibles et infobulles. La phrase de synchronisation sous le lecteur est retirée. La navigation masquée sur YouTube, la correction des déplacements Twitch et la reprise à l’heure de l’antenne restent actives. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -131,7 +131,7 @@ Le rafraîchissement utilise la route locale publique du programme avec `format=
 
 ## Lecture à l’heure de l’antenne
 
-Le comportement s’applique aux widgets existants dès la mise à jour, sans réglage Elementor à réenregistrer. Sur YouTube, les paramètres officiels `controls: 0` et `disablekb: 1` retirent la barre de navigation et les raccourcis clavier. Des boutons accessibles placés sous le lecteur permettent de mettre en pause, reprendre le direct, couper le son, régler le volume et passer en plein écran lorsque le navigateur le permet. La préférence audio choisie reste conservée entre les émissions YouTube sur ce widget. [Paramètres YouTube](https://developers.google.com/youtube/player_parameters).
+Le comportement s’applique aux widgets existants dès la mise à jour, sans réglage Elementor à réenregistrer. Sur YouTube, les paramètres officiels `controls: 0` et `disablekb: 1` retirent la barre de navigation et les raccourcis clavier. Des boutons à icônes placés sous le lecteur permettent de mettre en pause, reprendre le direct, couper le son et passer en plein écran lorsque le navigateur le permet ; le curseur de volume reste disponible. Leurs noms accessibles et infobulles suivent l’action disponible, et leurs icônes changent selon la lecture, le son et le plein écran. La préférence audio choisie reste conservée entre les émissions YouTube sur ce widget. [Paramètres YouTube](https://developers.google.com/youtube/player_parameters).
 
 Sur les rediffusions, une reprise ou un déplacement signalé par Twitch rejoint la position calculée depuis l’horaire serveur. Le lecteur vérifie aussi localement sa position chaque seconde lorsqu’il joue. Les déplacements supérieurs à trois secondes sont corrigés ; cette marge évite les allers-retours dus aux images clés. Les corrections sont espacées d’au moins deux secondes, y compris quand un appel `seek()` déclenche lui-même un événement Twitch `SEEK`. Un déplacement pendant une pause est corrigé sans forcer la lecture ; une pause ordinaire ne déclenche pas de repositionnement continu. Une tentative d’aller directement à la fin ne fait pas passer toute l’antenne au programme suivant. La reprise rejoint le programme diffusé à ce moment, sans reprendre le retard de la pause.
 
@@ -152,6 +152,8 @@ Les plateformes peuvent bloquer ou retarder une intégration selon le compte, la
 L’intégration Twitch nécessite HTTPS en production et les bons domaines `parent`. Les filtres CSS ne suivent pas le plein écran interne des plateformes. Les règles d’intégration des plateformes restent applicables aux calques visuels demandés.
 
 ## Validation
+
+Version 1.14.1 : **189 contrôles ciblés réexécutés** (91 WordPress/Elementor du lecteur, 49 du lecteur JavaScript, 14 de lecture automatique, 35 de lecture synchronisée). Syntaxe PHP/JavaScript et diff vérifiés. Les icônes et la suppression de la phrase ont été contrôlées dans un aperçu local à 1 200 et 390 pixels, avec SDK simulé et sans débordement horizontal.
 
 Version 1.14.0 : **453 contrôles locaux exécutés** : 73 d’horloge et programmation, 91 WordPress/Elementor du lecteur, 81 d’import, 49 du lecteur JavaScript, 14 de lecture automatique, 35 de lecture synchronisée, 37 + 26 de liste quotidienne et 25 + 22 de pastille. La syntaxe PHP/JavaScript et le diff sont également vérifiés. Les nouveaux scénarios couvrent les déplacements dans les deux sens, les clics rapprochés, la pause/reprise, les changements de vitesse YouTube, le son, le plein écran, la fin anticipée, les refus temporaires du SDK et les événements récursifs Twitch. Un aperçu local avec SDK simulé a également été contrôlé à 1 200 et 390 pixels : commandes visibles et absence de débordement horizontal.
 
