@@ -7,6 +7,7 @@ define( 'HOUR_IN_SECONDS', 3600 );
 define( 'DAY_IN_SECONDS', 86400 );
 define( 'WEEK_IN_SECONDS', 604800 );
 require dirname( __DIR__ ) . '/includes/player.php';
+require dirname( __DIR__ ) . '/includes/player-schedule.php';
 
 $checks = 0;
 function tv_check( $condition, $label ) {
@@ -80,4 +81,56 @@ foreach ( array( 2, 5, 10, 20, 40 ) as $days ) {
 }
 $long_gap = BSC_TV_Player::advance( $state, $single, array(), $zero_cooldown, $now + 600 * DAY_IN_SECONDS );
 tv_check( $long_gap['vod']['start'] <= $now + 600 * DAY_IN_SECONDS && $long_gap['vod']['end'] > $now + 600 * DAY_IN_SECONDS, 'Long inactivity recovery is bounded and produces a current common slot' );
-echo "OK {$checks} player clock checks.\n";
+$planned = $state;
+$planned['plan'] = BSC_TV_Player_Schedule::build( $planned, $pool, $zero_cooldown, $now );
+tv_check( count( $planned['plan'] ) > 5 && end( $planned['plan'] )['end'] >= $now + 72 * HOUR_IN_SECONDS, 'Admin projection covers 72 hours, not only five programmes' );
+tv_check( $planned['plan'] === BSC_TV_Player_Schedule::build( $planned, $pool, $zero_cooldown, $now ), 'Refreshing a saved grid preserves its slots and IDs' );
+$original_plan = $planned['plan'];
+$move = BSC_TV_Player_Schedule::change( $planned, $pool, $zero_cooldown, $now, 'move', $original_plan[0]['id'], $original_plan[0]['start'] + 1800, BSC_TV_Player_Schedule::fingerprint( $planned ) );
+tv_check( $move['vod'] === $state['vod'] && $move['plan'][0]['start'] === $original_plan[0]['start'] + 1800 && $move['plan'][1]['start'] === $original_plan[1]['start'] + 1800, 'Delay shifts subsequent slots and never touches the on-air programme' );
+$gap = BSC_TV_Player::advance( $move, $pool, array(), $zero_cooldown, $now + 3600 );
+tv_check( null === $gap['vod'], 'An explicit delay produces the advertised programming pause' );
+$moved_start = BSC_TV_Player::advance( $gap, $pool, array(), $zero_cooldown, $move['plan'][0]['start'] );
+tv_check( $move['plan'][0]['show_id'] === $moved_start['vod']['show_id'] && $move['plan'][0]['start'] === $moved_start['vod']['start'], 'Saved delayed slot is actually broadcast at its new time' );
+$late_start = BSC_TV_Player::advance( $gap, $pool, array(), $zero_cooldown, $move['plan'][0]['start'] + 900 );
+tv_check( $late_start['vod']['start'] === $move['plan'][0]['start'], 'A late visitor after a scheduled gap joins at the planned offset instead of restarting the slot' );
+$earlier = BSC_TV_Player_Schedule::change( $move, $pool, $zero_cooldown, $now, 'move', $move['plan'][0]['id'], $original_plan[0]['start'], BSC_TV_Player_Schedule::fingerprint( $move ) );
+tv_check( $earlier['plan'][0]['start'] === $original_plan[0]['start'], 'A programme can move earlier into an available gap' );
+$replacement_pool = $pool;
+$replacement_pool[ $c['key'] ]['duration'] = 1800;
+$replacement = BSC_TV_Player_Schedule::change( $planned, $replacement_pool, $zero_cooldown, $now, 'replace', $original_plan[0]['id'], 3, BSC_TV_Player_Schedule::fingerprint( $planned ) );
+tv_check( 3 === $replacement['plan'][0]['show_id'] && $original_plan[0]['id'] === $replacement['plan'][0]['id'] && 1800 === $replacement['plan'][0]['end'] - $replacement['plan'][0]['start'] && $replacement['plan'][1]['start'] === $original_plan[1]['start'] - 1800, 'Replacement retains slot identity and shifts following times by its duration' );
+$broadcast = BSC_TV_Player::advance( $replacement, $replacement_pool, array(), $zero_cooldown, $replacement['plan'][0]['start'] );
+$broadcast_visitor = BSC_TV_Player::advance( $broadcast, $replacement_pool, array(), $zero_cooldown, $replacement['plan'][0]['start'] + 900 );
+tv_check( 3 === $broadcast['vod']['show_id'] && $broadcast_visitor['vod'] === $broadcast['vod'] && 900 === $replacement['plan'][0]['start'] + 900 - $broadcast_visitor['vod']['start'], 'Replacement reaches the common player clock and visitors share its offset' );
+foreach ( array(
+	array( $planned, 'move', $original_plan[0]['id'], $now, BSC_TV_Player_Schedule::fingerprint( $planned ), 'Overlap with the current programme is rejected' ),
+	array( $planned, 'move', $original_plan[0]['id'], $now + 73 * HOUR_IN_SECONDS, BSC_TV_Player_Schedule::fingerprint( $planned ), 'A date outside the editable horizon is rejected' ),
+	array( $planned, 'replace', $original_plan[0]['id'], 999, BSC_TV_Player_Schedule::fingerprint( $planned ), 'An unavailable or draft replacement is rejected' ),
+	array( $move, 'replace', $original_plan[0]['id'], 3, BSC_TV_Player_Schedule::fingerprint( $planned ), 'A stale administrator form cannot overwrite another edit' ),
+	array( $planned, 'replace', 'missing-slot', 3, BSC_TV_Player_Schedule::fingerprint( $planned ), 'A consumed slot cannot be edited' ),
+) as $case ) {
+	$rejected = false;
+	try { BSC_TV_Player_Schedule::change( $case[0], $pool, $zero_cooldown, $now, $case[1], $case[2], $case[3], $case[4] ); } catch ( InvalidArgumentException $error ) { $rejected = true; }
+	tv_check( $rejected, $case[5] );
+}
+$cooldown_plan = $state;
+$cooldown_plan['plan'] = BSC_TV_Player_Schedule::build( $state, $pool, $settings, $now );
+$cooldown_replacement = BSC_TV_Player_Schedule::change( $cooldown_plan, $pool, $settings, $now, 'replace', $cooldown_plan['plan'][0]['id'], 1, BSC_TV_Player_Schedule::fingerprint( $cooldown_plan ) );
+tv_check( $cooldown_replacement['plan'][0]['start'] >= $now + 7 * HOUR_IN_SECONDS, 'Replacing with a recent replay still respects the repeat cooldown' );
+$plan_live = BSC_TV_Player::advance( $planned, $pool, array( $live1['key'] => $live1 ), $zero_cooldown, $now + 1200 );
+$plan_resume = BSC_TV_Player::advance( $plan_live, $pool, array(), $zero_cooldown, $now + 2400 );
+tv_check( $plan_resume['plan'][0]['start'] === $original_plan[0]['start'] + 1200 && $plan_resume['vod']['show_id'] === $planned['vod']['show_id'], 'A real live pauses both the current replay and all future slots' );
+$plan_live['plan'] = BSC_TV_Player_Schedule::build( $plan_live, $pool, $zero_cooldown, $now + 4 * HOUR_IN_SECONDS );
+tv_check( $plan_live['plan'][0]['start'] === $original_plan[0]['start'], 'Viewing the grid during a long live does not rebase the frozen replay clock' );
+$long_live_resume = BSC_TV_Player::advance( $plan_live, $pool, array(), $zero_cooldown, $now + 4 * HOUR_IN_SECONDS );
+tv_check( $long_live_resume['plan'][0]['start'] === $original_plan[0]['start'] + 4 * HOUR_IN_SECONDS - 1200, 'A long live shifts the saved grid exactly once at its end' );
+$limited = BSC_TV_Player_Schedule::build( array(), array( $a['key'] => array_replace( $a, array( 'duration' => 1 ) ) ), $zero_cooldown, $now );
+tv_check( BSC_TV_Player_Schedule::MAX_SLOTS === count( $limited ), 'Very short videos cannot create an unbounded administrator page' );
+$priority = $planned;
+$priority['manual'] = array( 3 );
+$priority['plan'] = BSC_TV_Player_Schedule::build( $priority, $pool, $zero_cooldown, $now );
+tv_check( 3 === $priority['plan'][0]['show_id'] && $priority['plan'][1]['id'] === $original_plan[0]['id'], 'Legacy programme-next inserts before the saved queue without losing edits' );
+$after_priority = BSC_TV_Player::advance( $priority, $pool, array(), $zero_cooldown, $now + 3600 );
+tv_check( 3 === $after_priority['vod']['show_id'] && empty( $after_priority['manual'] ), 'A queued priority is consumed once when actually broadcast' );
+echo "OK {$checks} player clock and schedule checks.\n";

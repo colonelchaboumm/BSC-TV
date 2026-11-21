@@ -1,0 +1,14 @@
+.bsc-player-admin-grid { margin: 24px 0; max-width: 1200px; }
+.bsc-player-grid-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bsc-player-grid-toolbar span { margin-inline-start: auto; }
+.bsc-player-grid-day { margin: 16px 0; border: 1px solid #c3c4c7; background: #fff; }
+.bsc-player-grid-day summary { padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.bsc-player-grid-scroll { overflow-x: auto; }
+.bsc-player-grid-scroll table { width: 100%; border: 0; min-width: 600px; }
+.bsc-player-grid-time { width: 195px; font-variant-numeric: tabular-nums; }
+.bsc-player-grid-actions { width: 175px; white-space: nowrap; }
+.bsc-player-grid-gap td { color: #646970; background: #f0f0f1; font-style: italic; }
+.bsc-player-editor { padding: 16px; margin: 16px 0; border: 1px solid #2271b1; background: #fff; scroll-margin-top: 48px; }
+.bsc-player-editor h4 { margin: 0 0 8px; font-size: 16px; }
+.bsc-player-editor select { width: min(100%, 650px); }
+.bsc-player-admin-grid .notice { margin: 12px 0; padding: 10px 12px; }
