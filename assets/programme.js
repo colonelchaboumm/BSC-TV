@@ -135,7 +135,8 @@
 	};
 
 	const tick = async () => {
-		if (document.visibilityState === 'hidden') return;
+		if (document.visibilityState === 'hidden') return pollingInterval;
+		let nextPoll = pollingInterval;
 		const groups = new Map();
 		for (const widget of document.querySelectorAll('[data-bsc-tv]')) {
 			const url = widget.dataset.bscTv;
@@ -147,6 +148,7 @@
 			if (!response.ok) return;
 			const data = await response.json();
 			if (typeof data.html !== 'string' || !Number.isInteger(data.live)) return;
+			if (Number.isFinite(data.poll_after)) nextPoll = Math.min(nextPoll, Math.max(5, data.poll_after) * 1000);
 			for (const widget of widgets) {
 				const programme = widget.querySelector('.bsc-tv-programme');
 				if (!programme) continue;
@@ -155,24 +157,27 @@
 					widget.bscTvMarkup = data.html;
 				}
 				updateBadge(widget, data.highlight);
-				if (Number(widget.dataset.live) !== data.live) {
-					widget.dataset.live = String(data.live);
-					widget.querySelector('.bsc-tv-announcement').textContent = data.live ? `${data.live} émission${data.live > 1 ? 's' : ''} en direct` : 'Aucune émission en direct';
-				}
+				widget.dataset.live = String(data.live);
+				const announcement = typeof data.announcement === 'string' ? data.announcement : (data.live ? `${data.live} émission${data.live > 1 ? 's' : ''} en direct` : 'Aucune émission en direct');
+				if (widget.bscTvAnnouncement !== announcement) { widget.querySelector('.bsc-tv-announcement').textContent = announcement; widget.bscTvAnnouncement = announcement; }
 			}
 		}));
+		return nextPoll;
 	};
 	let refreshing = false;
+	let refreshTimer;
 	const refresh = async () => {
 		if (refreshing) return;
+		window.clearTimeout(refreshTimer);
 		refreshing = true;
+		let wait = pollingInterval;
 		try {
-			await tick();
+			wait = await tick();
 		} finally {
 			refreshing = false;
+			refreshTimer = window.setTimeout(refresh, wait);
 		}
 	};
-	window.setInterval(refresh, pollingInterval);
 	document.addEventListener('visibilitychange', refresh);
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', refresh, { once: true });
