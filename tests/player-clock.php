@@ -1,5 +1,6 @@
 <?php
 /** Run with: php tests/player-clock.php. No WordPress or network needed. */
+if ( 'cli' !== PHP_SAPI ) { http_response_code( 404 ); exit; }
 define( 'ABSPATH', __DIR__ );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );

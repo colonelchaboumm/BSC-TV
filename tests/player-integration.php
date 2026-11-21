@@ -1,5 +1,6 @@
 <?php
 /** php tests/player-integration.php /path/to/disposable-wordpress-installation */
+if ( 'cli' !== PHP_SAPI ) { http_response_code( 404 ); exit; }
 define( 'WP_HTTP_BLOCK_EXTERNAL', true );
 $fixture_root = isset( $argv[1] ) ? rtrim( $argv[1], '/\\' ) : '';
 if ( ! is_file( $fixture_root . '/wp-load.php' ) ) {
