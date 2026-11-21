@@ -190,7 +190,7 @@ final class BSC_TV_Player_Admin {
 					<?php $previous_end = $row['end']; endforeach; ?>
 					</tbody></table></div></details>
 				<?php endforeach; ?>
-				<?php if ( ! $groups ) : ?><p>Aucun replay programmé dans cette période. Vérifiez le catalogue et les délais de rediffusion.</p><?php endif; ?>
+				<?php if ( ! $groups ) : ?><p>Aucun replay programmé dans cette période. Un replay doit disposer d’un lien vidéo public, d’une durée connue et d’une date de publication. Vérifiez aussi les autorisations et les délais de rediffusion. Les annonces de futurs directs ne sont pas utilisées comme replays.</p><?php endif; ?>
 				<?php if ( count( $prepared['plan'] ?? array() ) >= BSC_TV_Player_Schedule::MAX_SLOTS ) : ?><p class="description">Affichage limité à 500 programmes pour conserver une administration légère. Avec des vidéos très courtes, la grille peut couvrir moins de 72 heures.</p><?php endif; ?>
 			<?php endif; ?>
 		</div>
@@ -220,6 +220,7 @@ final class BSC_TV_Player_Admin {
 		<section id="bsc-tv-player-settings">
 			<h2>BSC TV LIVE 24/7</h2>
 			<p>Cette programmation utilise les émissions BSC TV existantes. Elle n’ajoute aucune collecte ni aucun stockage vidéo.</p>
+			<p>Une fois le lecteur activé, les replays disponibles remplissent automatiquement les 72 prochaines heures. La grille est complétée chaque heure et après une mise à jour du catalogue. Vos décalages, remplacements et priorités sont conservés ; l’émission en cours n’est pas interrompue.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="bsc_tv_player_settings"><?php wp_nonce_field( 'bsc_tv_player_settings' ); ?>
 				<p><label><input type="checkbox" name="bsc_player[enabled]" value="1" <?php checked( $settings['enabled'] ); ?>> Activer le lecteur 24/7</label></p>
