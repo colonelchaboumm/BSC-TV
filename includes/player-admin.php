@@ -10,6 +10,7 @@ final class BSC_TV_Player_Admin {
 		add_action( 'admin_post_bsc_tv_player_settings', array( __CLASS__, 'save_settings' ) );
 		add_action( 'admin_post_bsc_tv_player_queue', array( __CLASS__, 'queue' ) );
 		add_action( 'admin_post_bsc_tv_player_schedule', array( __CLASS__, 'schedule' ) );
+		add_action( 'admin_post_bsc_tv_player_import', array( __CLASS__, 'import_replays' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'notice' ) );
 	}
@@ -109,6 +110,35 @@ final class BSC_TV_Player_Admin {
 		if ( 'toplevel_page_bsc-tv' === $hook ) {
 			wp_enqueue_style( 'bsc-tv-player-admin', BSC_TV_URL . 'assets/player-admin.css', array(), BSC_TV_VERSION );
 		}
+	}
+
+	public static function import_replays() {
+		self::authorize( 'bsc_tv_player_import' );
+		BSC_TV_Player_Import::request();
+		self::message( BSC_TV_Player::settings()['enabled'] ? 'Récupération des émissions des deux derniers mois planifiée. Les replays utilisables alimenteront automatiquement le lecteur.' : 'Activez le lecteur 24/7 pour récupérer les émissions récentes.' );
+		self::redirect( 'bsc-player-import' );
+	}
+
+	private static function imports() {
+		$state = (array) get_option( BSC_TV_Player_Import::STATE, array() );
+		$channels = BSC_TV_Player_Import::channels();
+		?>
+		<div id="bsc-player-import">
+			<h3>Récupérer les émissions des deux derniers mois</h3>
+			<p>Les vidéos YouTube publiques et les replays Twitch encore disponibles des chaînes publiées sont récupérés automatiquement par lots, avec leur image et leur durée. Les mots-clés et les exclusions des chaînes sont respectés. Les émissions existantes sont rapprochées sans publier les brouillons ni rétablir les vidéos exclues.</p>
+			<p><?php echo esc_html( sprintf( '%d chaîne(s) compatible(s) avec un accès API et les replays autorisés.', count( $channels ) ) ); ?> <?php if ( ! $channels ) : ?>Vérifiez la clé YouTube, le Client ID et le secret Twitch, ainsi que la publication des chaînes.<?php endif; ?></p>
+			<?php if ( $state ) : ?>
+				<p><?php echo esc_html( sprintf( '%s · %d émission(s) ajoutée(s), %d actualisée(s), %d conservée(s) sans modification. %d chaîne(s) restante(s), %d en erreur.', ! empty( $state['pending'] ) ? 'Récupération en cours' : 'Dernière récupération terminée', $state['created'], $state['updated'], $state['skipped'], count( $state['pending'] ), $state['errors'] ) ); ?></p>
+				<p class="description"><?php echo esc_html( 'Période : ' . wp_date( 'd/m/Y H:i', $state['since'] ) . ' → ' . wp_date( 'd/m/Y H:i', $state['until'] ) ); ?>. Les passages dépendent de WP-Cron et continuent en arrière-plan.</p>
+			<?php endif; ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_import"><?php wp_nonce_field( 'bsc_tv_player_import' ); ?><button class="button" type="submit">Récupérer les émissions des deux derniers mois</button></form>
+			<?php if ( $channels ) : ?><details><summary>Résultats par chaîne</summary>
+				<?php foreach ( $channels as $channel ) : $report = (array) get_post_meta( $channel['id'], BSC_TV_Player_Import::REPORT, true ); ?>
+					<p><strong><?php echo esc_html( get_the_title( $channel['id'] ) ); ?></strong> : <?php echo esc_html( ! $report ? 'En attente de récupération.' : sprintf( '%s · %d ajoutée(s), %d actualisée(s), %d ignorée(s).', ! empty( $report['done'] ) ? 'Terminé' : 'En cours', $report['created'] ?? 0, $report['updated'] ?? 0, $report['skipped'] ?? 0 ) ); ?> <?php echo esc_html( $report['error'] ?? '' ); ?></p>
+				<?php endforeach; ?>
+			</details><?php endif; ?>
+		</div>
+		<?php
 	}
 
 	public static function schedule() {
@@ -219,7 +249,7 @@ final class BSC_TV_Player_Admin {
 		?>
 		<section id="bsc-tv-player-settings">
 			<h2>BSC TV LIVE 24/7</h2>
-			<p>Cette programmation utilise les émissions BSC TV existantes. Elle n’ajoute aucune collecte ni aucun stockage vidéo.</p>
+			<p>Cette programmation utilise les émissions BSC TV existantes et récupère les vidéos publiques des deux derniers mois des chaînes suivies. Les vidéos restent hébergées sur leurs plateformes.</p>
 			<p>Une fois le lecteur activé, les replays disponibles remplissent automatiquement les 72 prochaines heures. La grille est complétée chaque heure et après une mise à jour du catalogue. Vos décalages, remplacements et priorités sont conservés ; l’émission en cours n’est pas interrompue.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="bsc_tv_player_settings"><?php wp_nonce_field( 'bsc_tv_player_settings' ); ?>
@@ -233,6 +263,7 @@ final class BSC_TV_Player_Admin {
 				<?php self::field( 'tolerance', 'Tolérance de synchronisation (secondes)', $settings['tolerance'], 'number', 'min="3" max="30"' ); ?>
 				<?php submit_button( 'Enregistrer le lecteur 24/7' ); ?>
 			</form>
+			<?php self::imports(); ?>
 			<h3>À l’antenne</h3>
 			<p><?php echo esc_html( ! $settings['enabled'] ? 'Lecteur désactivé.' : ( $snapshot['current'] ? ( $snapshot['current']['live'] ? 'LIVE · ' : '' ) . $snapshot['current']['title'] . ' · ' . $snapshot['current']['creator'] : 'Aucun programme disponible maintenant.' ) ); ?></p>
 			<?php if ( $snapshot['current'] && ! $snapshot['current']['live'] ) : ?>

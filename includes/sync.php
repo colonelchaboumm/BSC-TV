@@ -549,6 +549,90 @@ final class BSC_TV_Sync {
 		return array( $videos, $failed );
 	}
 
+	/** One resumable page of recent public videos, using the existing API credentials. */
+	public static function replay_page( $channel, $settings, $since, $until, $cursor = '' ) {
+		if ( 'youtube' === $channel['api'] ) {
+			return self::youtube_replay_page( $channel, $settings['youtube_key'], $since, $until, $cursor );
+		}
+		if ( 'twitch' === $channel['api'] ) {
+			return self::twitch_replay_page( $channel, $settings, $since, $until, $cursor );
+		}
+		return new WP_Error( 'replay_platform', 'Cette plateforme ne fournit pas de catalogue de replays compatible.' );
+	}
+
+	private static function youtube_replay_page( $channel, $key, $since, $until, $cursor ) {
+		$channel_id = self::yt_channel_id( $channel, $key );
+		if ( is_wp_error( $channel_id ) ) { return $channel_id; }
+		$playlist = $channel['state']['uploads_playlist'] ?? '';
+		if ( ! $playlist ) {
+			$result = self::yt_request( 'channels', $key, array( 'part' => 'contentDetails', 'id' => $channel_id ) );
+			if ( is_wp_error( $result ) ) { return $result; }
+			$playlist = $result['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? '';
+			if ( ! $playlist ) { return new WP_Error( 'replay_playlist', 'Liste des vidéos YouTube introuvable.' ); }
+			self::save( $channel, array( 'channel_id' => $channel_id, 'uploads_playlist' => $playlist ) );
+		}
+		$params = array( 'part' => 'contentDetails', 'playlistId' => $playlist, 'maxResults' => 50 );
+		if ( $cursor ) { $params['pageToken'] = rawurlencode( $cursor ); }
+		$result = self::yt_request( 'playlistItems', $key, $params );
+		if ( is_wp_error( $result ) ) { return $result; }
+		$ids = array();
+		$recent = false;
+		foreach ( $result['items'] as $item ) {
+			$id = $item['contentDetails']['videoId'] ?? '';
+			if ( preg_match( '/^[\w-]{11}$/D', $id ) ) { $ids[] = $id; }
+			$date = BSC_TV_Content::parse_date( $item['contentDetails']['videoPublishedAt'] ?? '', false );
+			$recent = $recent || ! $date || $date >= $since;
+		}
+		list( $videos, $failed ) = self::yt_details( $key, $ids );
+		if ( $failed ) { return new WP_Error( 'replay_details', reset( $failed ) ); }
+		$events = array();
+		foreach ( $videos as $event ) {
+			$recent = $recent || $event['published_at'] >= $since;
+			if ( $event['channel_id'] !== $channel_id || empty( $event['playable'] ) || $event['duration'] > DAY_IN_SECONDS || $event['published_at'] < $since || $event['published_at'] > $until || ! self::matches( $channel, $event['title'] ) ) { continue; }
+			$event['start'] = $event['start'] ?: $event['published_at'];
+			$events[] = $event;
+		}
+		return array( 'events' => $events, 'cursor' => $result['items'] && $recent ? ( $result['nextPageToken'] ?? '' ) : '' );
+	}
+
+	private static function twitch_replay_page( $channel, $settings, $since, $until, $cursor ) {
+		$token = self::oauth( 'twitch', $settings );
+		if ( is_wp_error( $token ) ) { return $token; }
+		$headers = array( 'Authorization' => 'Bearer ' . $token, 'Client-Id' => $settings['twitch_id'] );
+		$api = 'https://api.twitch.tv/helix/';
+		$user = $channel['state']['twitch_user'] ?? array();
+		if ( empty( $user['id'] ) || time() - ( $channel['state']['twitch_user_at'] ?? 0 ) >= WEEK_IN_SECONDS ) {
+			$result = self::require_items( self::request( $api . 'users?login=' . rawurlencode( $channel['key'] ), $headers ), 'data' );
+			if ( is_wp_error( $result ) ) { self::forget_oauth( 'twitch', $settings, $result ); return $result; }
+			$user = $result['data'][0] ?? array();
+			if ( empty( $user['id'] ) ) { return new WP_Error( 'replay_user', 'Chaîne Twitch introuvable.' ); }
+			self::save( $channel, array( 'twitch_user' => $user, 'twitch_user_at' => time() ) );
+		}
+		$params = array( 'user_id' => $user['id'], 'type' => 'archive', 'period' => 'all', 'sort' => 'time', 'first' => 50 );
+		if ( $cursor ) { $params['after'] = rawurlencode( $cursor ); }
+		$result = self::require_items( self::request( add_query_arg( $params, $api . 'videos' ), $headers ), 'data' );
+		if ( is_wp_error( $result ) ) { self::forget_oauth( 'twitch', $settings, $result ); return $result; }
+		$streams = self::require_items( self::request( $api . 'streams?user_id=' . rawurlencode( $user['id'] ), $headers ), 'data' );
+		if ( is_wp_error( $streams ) ) { self::forget_oauth( 'twitch', $settings, $streams ); return $streams; }
+		$active = array_column( $streams['data'], 'id' );
+		$recent = false;
+		$events = array();
+		foreach ( $result['data'] as $video ) {
+			$published = BSC_TV_Content::parse_date( $video['published_at'] ?? '', false );
+			$recent = $recent || ! $published || $published >= $since;
+			$duration = 0;
+			if ( preg_match( '/^(?=\d)(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/D', $video['duration'] ?? '', $parts ) ) {
+				$duration = (int) ( $parts[1] ?? 0 ) * HOUR_IN_SECONDS + (int) ( $parts[2] ?? 0 ) * MINUTE_IN_SECONDS + (int) ( $parts[3] ?? 0 );
+			}
+			if ( ! preg_match( '/^[0-9]{1,20}$/D', $video['id'] ?? '' ) || ( $video['user_id'] ?? '' ) !== $user['id'] || 'archive' !== ( $video['type'] ?? '' ) || 'public' !== ( $video['viewable'] ?? '' ) || $duration < 1 || $duration > DAY_IN_SECONDS || $published < $since || $published > $until || in_array( $video['stream_id'] ?? '', $active, true ) || ! self::matches( $channel, $video['title'] ?? '' ) ) { continue; }
+			$start = BSC_TV_Content::parse_date( $video['created_at'] ?? '', false );
+			if ( ! $start || $start + $duration > $until ) { continue; }
+			$image = strtr( $video['thumbnail_url'] ?? '', array( '%{width}' => '320', '%{height}' => '180' ) );
+			$events[] = self::event( $video['id'], $video['title'], 'https://www.twitch.tv/videos/' . $video['id'], $image, $start, $start + $duration ) + array( 'status' => 'ended', 'duration' => $duration, 'published_at' => $published, 'playable' => true, 'embeddable' => true );
+		}
+		return array( 'events' => $events, 'cursor' => $result['data'] && $recent ? ( $result['pagination']['cursor'] ?? '' ) : '' );
+	}
+
 	private static function live_youtube( $channels, $key, $now ) {
 		$manual_shows = self::manual_youtube_ids( $now, true );
 		$checks = array();
@@ -696,9 +780,10 @@ final class BSC_TV_Sync {
 				return new WP_Error( 'bsc_tv_youtube_channel', 'Identifiant de chaîne YouTube invalide.' );
 			}
 			$result = self::yt_request( 'channels', $key, $param + array( 'part' => 'id' ) );
+			if ( is_wp_error( $result ) ) { return $result; }
 			$channel_id = $result['items'][0]['id'] ?? '';
-			if ( is_wp_error( $result ) || ! $channel_id ) {
-				return is_wp_error( $result ) ? $result : new WP_Error( 'bsc_tv_youtube_channel', 'Chaîne YouTube introuvable.' );
+			if ( ! $channel_id ) {
+				return new WP_Error( 'bsc_tv_youtube_channel', 'Chaîne YouTube introuvable.' );
 			}
 		}
 		return $channel_id;
@@ -729,11 +814,15 @@ final class BSC_TV_Sync {
 		} catch ( Exception $exception ) {
 			$duration = 0;
 		}
+		$published = max( BSC_TV_Content::parse_date( $snippet['publishedAt'] ?? '', false ), BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? '', false ) );
+		$playable = $duration > 0 && ! empty( $item['status']['embeddable'] ) && 'public' === ( $item['status']['privacyStatus'] ?? '' ) && 'processed' === ( $item['status']['uploadStatus'] ?? 'processed' ) && 'none' === $flag;
+		// A complete public upload remains a replay when the daily metadata refresh reads it again.
+		if ( $playable ) { $status = 'ended'; $start = $start ?: $published; }
 		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start, $end > $start ? $end : 0 ) + array(
 			'status' => $status, 'channel_id' => $snippet['channelId'] ?? '', 'duration' => $duration,
-			'published_at' => max( BSC_TV_Content::parse_date( $snippet['publishedAt'] ?? '', false ), BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? '', false ) ),
+			'published_at' => $published,
 			'embeddable' => isset( $item['status']['embeddable'] ) ? (bool) $item['status']['embeddable'] : null,
-			'playable' => $duration > 0 && ! empty( $item['status']['embeddable'] ) && 'public' === ( $item['status']['privacyStatus'] ?? '' ) && 'none' === $flag,
+			'playable' => $playable,
 		);
 	}
 }
