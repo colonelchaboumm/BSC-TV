@@ -109,7 +109,8 @@ final class BSC_TV_Player {
 			$url = $url ?: ( $data['url'] ?? '' );
 			$resource = self::resource( $url );
 			$video_id = BSC_TV_Content::youtube_video_id( $data['url'] ?? '' );
-			$state = BSC_TV_Sync::state( $post->ID, $video_id );
+			$source = self::resource( $data['url'] ?? '' );
+			$state = BSC_TV_Sync::state( $post->ID, $video_id ?: ( $source ? self::resource_key( $source ) : '' ) );
 			$video = $state['video'] ?? $data;
 			$channel_id = (int) ( $data['channel_id'] ?? $data['origin_channel'] ?? 0 );
 			if ( ! isset( $channels[ $channel_id ] ) ) {
