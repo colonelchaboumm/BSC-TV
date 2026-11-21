@@ -40,6 +40,8 @@ Les horaires s’affichent dans le fuseau réglé dans **Réglages → Général
 
 Le lecteur 24/7 exclut les vidéos que YouTube signale comme soumises à une limite d’âge, même en mode **Inclure**. Les métadonnées des vidéos déjà présentes sont corrigées lorsqu’elles sont relues par les collectes existantes, notamment l’import quotidien Infomaniak. Pour une vidéo bloquée non signalée par l’API, ouvrir sa fiche **Émission → Diffusion BSC TV 24/7** et cocher **Exclure cette vidéo du lecteur : limite d’âge ou lecture bloquée**. La fiche, sa chaîne et les annonces restent conservées. [Restrictions du lecteur](LIVE_PLAYER.md#vidéos-soumises-à-une-limite-dâge).
 
+Le lecteur utilise l’animation Brewers Social Club incluse entre les émissions et pendant le chargement de la suivante. Elle boucle sans son et s’efface dès que YouTube ou Twitch confirme la lecture. Dans Elementor, **Contenu → Animation entre les programmes** permet de la désactiver, choisir une autre vidéo ou modifier l’attente maximale de 20 secondes. Une erreur ou un blocage de lecture la retire pour montrer les commandes du lecteur. La préférence de réduction des animations utilise une image fixe. [Réglages du lecteur](LIVE_PLAYER.md#réglages-elementor).
+
 ## Collecte et vérification des directs
 
 | Plateforme | Programme à venir | Direct en cours |

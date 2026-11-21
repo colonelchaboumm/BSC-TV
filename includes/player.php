@@ -592,9 +592,14 @@ final class BSC_TV_Player {
 		wp_enqueue_script( 'bsc-tv-player' );
 		$settings = (array) $settings;
 		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay' ), 'yes' );
-		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'autoplay' => '', 'muted' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array() );
+		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'autoplay' => '', 'muted' => '', 'join_label' => 'Rejoindre le direct TV', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );
 		$poster = 'yes' === $settings['show_poster'] ? ( self::snapshot()['current']['image'] ?? '' ) : '';
+		$transition_media = $settings['transition_video'];
+		$transition_value = is_array( $transition_media ) ? ( $transition_media['url'] ?? '' ) : $transition_media;
+		$transition_url = is_scalar( $transition_value ) ? BSC_TV_Content::url( $transition_value ) : '';
+		$transition_url = $transition_url ?: BSC_TV_URL . 'assets/media/transition.mp4';
+		$transition_timeout = is_numeric( $settings['transition_timeout'] ) ? max( 5, min( 60, (int) $settings['transition_timeout'] ) ) : 20;
 		ob_start();
 		require BSC_TV_DIR . 'includes/player-view.php';
 		return ob_get_clean();

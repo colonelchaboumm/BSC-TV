@@ -50,6 +50,8 @@
 			this.screen = root.querySelector('.bsc-player__screen');
 			this.message = root.querySelector('[data-player-message]');
 			this.button = root.querySelector('[data-player-join]');
+			this.transition = root.querySelector('[data-player-transition]');
+			this.transitionVideo = root.querySelector('[data-player-transition-video]');
 			this.data = null;
 			this.clock = 0;
 			this.joined = false;
@@ -62,10 +64,15 @@
 			this.timer = null;
 			this.readyTimer = null;
 			this.lastSeek = 0;
+			this.transitionAttempt = 0;
 			this.button.addEventListener('click', () => this.join());
 			root.querySelector('[data-player-avatar]')?.addEventListener('error', event => { event.target.hidden = true; });
 			root.querySelector('[data-player-poster]')?.addEventListener('error', event => { event.target.hidden = true; });
-			this.visibility = () => { if (!document.hidden) this.request(); };
+			this.transitionVideo?.addEventListener('error', () => { this.transitionBroken = true; this.stopTransition(); });
+			this.visibility = () => {
+				if (document.hidden) this.pauseTransition();
+				else { if (this.waitingForPlayback && this.transition?.hidden) this.showTransition(); this.request(); }
+			};
 			document.addEventListener('visibilitychange', this.visibility);
 			this.pulse = window.setInterval(() => this.tick(), 1000);
 			this.observer = new IntersectionObserver(entries => {
@@ -82,6 +89,40 @@
 		now() { return this.clock + performance.now() / 1000; }
 		text(selector, value) { const node = this.root.querySelector(selector); if (node) node.textContent = value || ''; }
 		status(message) { this.message.textContent = message; }
+
+		startTransition() {
+			if (!this.transition || !this.transitionVideo || !this.joined || this.transitionBroken) return;
+			this.waitingForPlayback = true;
+			this.transitionDeadline = performance.now() + Math.max(5, Math.min(60, Number(this.transition.dataset.timeout) || 20)) * 1000;
+			try { this.transitionVideo.currentTime = 0; } catch { /* The local clip may not yet be loaded. */ }
+			this.showTransition();
+		}
+		showTransition() {
+			if (!this.waitingForPlayback || !this.transition || !this.transitionVideo || document.hidden) return;
+			const remaining = this.transitionDeadline - performance.now();
+			const url = safeURL(this.transitionVideo.dataset.src);
+			if (remaining <= 0 || !url) { this.stopTransition(); return; }
+			window.clearTimeout(this.transitionTimer);
+			const attempt = ++this.transitionAttempt;
+			this.transition.hidden = false;
+			this.transitionTimer = window.setTimeout(() => { if (attempt === this.transitionAttempt) this.stopTransition(); }, remaining);
+			// Reduced motion uses the clip's static poster, without downloading the MP4.
+			this.transitionVideo.hidden = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+			if (this.transitionVideo.hidden) return;
+			this.transitionVideo.muted = true;
+			this.transitionVideo.defaultMuted = true;
+			if (this.transitionVideo.getAttribute('src') !== url) this.transitionVideo.src = url;
+			try { this.transitionVideo.play()?.catch(() => { if (attempt === this.transitionAttempt) this.stopTransition(); }); } catch { this.stopTransition(); }
+		}
+		pauseTransition() {
+			this.transitionAttempt++;
+			window.clearTimeout(this.transitionTimer);
+			if (this.transition) this.transition.hidden = true;
+			try { this.transitionVideo?.pause(); } catch { /* A disabled animation has no media element. */ }
+		}
+		stopTransition() { this.waitingForPlayback = false; this.pauseTransition(); }
+		playing() { this.stopTransition(); this.status(''); }
+		ended(message) { this.startTransition(); this.status(message); this.request(); }
 
 		async request() {
 			if (!this.root.isConnected) { this.dispose(); return; }
@@ -107,7 +148,7 @@
 				window.clearTimeout(timeout);
 				this.loading = false;
 				const boundary = this.data?.current?.end || this.data?.next?.[0]?.start || 0;
-				const wait = boundary > this.now() ? Math.max(5, Math.min(60, boundary - this.now() + .5)) : 60;
+				const wait = boundary ? Math.max(5, Math.min(60, boundary - this.now() + .5)) : 60;
 				this.timer = window.setTimeout(() => this.request(), wait * 1000);
 			}
 		}
@@ -152,10 +193,10 @@
 				this.text('[data-player-next-title]', next?.title);
 				this.text('[data-player-next-time]', next ? (next.after_live ? 'Après le direct' : time(next.start, this.data.timezone)) : '');
 			}
-			this.tick();
 			if (!current) {
-				this.destroy();
-				this.token = '';
+				const gap = this.data.enabled && next ? `gap:${next.key}/${next.start}` : '';
+				if (this.token !== gap || this.player || this.starting) { this.destroy(); this.token = gap; if (gap) this.startTransition(); }
+				this.tick();
 				this.status(!this.data.enabled ? 'La chaîne BSC TV est actuellement désactivée.' : next ? `Prochaine émission à ${time(next.start, this.data.timezone)}.` : 'Aucune émission disponible pour le moment.');
 				return;
 			}
@@ -166,6 +207,8 @@
 				this.failedToken = '';
 				this.status('Rejoignez le programme en cours avec le bouton ci-dessus.');
 			}
+			this.tick();
+			if (current.end && this.now() >= current.end) return;
 			if (this.joined && !this.player && this.failedToken !== token && !this.starting) this.load(current, token);
 		}
 
@@ -197,6 +240,7 @@
 				return;
 			}
 			this.starting = true;
+			this.startTransition();
 			const generation = ++this.generation;
 			this.screen.dataset.platform = platform;
 			try {
@@ -223,10 +267,10 @@
 							onReady: () => { if (!valid()) return; if (this.root.dataset.muted === '1') this.player.mute(); else this.player.unMute(); ready(); },
 							onStateChange: event => {
 								if (!valid()) return;
-								if (event.data === window.YT.PlayerState.PLAYING) this.status('');
-								if (event.data === window.YT.PlayerState.ENDED) { this.status('Cette vidéo est terminée. Actualisation du programme…'); this.request(); }
+								if (event.data === window.YT.PlayerState.PLAYING) this.playing();
+								if (event.data === window.YT.PlayerState.ENDED) this.ended('Cette vidéo est terminée. Actualisation du programme…');
 							},
-							onAutoplayBlocked: () => { if (valid()) this.status('Votre navigateur demande un clic sur « Rejoindre le direct TV » pour démarrer.'); },
+							onAutoplayBlocked: () => { if (valid()) { this.stopTransition(); this.status('Votre navigateur demande un clic sur « Rejoindre le direct TV » pour démarrer.'); } },
 							onError: event => { if (valid()) this.fail(`Cette vidéo ne peut pas être lue ici (YouTube ${event.data}). Utilisez le lien vers YouTube ou réessayez. Le prochain programme démarrera à son horaire.`); },
 						},
 					});
@@ -236,10 +280,10 @@
 						muted: this.root.dataset.muted === '1', ...(current.live ? { channel: id } : { video: id, time: `${Math.floor(this.position())}s` }),
 					});
 					this.player.addEventListener(window.Twitch.Player.READY, ready);
-					this.player.addEventListener(window.Twitch.Player.PLAYING, () => { if (valid()) this.status(''); });
-					this.player.addEventListener(window.Twitch.Player.PLAYBACK_BLOCKED, () => { if (valid()) this.status('Cliquez sur « Rejoindre le direct TV » ou sur Lecture dans Twitch pour démarrer.'); });
-					this.player.addEventListener(window.Twitch.Player.OFFLINE, () => { if (valid()) { this.status('Ce direct est terminé ou indisponible. BSC TV vérifie son état.'); this.request(); } });
-					this.player.addEventListener(window.Twitch.Player.ENDED, () => { if (valid()) { this.status('Vidéo terminée. Actualisation du programme…'); this.request(); } });
+					this.player.addEventListener(window.Twitch.Player.PLAYING, () => { if (valid()) this.playing(); });
+					this.player.addEventListener(window.Twitch.Player.PLAYBACK_BLOCKED, () => { if (valid()) { this.stopTransition(); this.status('Cliquez sur « Rejoindre le direct TV » ou sur Lecture dans Twitch pour démarrer.'); } });
+					this.player.addEventListener(window.Twitch.Player.OFFLINE, () => { if (valid()) this.ended('Ce direct est terminé ou indisponible. BSC TV vérifie son état.'); });
+					this.player.addEventListener(window.Twitch.Player.ENDED, () => { if (valid()) this.ended('Vidéo terminée. Actualisation du programme…'); });
 				}
 				this.readyTimer = window.setTimeout(() => {
 					if (valid() && !this.ready) this.fail('Le lecteur officiel ne répond pas. Réessayez ou utilisez le lien vers la plateforme.');
@@ -290,13 +334,21 @@
 				if (current && !current.live) progress.value = Math.min(100, Math.max(0, 100 * (this.now() - current.start) / (current.end - current.start)));
 			}
 			if (document.hidden || !current) return;
-			if (current.end && this.now() > current.end + this.data.tolerance) {
-				if (this.player) { this.destroy(); this.status('Synchronisation avec le programme suivant…'); }
+			if (current.end && this.now() >= current.end) {
+				const boundary = `${current.key}/${current.start}/${current.end}`;
+				if (boundary !== this.boundaryToken) {
+					this.boundaryToken = boundary;
+					this.destroy();
+					this.startTransition();
+					this.status('Synchronisation avec le programme suivant…');
+					this.request();
+				}
 			} else if (Math.floor(performance.now() / 1000) % 10 === 0) this.seek();
 		}
 
-		fail(message) { window.clearTimeout(this.readyTimer); this.failedToken = this.token; this.status(message); }
+		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.status(message); }
 		destroy() {
+			this.stopTransition();
 			window.clearTimeout(this.readyTimer);
 			this.generation += 1;
 			try {

@@ -41,9 +41,16 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation se règle dans BSC TV → Le live et les autorisations dans les fiches des chaînes et émissions. Les logos et métadonnées restent hors du lecteur officiel. Le bouton Lecture peut être nécessaire selon le navigateur.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
 		$this->end_controls_section();
 
+		$this->start_controls_section( 'player_transition', array( 'label' => 'Animation entre les programmes' ) );
+		$this->add_control( 'transition_enabled', array( 'label' => 'Afficher l’animation pendant le chargement', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->add_control( 'transition_video', array( 'label' => 'Animation personnalisée', 'type' => Controls_Manager::MEDIA, 'media_types' => array( 'video' ), 'condition' => array( 'transition_enabled' => 'yes' ), 'description' => 'Sans vidéo choisie, utilise l’animation Brewers Social Club incluse. Lecture en boucle sans son jusqu’au démarrage du programme.' ) );
+		$this->add_control( 'transition_timeout', array( 'label' => 'Attente maximale avant de montrer le lecteur (secondes)', 'type' => Controls_Manager::NUMBER, 'min' => 5, 'max' => 60, 'default' => 20, 'condition' => array( 'transition_enabled' => 'yes' ), 'description' => 'L’animation s’efface aussi immédiatement en cas de lecture bloquée ou d’erreur.' ) );
+		$this->end_controls_section();
+
 		$this->start_controls_section( 'player_style', array( 'label' => 'Lecteur et habillage', 'tab' => Controls_Manager::TAB_STYLE ) );
 		$this->add_responsive_control( 'ratio', array( 'label' => 'Format du lecteur', 'type' => Controls_Manager::SELECT, 'options' => array( '16 / 9' => '16:9', '4 / 3' => '4:3', '21 / 9' => '21:9' ), 'default' => '16 / 9', 'selectors' => array( $root => '--bsc-player-ratio: {{VALUE}};' ) ) );
 		$this->add_control( 'poster_fit', array( 'label' => 'Cadrage de l’image avant lecture', 'type' => Controls_Manager::SELECT, 'options' => array( 'cover' => 'Remplir l’écran', 'contain' => 'Afficher l’image entière' ), 'default' => 'cover', 'condition' => array( 'show_poster' => 'yes' ), 'selectors' => array( $root => '--bsc-player-poster-fit: {{VALUE}};' ) ) );
+		$this->add_control( 'transition_fit', array( 'label' => 'Cadrage de l’animation', 'type' => Controls_Manager::SELECT, 'options' => array( 'contain' => 'Afficher toute l’animation', 'cover' => 'Remplir l’écran' ), 'default' => 'contain', 'condition' => array( 'transition_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-transition-fit: {{VALUE}};' ) ) );
 		$this->size( 'gap', 'Espacements', '--bsc-player-gap', 0, 48 );
 		$this->size( 'radius', 'Arrondi du conteneur', '--bsc-player-radius', 0, 48 );
 		foreach ( array( 'surface' => 'Fond du widget', 'ink' => 'Titres et créateur', 'muted' => 'Horaires et messages', 'accent' => 'Bouton, liens et progression', 'live' => 'Badge et point LIVE' ) as $key => $label ) {

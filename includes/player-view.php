@@ -9,7 +9,9 @@
 			<?php endforeach; ?>
 		</div>
 	</div>
-	<div class="bsc-player__screen-wrap"><div class="bsc-player__screen"><?php if ( 'yes' === $settings['show_poster'] ) : ?><img class="bsc-player__poster" data-player-poster alt="" decoding="async"<?php if ( $poster ) : ?> src="<?php echo esc_url( $poster ); ?>"<?php else : ?> hidden<?php endif; ?>><?php endif; ?><div class="bsc-player__mount" data-player-mount></div></div></div>
+	<div class="bsc-player__screen-wrap"><div class="bsc-player__screen"><?php if ( 'yes' === $settings['show_poster'] ) : ?><img class="bsc-player__poster" data-player-poster alt="" decoding="async"<?php if ( $poster ) : ?> src="<?php echo esc_url( $poster ); ?>"<?php else : ?> hidden<?php endif; ?>><?php endif; ?><div class="bsc-player__mount" data-player-mount></div>
+		<?php if ( 'yes' === $settings['transition_enabled'] ) : ?><div class="bsc-player__transition" data-player-transition data-timeout="<?php echo esc_attr( $transition_timeout ); ?>" aria-hidden="true" hidden><img src="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" alt="" decoding="async"><video data-player-transition-video data-src="<?php echo esc_url( $transition_url ); ?>" poster="<?php echo esc_url( BSC_TV_URL . 'assets/media/transition-poster.jpg' ); ?>" muted loop playsinline preload="none" tabindex="-1" disablepictureinpicture></video></div><?php endif; ?>
+	</div></div>
 	<div class="bsc-player__actions">
 		<button class="bsc-player__join" type="button" data-player-join><?php echo esc_html( $settings['join_label'] ); ?></button>
 		<a class="bsc-player__source" data-player-source hidden>Regarder sur la plateforme</a>
