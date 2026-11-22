@@ -296,7 +296,7 @@
 			if (sourceURL) source.href = sourceURL; else source.removeAttribute('href');
 			const provider = current?.resource?.platform;
 			const providerName = provider === 'youtube' ? 'YouTube' : provider === 'twitch' ? 'Twitch' : '';
-			source.setAttribute('aria-label', providerName ? `Regarder sur ${providerName} (nouvel onglet)` : 'Regarder sur la plateforme');
+			source.setAttribute('aria-label', `Regarder sur la plateforme et soutenir le créateur${providerName ? ` (${providerName}, nouvel onglet)` : ''}`);
 			for (const icon of this.root.querySelectorAll('[data-player-provider]')) {
 				if (sourceURL && icon.dataset.playerProvider === provider) icon.removeAttribute('hidden'); else icon.setAttribute('hidden', '');
 			}

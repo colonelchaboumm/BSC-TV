@@ -6,6 +6,10 @@
 	<ol class="bsc-day__list<?php echo 'yes' !== $config['show_times'] ? ' bsc-day__list--no-times' : ''; ?>">
 	<?php foreach ( $data['items'] as $item ) :
 		$phase = $item['on_air'] ? 'current' : $item['phase'];
+		$same_creator = 0 === strcasecmp( trim( $item['creator'] ), trim( $item['channel'] ) );
+		$linked_creator = 'yes' === $config['show_creator'] && $item['creator'] && 'yes' === $config['show_profile'] && $item['profile_url'];
+		$show_channel = 'yes' === $config['show_channel'] && $item['channel'] && ! ( $same_creator && $linked_creator );
+		$show_creator = 'yes' === $config['show_creator'] && $item['creator'] && ( ! $show_channel || ! $same_creator );
 		$badge = $item['on_air'] && $item['live'] ? 'live' : $phase;
 		$label = $config[ ( 'live' === $badge ? 'live' : $badge ) . '_label' ];
 		$href = 'watch' === $config['link_mode'] ? $config['watch_url'] : ( 'source' === $config['link_mode'] ? $item['url'] : '' );
@@ -19,8 +23,8 @@
 					<?php if ( 'yes' === $config['show_badges'] ) : ?><span class="bsc-day__badge bsc-day__badge--<?php echo esc_attr( $badge ); ?>"><?php echo esc_html( $label ); ?></span><?php endif; ?>
 					<?php if ( $music && 'yes' === $config['show_badges'] ) : ?><span class="bsc-day__badge bsc-day__badge--music"><?php echo esc_html( $config['music_label'] ); ?></span><?php endif; ?>
 					<h3 class="bsc-day__title"><?php if ( $href ) : ?><a href="<?php echo esc_url( $href ); ?>"<?php echo $external ? ' target="_blank" rel="noopener noreferrer"' : ''; ?>><?php echo esc_html( $item['title'] ); ?></a><?php else : ?><?php echo esc_html( $item['title'] ); ?><?php endif; ?></h3>
-					<?php if ( 'yes' === $config['show_channel'] && $item['channel'] ) : ?><p class="bsc-day__channel"><?php echo esc_html( $item['channel'] ); ?></p><?php endif; ?>
-					<?php if ( 'yes' === $config['show_creator'] && $item['creator'] && ( 'yes' !== $config['show_channel'] || $item['creator'] !== $item['channel'] || ( 'yes' === $config['show_profile'] && $item['profile_url'] ) ) ) : ?><p class="bsc-day__creator"><?php if ( 'yes' === $config['show_profile'] && $item['profile_url'] ) : ?><a href="<?php echo esc_url( $item['profile_url'] ); ?>"><?php echo esc_html( $item['creator'] ); ?></a><?php else : ?><?php echo esc_html( $item['creator'] ); ?><?php endif; ?></p><?php endif; ?>
+					<?php if ( $show_channel ) : ?><p class="bsc-day__channel"><?php echo esc_html( $item['channel'] ); ?></p><?php endif; ?>
+					<?php if ( $show_creator ) : ?><p class="bsc-day__creator"><?php if ( 'yes' === $config['show_profile'] && $item['profile_url'] ) : ?><a href="<?php echo esc_url( $item['profile_url'] ); ?>"><?php echo esc_html( $item['creator'] ); ?></a><?php else : ?><?php echo esc_html( $item['creator'] ); ?><?php endif; ?></p><?php endif; ?>
 					<?php if ( $item['continued'] || $item['provisional'] ) : ?><p class="bsc-day__note"><?php echo esc_html( $item['provisional'] ? 'Horaire prévisionnel après le direct' : 'Suite du programme précédent' ); ?></p><?php endif; ?>
 					<?php if ( $music && 'yes' === $config['show_music_timing'] ) : ?><p class="bsc-day__note bsc-day__music-timing"><?php echo esc_html( sprintf( 'Clip %s – %s · animations BSC : %d s + %d s', wp_date( 'H:i:s', $item['clip_start'] ), wp_date( 'H:i:s', $item['clip_end'] ), $item['music_entry'], $item['music_exit'] ) ); ?><?php if ( ! empty( $item['music_category'] ) ) : ?><br><?php echo esc_html( $item['music_category'] ); ?><?php endif; ?></p><?php endif; ?>
 				</div>
