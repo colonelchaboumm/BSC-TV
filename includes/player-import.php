@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** Seed the existing show catalogue with two months of public, completed videos. */
+/** Enrich the existing show catalogue with public, completed videos during the daily import. */
 final class BSC_TV_Player_Import {
 	const STATE = 'bsc_tv_player_replay_import';
 	const JOB = 'bsc_tv_player_replay_import_batch';
@@ -35,9 +35,9 @@ final class BSC_TV_Player_Import {
 		} );
 	}
 
-	public static function since( $now ) {
+	public static function since( $now, $months = 2 ) {
 		$date = new DateTimeImmutable( '@' . $now );
-		$month = $date->modify( 'first day of this month' )->modify( '-2 months' );
+		$month = $date->modify( 'first day of this month' )->modify( '-' . max( 2, min( 12, (int) $months ) ) . ' months' );
 		return $month->setDate( (int) $month->format( 'Y' ), (int) $month->format( 'n' ), min( (int) $date->format( 'j' ), (int) $month->format( 't' ) ) )->getTimestamp();
 	}
 
@@ -98,7 +98,13 @@ final class BSC_TV_Player_Import {
 			$now = time();
 			if ( empty( $state['pending'] ) ) {
 				$state = array( 'since' => self::since( $now ), 'until' => $now, 'checked_at' => $now, 'pending' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => 0, 'total' => count( $channels ) );
-				foreach ( $channels as $id => $channel ) { $state['pending'][ $id ] = array( 'key' => $channel['key'], 'cursor' => '', 'pages' => 0, 'attempts' => 0, 'seen' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0 ); }
+				$counts = array_count_values( array_column( array_filter( BSC_TV_Player::media(), static function ( $media ) { return empty( $media['music'] ); } ), 'channel_id' ) );
+				$enrich_archives = BSC_TV_Player::settings()['enrich_archives'];
+				uksort( $channels, static function ( $a, $b ) use ( $counts ) { return ( $counts[ $a ] ?? 0 ) <=> ( $counts[ $b ] ?? 0 ) ?: $a <=> $b; } );
+				foreach ( $channels as $id => $channel ) {
+					$enrich = $enrich_archives && ( $counts[ $id ] ?? 0 ) < 8;
+					$state['pending'][ $id ] = array( 'key' => $channel['key'], 'cursor' => '', 'pages' => 0, 'attempts' => 0, 'seen' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0, 'since' => $enrich ? self::since( $now, 12 ) : $state['since'], 'usable_before' => $counts[ $id ] ?? 0 );
+				}
 				update_option( self::STATE, $state, false );
 			}
 			if ( $state['pending'] ) {
@@ -109,7 +115,8 @@ final class BSC_TV_Player_Import {
 				} else {
 					$channel = $channels[ $id ];
 					$channel['state'] = BSC_TV_Sync::state( $id, $channel['key'] );
-					$page = BSC_TV_Sync::replay_page( $channel, BSC_TV_Sync::settings(), $state['since'], $state['until'], $job['cursor'] );
+					$page_since = $job['since'] ?? $state['since'];
+					$page = BSC_TV_Sync::replay_page( $channel, BSC_TV_Sync::settings(), $page_since, $state['until'], $job['cursor'] );
 					$error = is_wp_error( $page ) ? $page->get_error_message() : '';
 					if ( ! $error ) {
 						$index = self::index();
@@ -126,6 +133,7 @@ final class BSC_TV_Player_Import {
 						else { $state['pending'][ $id ] = $job; }
 					} else {
 						++$job['pages'];
+						if ( max( $job['usable_before'] ?? 0, $job['created'] + $job['updated'] ) >= 8 ) { $job['since'] = $state['since']; }
 						$cursor = $page['cursor'];
 						if ( $cursor && ( isset( $job['seen'][ $cursor ] ) || $job['pages'] >= self::MAX_PAGES ) ) { $error = 'Import partiel : pagination répétée ou limite de 100 pages atteinte.'; ++$state['errors']; $cursor = ''; }
 						if ( $cursor ) {
@@ -135,7 +143,8 @@ final class BSC_TV_Player_Import {
 							$state['pending'][ $id ] = $job;
 						} else { unset( $state['pending'][ $id ] ); }
 					}
-					update_post_meta( $id, self::REPORT, array( 'at' => $now, 'error' => $error, 'pages' => $job['pages'], 'done' => ! isset( $state['pending'][ $id ] ), 'created' => $job['created'], 'updated' => $job['updated'], 'skipped' => $job['skipped'] ) );
+					if ( isset( $state['pending'][ $id ] ) ) { $remaining = $state['pending'][ $id ]; unset( $state['pending'][ $id ] ); $state['pending'][ $id ] = $remaining; }
+					update_post_meta( $id, self::REPORT, array( 'at' => $now, 'error' => $error, 'pages' => $job['pages'], 'since' => $page_since, 'done' => ! isset( $state['pending'][ $id ] ), 'created' => $job['created'], 'updated' => $job['updated'], 'skipped' => $job['skipped'] ) );
 				}
 			}
 			if ( ! $state['pending'] ) {
@@ -143,7 +152,7 @@ final class BSC_TV_Player_Import {
 			}
 			update_option( self::STATE, $state, false );
 		} finally { if ( ! $held_lock ) { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $lock ); } }
-		if ( $changed ) { BSC_TV_Player_Schedule::refresh(); }
+		if ( $changed && ! $held_lock ) { BSC_TV_Player_Schedule::refresh(); }
 		return $state;
 	}
 }

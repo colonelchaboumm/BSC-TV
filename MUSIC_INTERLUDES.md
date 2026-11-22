@@ -1,6 +1,6 @@
 # BSC TV — Music Interludes
 
-Version 1.20.0, branche `feature/random-bsc-animations`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique et les animations d’identité sont choisies côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
+Version 1.21.0, branche `fix/programme-diversity`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique et les animations d’identité sont choisies côté serveur, avec grille recalculée et affichage dans le widget quotidien. La recomposition commune dans **Le live** active l’insertion flexible lorsqu’au moins un clip est prêt. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
 
 ## Architecture réutilisée
 
@@ -10,7 +10,7 @@ Le module ajoute une référence musicale dans cette même file. Un créneau mus
 
 ## Mise en service
 
-1. Installer le ZIP 1.20.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
+1. Installer le ZIP 1.21.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
 2. Ouvrir **BSC TV → Music Interludes**. Le lecteur général doit aussi être activé dans **BSC TV → Le live**.
 3. Ajouter des clips depuis leurs URL YouTube ou utiliser **Clips → Importer une playlist YouTube**. Compléter ou vérifier artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
 4. Si une clé YouTube est configurée dans les réglages existants, cocher **Récupérer les métadonnées**. À défaut, vérifier manuellement disponibilité et durée. Une vidéo officiellement signalée comme bloquée ne peut pas être débloquée avec la case manuelle.
@@ -33,11 +33,13 @@ Validation locale de la version 1.19.0 : **163 contrôles ciblés** (38 de valid
 
 ## Contrôle du site et diagnostic de la bibliothèque
 
-Le 22 novembre 2026, les routes publiques de [l’antenne](https://brewerssocialclub.com/wp-json/bsc-tv/v1/player) et du [programme du jour](https://brewerssocialclub.com/wp-json/bsc-tv/v1/day?page_size=50&page=500) ont répondu HTTP 200. Au moment du contrôle, le programme quotidien contenait 24 entrées et aucun interlude musical ; les cinq transitions de l’antenne examinées enchaînaient directement les émissions. Il s’agit d’une observation préalable à cette mise à jour, pas d’une vérification après déploiement.
+Le 22 novembre 2026 vers 20 h 02 à Paris, les routes publiques de [l’antenne](https://brewerssocialclub.com/wp-json/bsc-tv/v1/player) et du [programme du jour](https://brewerssocialclub.com/wp-json/bsc-tv/v1/day?page_size=50&show_past=yes) ont répondu HTTP 200. Les ressources publiques indiquaient BSC TV 1.20.0. Le programme quotidien contenait 38 entrées : 32 The Craft Beer Channel et 6 Beer In Front, sans interlude musical. Ce relevé confirme une concentration sur deux sources ; il ne permet pas de connaître l’éligibilité des autres chaînes privées de l’administration. Il précède cette mise à jour et ne constitue pas une vérification après déploiement.
 
-L’utilisateur indique environ 429 références en bibliothèque. Les validations privées, l’activation de la musique et les médias sélectionnés n’ont pas pu être vérifiés : l’outil de contrôle a arrêté l’accès à Firefox, faute de prise en charge de sa politique d’URL sous Windows. Aucun autre moyen n’a été utilisé pour accéder à l’administration connectée. Aucune configuration de production n’a été modifiée.
+Un nombre élevé de clips prêts ne suffit pas à insérer de la musique si l’insertion utilise uniquement les espaces libres d’une grille contiguë. Une priorité manuelle obsolète pouvait également bloquer les insertions et ne le fait plus. Les clips incomplets restent exclus. Aucun accès à l’administration connectée n’a été utilisé pour cette version.
 
-**Music Interludes → État actuel → Diagnostic de la programmation musicale** affiche désormais le total importé, les clips réellement prêts, les interludes planifiés et les éléments à compléter : activation, autorisations et référence, source officielle, disponibilité, durée, artiste/titre. Les raisons peuvent se cumuler. Le détail par catégorie et les durées d’entrée/sortie sont également visibles. Un total de 429 références ne signifie donc pas 429 clips diffusables.
+Après installation de la version 1.21.0, **Le live → Diversité et musique → Recomposer avec les chaînes et la musique** active l’insertion flexible des clips déjà prêts, conserve les tranches enregistrées et recalcule les émissions automatiques avec les durées complètes du clip et des animations. Le programme courant et les créneaux fixés restent protégés. Cette action ne change aucune validation, ne lance aucune recherche API et attend le prochain import quotidien pour enrichir les chaînes peu fournies. Le bouton de programmation existant dans Music Interludes reste disponible pour ne recomposer que la musique.
+
+**Music Interludes → État actuel → Diagnostic de la programmation musicale** affiche désormais le total importé, les clips réellement prêts, les interludes planifiés et les éléments à compléter : activation, autorisations et référence, source officielle, disponibilité, durée, artiste/titre. Les raisons peuvent se cumuler. Le détail par catégorie et les durées d’entrée/sortie sont également visibles. Le nombre de références importées ne représente pas nécessairement le nombre de clips diffusables.
 
 Après installation, vérifier le nombre **Prêt à diffuser**, puis utiliser le bouton de programmation. Le bilan annonce immédiatement combien de clips sont prêts et combien d’interludes ont été enregistrés. S’il reste zéro clip prêt, compléter les validations dans la bibliothèque. Les références non validées restent exclues.
 
@@ -137,9 +139,11 @@ Les API peuvent fournir durée, miniature, chaîne d’origine et disponibilité
 
 La route REST du lecteur n’appelle pas YouTube. Elle expose les métadonnées publiques et les timestamps de la phase, sans notes d’autorisation ni clé privée. Les requêtes continuent sur le rythme existant, en se rapprochant des limites de phase ; une phase de trois secondes ne subit pas l’ancien minimum de cinq secondes. Le contrôle local se fonde sur l’heure serveur reçue et ne recharge pas la page.
 
-Module désactivé sans break en cours : aucun accès à la bibliothèque ni vérification musicale d’API. La signature de la grille normale reste identique à celle de la version précédente pour éviter de mélanger les émissions à la simple installation.
+Module désactivé sans break en cours : aucun accès à la bibliothèque ni vérification musicale d’API. Les réglages musicaux inactifs ne modifient pas la signature de la grille normale. La nouvelle limite de programmes consécutifs est un réglage indépendant du lecteur et peut renouveler ses choix automatiques.
 
 ## Vérifications effectuées
+
+Version 1.21.0 : **521 contrôles PHP ciblés et 16 vérifications de navigateur local** réussis. La nouvelle simulation utilise 50 chaînes, des émissions de 50 minutes, les tranches enregistrées et les animations incluses : recomposition avec musique, conservation du programme courant et d’un horaire fixé, variété des sources et enrichissement d’une chaîne sans replay récent. Elle exerce aussi le nonce invalide, l’accès anonyme et le verrou occupé. Les suites existantes du lecteur, des imports, de la grille, de la liste quotidienne, des animations et des validations groupées passent. Le formulaire et le tableau sont vérifiés à 1 280 et 390 pixels. Les plateformes sont simulées ; aucune configuration de production n’a changé.
 
 **695 contrôles locaux** : les 649 précédents et 46 vérifications du choix aléatoire partagé, du recalcul avec protection des horaires fixés et des délais de rediffusion, des changements de durée, du diagnostic et des morceaux dans le widget quotidien. Les tests utilisent une copie SQLite jetable de WordPress, Elementor et BSC BDD. API et SDK sont simulés. Les scénarios couvrent aussi les 25 points du cahier des charges : limites de durée, activation, tranches, trois phases et retours, arrivées tardives, visiteurs multiples, absence de validation, indisponibilité, manque d’espace, directs, désactivation, Elementor, grilles et changements d’heure. Les formulaires et le contrôleur AJAX sont exercés avec capacités et nonces WordPress.
 

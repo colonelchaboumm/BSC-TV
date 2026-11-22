@@ -33,6 +33,8 @@ final class BSC_TV_Player {
 			'live_priority' => ! empty( $input['live_priority'] ),
 			'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ),
 			'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ),
+			'max_channel_streak' => max( 0, min( 10, (int) ( $input['max_channel_streak'] ?? 3 ) ) ),
+			'enrich_archives' => ! array_key_exists( 'enrich_archives', $input ) || ! empty( $input['enrich_archives'] ),
 			'timezone' => wp_timezone_string(),
 			'music' => class_exists( 'BSC_TV_Music' ) ? BSC_TV_Music::settings() : array(),
 		);
@@ -295,6 +297,11 @@ final class BSC_TV_Player {
 				}
 			}
 		}
+		$maximum = $settings['max_channel_streak'] ?? 0;
+		if ( $maximum > 0 && ( $state['channel_streak'] ?? 1 ) >= $maximum && ! empty( $state['last_channel'] ) ) {
+			$alternatives = array_values( array_filter( $candidates, static function ( $item ) use ( $state ) { return self::mix_channel( $item ) !== $state['last_channel']; } ) );
+			if ( $alternatives ) { $candidates = $alternatives; }
+		}
 		$bounds = self::day_bounds( $first_time, $settings['timezone'] ?? 'UTC' );
 		$usage = array();
 		$plays = array();
@@ -408,8 +415,10 @@ final class BSC_TV_Player {
 		$state['premiered'][ $media['key'] ] = true;
 		$state['history'][ $media['key'] ] = array( 'end' => $slot['end'] );
 		if ( empty( $media['music'] ) ) {
+			$channel = self::mix_channel( $media );
+			$state['channel_streak'] = ( $state['last_channel'] ?? '' ) === $channel ? 1 + ( $state['channel_streak'] ?? 1 ) : 1;
 			$state['last_creator'] = $media['creator_key'];
-			$state['last_channel'] = self::mix_channel( $media );
+			$state['last_channel'] = $channel;
 			$state['last_show'] = $media['key'];
 		}
 		self::log_slot( $state, $slot );

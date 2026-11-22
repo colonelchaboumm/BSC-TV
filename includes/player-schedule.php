@@ -58,6 +58,7 @@ final class BSC_TV_Player_Schedule {
 		}
 		ksort( $selection );
 		$signature = array( 'mixed-v1', $selection, $settings['recent'], $settings['repeat_hours'], $settings['timezone'] ?? 'UTC' );
+		if ( ! empty( $settings['max_channel_streak'] ) ) { $signature[] = array( 'channel-streak-v1', $settings['max_channel_streak'] ); }
 		// An untouched, disabled music module must preserve pre-existing automatic choices.
 		if ( ! empty( $settings['music']['enabled'] ) || $has_music ) { $signature[] = array( 'random-music-v3-animations', $settings['music'] ?? array() ); }
 		return hash( 'sha256', json_encode( $signature ) );
