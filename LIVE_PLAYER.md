@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.15.0, branche `feature/music-interludes`. Le module **Music Interludes**, désactivé par défaut, peut insérer un clip validé et deux transitions dans la même antenne. [Gestion, règles d’insertion et configuration musicale](MUSIC_INTERLUDES.md). Les commandes à icônes et la lecture synchronisée restent actives. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.16.0, branche `feature/music-playlist-import`. Le module **Music Interludes** permet d’importer une playlist YouTube dans une catégorie musicale ; les nouveaux clips restent inactifs et à valider. [Import, gestion et configuration musicale](MUSIC_INTERLUDES.md). Le lecteur et la programmation partagée conservent leur fonctionnement. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -153,7 +153,9 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.15.0 : **580 contrôles locaux**, dont 106 WordPress/programmation des interludes et 21 scénarios JavaScript de leurs phases. La suite antérieure complète de 453 contrôles est également exécutée. [Détails des scénarios musicaux et limites de validation](MUSIC_INTERLUDES.md#vérifications-effectuées).
+Version 1.16.0 : **649 contrôles locaux**, dont 50 contrôles WordPress/API des playlists et 19 de leur interface AJAX, en complément des 580 contrôles de la version précédente. [Détails des scénarios musicaux et limites de validation](MUSIC_INTERLUDES.md#vérifications-effectuées).
+
+Version 1.15.0 : **580 contrôles locaux**, dont 106 WordPress/programmation des interludes et 21 scénarios JavaScript de leurs phases. La suite antérieure complète de 453 contrôles est également exécutée.
 
 Version 1.14.1 : **189 contrôles ciblés réexécutés** (91 WordPress/Elementor du lecteur, 49 du lecteur JavaScript, 14 de lecture automatique, 35 de lecture synchronisée). Syntaxe PHP/JavaScript et diff vérifiés. Les icônes et la suppression de la phrase ont été contrôlées dans un aperçu local à 1 200 et 390 pixels, avec SDK simulé et sans débordement horizontal.
 

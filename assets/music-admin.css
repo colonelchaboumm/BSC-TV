@@ -11,6 +11,9 @@
 .bsc-music-library { overflow-x: auto; }
 .bsc-music-library table { min-width: 700px; }
 .bsc-music-library .button { margin: 4px 0; }
+.bsc-music-playlist { margin: 20px 0 28px; padding: 16px; border: 1px solid #c3c4c7; border-radius: 6px; background: #f6f7f7; }
+.bsc-music-playlist [hidden] { display: none !important; }
+.bsc-music-playlist progress { display: block; width: min(420px, 100%); }
 .bsc-music-admin [data-music-preview-screen] { min-height: 180px; padding: 24px; display: grid; place-content: center; text-align: center; }
 .bsc-music-admin [data-music-preview-screen][hidden] { display: none; }
 .bsc-music-admin [data-music-preview-screen] img { max-height: 120px; max-width: 100%; margin: auto; }

@@ -1,6 +1,6 @@
 # BSC TV — Music Interludes
 
-Version 1.15.0, branche `feature/music-interludes`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Aucune installation ni activation sur le site de production n’a été effectuée.
+Version 1.16.0, branche `feature/music-playlist-import`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist dans une catégorie. Aucune installation ni activation sur le site de production n’a été effectuée.
 
 ## Architecture réutilisée
 
@@ -10,14 +10,35 @@ Le module ajoute une référence musicale dans cette même file. Un créneau mus
 
 ## Mise en service
 
-1. Installer le ZIP 1.15.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
+1. Installer le ZIP 1.16.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
 2. Ouvrir **BSC TV → Music Interludes**. Le lecteur général doit aussi être activé dans **BSC TV → Le live**.
-3. Ajouter manuellement des clips depuis leurs URL YouTube officielles. Compléter artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
+3. Ajouter des clips depuis leurs URL YouTube ou utiliser **Clips → Importer une playlist YouTube**. Compléter ou vérifier artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
 4. Si une clé YouTube est configurée dans les réglages existants, cocher **Récupérer les métadonnées**. À défaut, vérifier manuellement disponibilité et durée. Une vidéo officiellement signalée comme bloquée ne peut pas être débloquée avec la case manuelle.
 5. Vérifier la source officielle, renseigner la référence ou note d’autorisation, choisir **Autorisations confirmées**, cocher la confirmation explicite et activer le clip. L’intégration YouTube disponible ne constitue pas cette autorisation. Un changement de vidéo exige une nouvelle confirmation.
 6. Configurer les horaires, l’identité et les politiques, puis activer le module. Prévoir au moins deux artistes différents pour maintenir l’alternance ; les règles peuvent volontairement laisser passer plusieurs émissions sans clip.
 7. Par défaut, seuls les espaces libres assez longs sont utilisés. Pour une antenne qui enchaîne uniquement des choix automatiques, activer **Autoriser l’insertion dans une rotation entièrement automatique sans horaire fixé**. Cette option reste désactivée par défaut.
 8. Vérifier **BSC TV → Le live** et l’état musical. Activer la vérification habituelle des véritables directs dans les réglages de synchronisation pour permettre leur détection. La tâche Infomaniak quotidienne existante est conservée.
+
+## Importer une playlist dans une catégorie
+
+Dans **BSC TV → Music Interludes → Clips** :
+
+1. Coller l’URL, par exemple `https://www.youtube.com/playlist?list=PLvLT_VV4Sfx3mwWY9T3Zn5OLLhVo-f7Vo`.
+2. Choisir **BSC Morning Chill** dans **Catégorie de destination**.
+3. Cliquer sur **Importer les clips**. Les pages sont traitées successivement, avec un bilan et une barre de progression.
+4. Ouvrir **Voir les clips importés**, puis vérifier et valider les références avant leur activation.
+
+La clé YouTube configurée dans les réglages existants est nécessaire. Le plugin utilise l’API officielle `playlistItems.list`, jusqu’à 50 éléments par requête, puis récupère les métadonnées des vidéos en un lot. Les playlists doivent être accessibles via cette clé ; l’accès aux playlists privées avec connexion OAuth n’est pas ajouté. L’URL ci-dessus est un exemple de saisie : son contenu réel n’a pas été importé ni vérifié pendant les tests locaux. [Pagination officielle YouTube](https://developers.google.com/youtube/v3/docs/playlistItems/list).
+
+Les nouvelles références reçoivent la catégorie, le lien YouTube, le titre, la chaîne propriétaire de la vidéo, la miniature et la durée lorsque l’API les fournit. Un titre sous la forme « Artiste - Titre » permet une suggestion d’artiste, à vérifier. L’année n’est pas déduite de la date de publication. Tous les nouveaux clips sont **inactifs, sans source officielle confirmée et en attente de validation des autorisations**. Un import ne démarre pas leur diffusion.
+
+Une vidéo déjà présente n’est pas copiée : sa catégorie est ajoutée aux catégories existantes. Les titres, artistes, réglages d’activité, notes et validations éditoriales sont conservés. La disponibilité technique connue peut être actualisée ; une restriction nouvellement signalée reste bloquante. Les doublons dans plusieurs pages sont ignorés. Les références privées, supprimées ou absentes de la réponse complète de métadonnées sont comptabilisées comme indisponibles. En cas d’erreur de métadonnées, les nouveaux liens peuvent être conservés comme non vérifiés, sans durée exploitable ni autorisation de lecture.
+
+L’import est ponctuel, lancé par un administrateur ; il n’ajoute pas de suivi quotidien des playlists. Le passage Infomaniak conserve son fonctionnement existant pour les métadonnées des références déjà importées. Aucun appel d’import n’est effectué par un visiteur du lecteur.
+
+L’état de reprise est privé à chaque administrateur, dans un transient `bsc_tv_music_playlist_<user_id>` valable 24 heures. Une requête de reprise déjà traitée renvoie sa progression enregistrée, sans rejouer la page. Après une erreur ou un rechargement, le bouton **Reprendre l’import** continue le même travail. Après expiration, relancer la même URL évite les doublons. Les requêtes réseau n’immobilisent pas le verrou de l’antenne ; les modifications de bibliothèque utilisent ensuite ce verrou existant.
+
+La limite de bibliothèque reste de 500 clips. Un import traite au plus 50 pages, soit 2 500 éléments, et annonce explicitement un arrêt partiel si une limite est atteinte. La progression indique séparément les créations, catégories ajoutées, doublons et indisponibilités.
 
 ## Paramètres ajoutés
 
@@ -82,11 +103,15 @@ Module désactivé sans break en cours : aucun accès à la bibliothèque ni vé
 
 ## Vérifications effectuées
 
-**580 contrôles locaux** : les 453 contrôles existants, 106 vérifications WordPress/programmation musicale et 21 scénarios de phases dans le navigateur simulé. Les tests utilisent une copie SQLite jetable de WordPress, Elementor et BSC BDD. API et SDK sont simulés. Les scénarios couvrent les 25 points du cahier des charges : limites de durée, activation, tranches, trois phases et retours, arrivées tardives, visiteurs multiples, absence de validation, indisponibilité, manque d’espace, directs, désactivation, Elementor, grilles et changements d’heure. Les formulaires réels sont exercés avec capacités et nonces WordPress ; leur traitement, la corbeille et le verrou commun sont contrôlés.
+**649 contrôles locaux** : les 580 contrôles précédents, 50 vérifications WordPress/API de l’import de playlists et 19 scénarios de son interface AJAX. Les tests utilisent une copie SQLite jetable de WordPress, Elementor et BSC BDD. API et SDK sont simulés. Les scénarios couvrent aussi les 25 points du cahier des charges : limites de durée, activation, tranches, trois phases et retours, arrivées tardives, visiteurs multiples, absence de validation, indisponibilité, manque d’espace, directs, désactivation, Elementor, grilles et changements d’heure. Les formulaires et le contrôleur AJAX sont exercés avec capacités et nonces WordPress.
+
+L’import vérifie notamment la pagination, la reprise après réponse perdue, les droits d’accès, les jetons et sessions d’administrateurs, les doublons, les catégories multiples, la conservation des réglages existants, les restrictions nouvelles, les erreurs réseau et de métadonnées, les verrous, les réponses qui se répètent et la bibliothèque à sa limite de 500 clips. L’interface arrête une réponse qui n’avance pas au lieu de boucler.
 
 ```sh
 php tests/music-integration.php /chemin/wordpress-de-test
 node tests/music-browser.mjs
+php tests/music-playlist.php /chemin/wordpress-de-test
+node tests/music-playlist-browser.mjs
 php tests/player-clock.php
 php tests/player-integration.php /chemin/wordpress-de-test
 php tests/player-import.php /chemin/wordpress-de-test
@@ -99,7 +124,7 @@ node tests/day-browser.mjs
 node tests/badge-browser.mjs
 ```
 
-L’aperçu local de l’entrée, du clip, de la sortie et de l’émission suivante ainsi que l’administration ont été vérifiés à 1 200 et 390 pixels, sans débordement horizontal. Les tests ne constituent ni une validation des droits réels ni une preuve de lecture de chaque clip sur YouTube. Deux avertissements Elementor préexistants peuvent apparaître dans la fixture PHP 8.4.
+L’aperçu local de l’entrée, du clip, de la sortie et de l’émission suivante ainsi que l’administration ont été vérifiés à 1 200 et 390 pixels, sans débordement horizontal. Le parcours réel du formulaire de playlist (coller l’URL, choisir Morning Chill, traiter plusieurs pages, consulter la progression et ouvrir la bibliothèque) a également été contrôlé dans un navigateur local aux deux largeurs, avec réponses API simulées. Les tests ne constituent ni une validation des droits réels ni une preuve de lecture de chaque clip sur YouTube. Deux avertissements Elementor préexistants peuvent apparaître dans la fixture PHP 8.4.
 
 ## Limites techniques
 
@@ -118,3 +143,5 @@ L’animation CSS est implémentée, avec vidéo de médiathèque facultative. A
 Ajouts : `includes/music.php`, `includes/music-admin.php`, `assets/music-admin.js`, `assets/music-admin.css`, les deux tests musicaux et ce document.
 
 Adaptations : `bsc-tv.php`, `includes/player.php`, `includes/player-schedule.php`, `includes/player-daily.php`, `includes/player-admin.php`, `includes/player-view.php`, `includes/player-widget.php`, `includes/sync.php`, `assets/player.js`, `assets/player.css`, `README.md` et `LIVE_PLAYER.md`.
+
+La version 1.16.0 ajoute `includes/music-playlist.php`, `tests/music-playlist.php` et `tests/music-playlist-browser.mjs`, avec adaptation de l’administration musicale, de son script, de ses styles et de l’accès YouTube existant. Pour revenir de 1.16.0 à 1.15.0, réinstaller le ZIP précédent : les références importées restent des clips ordinaires de la bibliothèque ; l’état de reprise inutilisé expire après 24 heures.

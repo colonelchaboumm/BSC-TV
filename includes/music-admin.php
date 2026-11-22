@@ -1,9 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/music-playlist.php';
 
 /** One section in the BSC TV administration; clip references are private WordPress records. */
 final class BSC_TV_Music_Admin {
 	public static function register() {
+		BSC_TV_Music_Playlist::register();
 		add_action( 'admin_menu', static function () { add_submenu_page( 'bsc-tv', 'Music Interludes', 'Music Interludes', 'manage_options', 'bsc-tv-music', array( __CLASS__, 'page' ) ); }, 20 );
 		add_action( 'admin_post_bsc_tv_music_settings', array( __CLASS__, 'settings' ) );
 		add_action( 'admin_post_bsc_tv_music_clip', array( __CLASS__, 'clip' ) );
@@ -146,7 +148,9 @@ final class BSC_TV_Music_Admin {
 	private static function library( $clips, $names, $state ) {
 		$id = absint( $_GET['clip_id'] ?? 0 ); $clip = $clips[ $id ] ?? array();
 		echo '<section id="music-library"><h2>Clips musicaux</h2><p>Ajoutez uniquement les URL officielles que vous avez vérifiées. L’intégration disponible sur YouTube ne vaut pas autorisation de programmation. Les références d’autorisation restent privées.</p>';
+		self::playlist( $names );
 		self::form( 'bsc_tv_music_clip' ); echo '<h3>' . ( $clip ? 'Modifier le clip' : 'Ajouter un clip' ) . '</h3><input type="hidden" name="clip_id" value="' . esc_attr( $clip ? $id : 0 ) . '"><input type="hidden" name="operation" value="save">';
+		if ( ! empty( $clip['origin_playlist'] ) ) { echo '<p class="description">Clip importé depuis une playlist. Vérifiez le titre, l’artiste éventuellement suggéré, la source officielle et les autorisations avant activation.</p>'; }
 		foreach ( array( 'url' => 'URL officielle YouTube', 'artist' => 'Artiste', 'title' => 'Titre', 'year' => 'Année', 'channel' => 'Chaîne YouTube d’origine', 'duration' => 'Durée exacte (secondes, obligatoire pour diffuser)', 'image' => 'URL de la miniature' ) as $key => $label ) { self::input( 'clip[' . $key . ']', $label, $clip[ $key ] ?? '', in_array( $key, array( 'year', 'duration' ), true ) ? 'number' : ( in_array( $key, array( 'url', 'image' ), true ) ? 'url' : 'text' ), 'url' === $key ? 'required' : '' ); }
 		foreach ( $names as $key => $name ) { echo '<p><label><input type="checkbox" name="clip[categories][]" value="' . esc_attr( $key ) . '" ' . checked( in_array( $key, $clip['categories'] ?? array(), true ), true, false ) . '> ' . esc_html( $name ) . '</label></p>'; }
 		self::select( 'clip[region]', 'Alternance hip-hop', $clip['region'] ?? 'other', array( 'us' => 'Rap américain', 'fr' => 'Rap français', 'other' => 'Autre' ) );
@@ -168,6 +172,14 @@ final class BSC_TV_Music_Admin {
 		for ( $n = 1; $n <= ceil( count( $clips ) / 25 ); ++$n ) { echo '<a class="button" href="' . esc_url( add_query_arg( array( 'page' => 'bsc-tv-music', 'music_page' => $n ), admin_url( 'admin.php' ) ) . '#music-library' ) . '">' . esc_html( $n ) . '</a> '; }
 		echo '</p></section>';
 	}
+	private static function playlist( $names ) {
+		$job = BSC_TV_Music_Playlist::status();
+		echo '<form class="bsc-music-playlist" data-music-playlist data-endpoint="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'bsc_tv_music_playlist' ) ) . '" data-job="' . esc_attr( wp_json_encode( $job ) ) . '" data-library="' . esc_url( admin_url( 'admin.php?page=bsc-tv-music' ) ) . '"><h3>Importer une playlist YouTube</h3><p>Collez son lien puis choisissez la catégorie de destination, par exemple BSC Morning Chill. Les nouveaux clips restent inactifs et en attente de validation. Les clips déjà présents reçoivent la catégorie sans perdre leurs réglages.</p>';
+		self::input( 'playlist_url', 'Lien de la playlist', $job['url'] ?? '', 'url', 'required placeholder="https://www.youtube.com/playlist?list=…"' );
+		self::select( 'playlist_category', 'Catégorie de destination', $job['category'] ?? 'morning', $names );
+		echo '<p><button class="button button-primary" type="submit" data-playlist-start>Importer les clips</button> <button class="button" type="button" data-playlist-resume hidden>Reprendre l’import</button></p><p data-playlist-status role="status" aria-live="polite"></p><progress data-playlist-progress value="0" max="100" hidden></progress><p><a class="button" data-playlist-library hidden>Voir les clips importés</a></p><noscript>Activez JavaScript pour lancer cet import par lots.</noscript></form>';
+	}
+
 	private static function status( $config, $state, $snapshot ) {
 		echo '<section id="music-status"><h2>État actuel</h2><p>Interludes : <strong>' . esc_html( $config['enabled'] ? 'activés' : 'désactivés' ) . '</strong>. Lecteur : ' . esc_html( $snapshot['enabled'] ? 'activé' : 'désactivé' ) . '.</p>';
 		if ( $config['enabled'] && empty( BSC_TV_Sync::settings()['live_enabled'] ) ) { echo '<p class="notice notice-warning">Activez la vérification des directs dans BSC TV → Réglages et imports pour permettre leur détection et leur priorité sur la musique.</p>'; }
