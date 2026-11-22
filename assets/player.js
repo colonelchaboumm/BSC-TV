@@ -49,7 +49,6 @@
 			this.mount = root.querySelector('[data-player-mount]');
 			this.screen = root.querySelector('.bsc-player__screen');
 			this.message = root.querySelector('[data-player-message]');
-			this.button = root.querySelector('[data-player-join]');
 			this.transition = root.querySelector('[data-player-transition]');
 			this.transitionVideo = root.querySelector('[data-player-transition-video]');
 			this.musicScreen = root.querySelector('[data-music-screen]');
@@ -69,9 +68,10 @@
 			this.volume = 100;
 			this.muted = root.dataset.muted === '1';
 			this.transitionAttempt = 0;
-			this.button.addEventListener('click', () => this.join());
 			root.querySelector('[data-player-pause]')?.addEventListener('click', () => {
-				if (!this.ready || this.data?.current?.resource.platform !== 'youtube') return;
+				if (!this.data?.enabled || !this.data.current) return;
+				if (!this.ready || !this.player || this.failedToken === this.token) return this.join();
+				if (this.data.current.resource.platform !== 'youtube') return;
 				if (this.player.getPlayerState() === window.YT.PlayerState.PLAYING) this.player.pauseVideo();
 				else { this.seek(true); this.play(); }
 				this.controls();
@@ -229,8 +229,10 @@
 			const current = this.data?.enabled ? this.data.current : null;
 			const platform = current?.resource?.platform;
 			const available = this.ready && !!this.player && this.failedToken !== this.token && ['youtube', 'twitch'].includes(platform);
+			const canStart = !!current && ['youtube', 'twitch', 'identity'].includes(platform);
+			const showStart = canStart && !(platform === 'identity' && this.joined);
 			const toolbar = this.root.querySelector('[data-player-toolbar]');
-			if (toolbar) toolbar.hidden = !available && !safeURL(current?.url);
+			if (toolbar) toolbar.hidden = !this.root.isConnected || !(available || showStart || safeURL(current?.url));
 			const fullscreen = this.root.querySelector('[data-player-fullscreen]');
 			if (fullscreen) {
 				fullscreen.hidden = !available || !document.fullscreenEnabled || !this.root.requestFullscreen;
@@ -238,13 +240,19 @@
 				this.control('[data-player-fullscreen]', expanded ? 'Quitter le plein écran' : 'Plein écran', expanded ? 'collapse' : 'expand');
 			}
 			const controls = this.root.querySelector('[data-player-controls]');
+			const mute = this.root.querySelector('[data-player-mute]');
+			if (mute) mute.hidden = !available || platform !== 'youtube';
+			const volumeControl = this.root.querySelector('[data-player-volume-control]');
+			if (volumeControl) volumeControl.hidden = !available || platform !== 'youtube';
 			if (!controls) return;
-			controls.hidden = !available || platform !== 'youtube';
+			controls.hidden = !this.root.isConnected || !showStart || (platform === 'twitch' && available);
 			if (controls.hidden) return;
+			const pause = this.root.querySelector('[data-player-pause]');
+			if (pause) pause.disabled = !available && this.failedToken !== this.token && (this.starting || !!this.player);
+			if (!available) { this.control('[data-player-pause]', 'Lire le direct', 'play'); return; }
 			try {
 				const playing = this.player.getPlayerState() === window.YT.PlayerState.PLAYING;
 				this.control('[data-player-pause]', playing ? 'Pause' : 'Reprendre le direct', playing ? 'pause' : 'play');
-				const mute = this.root.querySelector('[data-player-mute]');
 				this.control('[data-player-mute]', this.muted ? 'Activer le son' : 'Couper le son', this.muted ? 'muted' : 'sound');
 				mute.setAttribute('aria-pressed', String(this.muted));
 				this.root.querySelector('[data-player-volume]').value = this.volume;
@@ -285,7 +293,6 @@
 		render() {
 			const current = this.data.enabled ? this.data.current : null;
 			this.root.querySelector('[data-player-meta]').hidden = !current;
-			this.button.disabled = !current;
 			for (const badge of this.root.querySelectorAll('[data-player-badge]')) {
 				const name = badge.dataset.playerBadge;
 				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere && !current.music : current[name]));
@@ -341,8 +348,9 @@
 				this.destroy();
 				this.token = token;
 				this.failedToken = '';
-				this.status('Rejoignez le programme en cours avec le bouton ci-dessus.');
+				this.status('');
 			}
+			this.controls();
 			this.tick();
 			if (current.end && this.now() >= current.end) return;
 			if (current.music && current.resource?.platform === 'identity') { this.showMusic(current); this.status(''); return; }
@@ -352,6 +360,7 @@
 		async join() {
 			automaticPlayerClaimed = true;
 			this.joined = true;
+			this.controls();
 			if (this.failedToken && this.failedToken === this.token) this.destroy();
 			this.failedToken = '';
 			if (this.player && this.ready) {
@@ -378,6 +387,7 @@
 				return;
 			}
 			this.starting = true;
+			this.controls();
 			this.startTransition();
 			const generation = ++this.generation;
 			this.screen.dataset.platform = platform;
@@ -417,7 +427,7 @@
 									try { this.player.setPlaybackRate(1); this.seek(false, true); } catch { /* The provider may refuse a rate change. */ }
 								}
 							},
-							onAutoplayBlocked: () => { if (valid()) { this.stopTransition(); this.status('Votre navigateur demande un clic sur « Rejoindre le direct TV » pour démarrer.'); } },
+							onAutoplayBlocked: () => { if (valid()) { this.stopTransition(); this.status(''); this.controls(); } },
 							onError: event => { if (valid()) this.fail(`Cette vidéo ne peut pas être lue ici (YouTube ${event.data}). Utilisez le lien vers YouTube ou réessayez. Le prochain programme démarrera à son horaire.`); },
 						},
 					});
@@ -431,7 +441,7 @@
 					this.player.addEventListener(window.Twitch.Player.SEEK, () => {
 						if (valid() && !current.live && !this.seeking) { this.pendingSeek = true; this.seek(false, true); }
 					});
-					this.player.addEventListener(window.Twitch.Player.PLAYBACK_BLOCKED, () => { if (valid()) { this.stopTransition(); this.status('Cliquez sur « Rejoindre le direct TV » ou sur Lecture dans Twitch pour démarrer.'); } });
+					this.player.addEventListener(window.Twitch.Player.PLAYBACK_BLOCKED, () => { if (valid()) { this.stopTransition(); this.status(''); this.controls(); } });
 					this.player.addEventListener(window.Twitch.Player.OFFLINE, () => { if (valid()) this.ended('Ce direct est terminé ou indisponible. BSC TV vérifie son état.'); });
 					this.player.addEventListener(window.Twitch.Player.ENDED, () => { if (valid()) this.ended('Vidéo terminée. Actualisation du programme…'); });
 				}
@@ -441,7 +451,7 @@
 			} catch (error) {
 				if (generation === this.generation) this.fail(error.message);
 			} finally {
-				if (generation === this.generation) this.starting = false;
+				if (generation === this.generation) { this.starting = false; this.controls(); }
 			}
 		}
 

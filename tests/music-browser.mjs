@@ -15,7 +15,7 @@ class Element {
   play() { this.paused = false; this.plays = (this.plays || 0) + 1; return new Promise((resolve, reject) => { this.reject = reject; }); }
 }
 const root = new Element(); root.dataset = { bscPlayer: 'https://bsc.example/wp-json/bsc-tv/v1/player', autoplay: '0', muted: '0', musicMeta: '1' };
-for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-profile]', '[data-player-avatar]', '[data-player-progress]', '[data-music-screen]', '[data-music-video]', '[data-music-identity]', '[data-music-logo]', '[data-music-text]']) root.nodes.set(selector, new Element());
+for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-pause]', '[data-player-controls]', '[data-player-mute]', '[data-player-volume]', '[data-player-volume-control]', '[data-player-toolbar]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-profile]', '[data-player-avatar]', '[data-player-progress]', '[data-music-screen]', '[data-music-video]', '[data-music-identity]', '[data-music-logo]', '[data-music-text]']) root.nodes.set(selector, new Element());
 root.badges = ['on_air', 'music', 'live', 'replay'].map(name => { const badge = new Element(); badge.dataset.playerBadge = name; return badge; });
 const node = selector => root.querySelector(selector);
 const document = new Element(); Object.assign(document, { readyState: 'complete', hidden: false, documentElement: { lang: 'fr' }, baseURI: 'https://bsc.example/live/', head: new Element() });
@@ -43,7 +43,7 @@ check(players.length === 0 && node('[data-player-mount]').children.length === 0,
 check(node('[data-music-logo]').hidden && node('[data-music-text]').textContent === 'BSC Music Break', 'No configured logo uses neutral identity and optional text, not an invented mark');
 check(node('[data-music-identity]').style.animationDelay === '-1s', 'Late entry joins the CSS animation offset rather than restarting its clock');
 check([...timers.values()].some(timer => timer.delay < 5000 && timer.delay >= 500), 'A three-second phase schedules its next read before the old five-second minimum');
-await node('[data-player-join]').fire('click'); await flush();
+await node('[data-player-pause]').fire('click'); await flush();
 current.identity.entry_video = 'https://bsc.example/official-ident.mp4'; current.identity.sound = true; await refresh();
 const video = node('[data-music-video]');
 check(video.src.endsWith('official-ident.mp4') && !video.muted && video.currentTime === 1, 'An administrator-supplied ident uses the shared offset and requested audio after joining');

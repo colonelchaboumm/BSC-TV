@@ -20,7 +20,7 @@ class Node {
 function environment(modes = ['1'], hidden = false, blocked = false) {
   const roots = modes.map(mode => {
     const root = new Node(); root.dataset = { bscPlayer: 'https://bsc.example/wp-json/bsc-tv/v1/player', autoplay: mode, muted: '0' };
-    for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]']) root.nodes.set(selector, new Node());
+    for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-pause]', '[data-player-controls]', '[data-player-mute]', '[data-player-volume]', '[data-player-volume-control]', '[data-player-toolbar]', '[data-player-meta]', '[data-player-source]']) root.nodes.set(selector, new Node());
     return root;
   });
   const document = new Node(); document.documentElement = { lang: 'fr' }; document.baseURI = 'https://bsc.example/le-live/'; document.readyState = 'complete'; document.hidden = hidden; document.head = new Node();
@@ -69,13 +69,13 @@ background.document.hidden = false; await background.document.fire('visibilitych
 check(background.players.length === 1 && background.players[0].playing, 'Returning to a visible background-loaded page can claim automatic playback');
 const manual = environment(['0', '1']); manual.observers[0].visible(1); await flush();
 check(manual.players.length === 0, 'Explicit click mode remains silent even when the widget is visible');
-await manual.roots[0].querySelector('[data-player-join]').fire('click'); await flush();
+await manual.roots[0].querySelector('[data-player-pause]').fire('click'); await flush();
 manual.observers[1].visible(1); await flush();
 check(manual.players.length === 1, 'A manual start prevents another widget from automatically adding a second soundtrack');
 const denied = environment(['1'], false, true); denied.observers[0].visible(1); await flush();
-check(denied.players.length === 1 && !denied.players[0].playing && denied.roots[0].querySelector('[data-player-message]').textContent.includes('navigateur'), 'Browser blocking gives the viewer an actionable play-button message');
-denied.state.blocked = false; await denied.roots[0].querySelector('[data-player-join]').fire('click'); await flush();
-check(denied.players[0].playing && denied.players.length === 1, 'The fallback play button resumes the existing official player');
+check(denied.players.length === 1 && !denied.players[0].playing && denied.roots[0].querySelector('[data-player-message]').textContent === '' && !denied.roots[0].querySelector('[data-player-controls]').hidden && denied.roots[0].querySelector('[data-player-pause]').dataset.state === 'play', 'Browser blocking leaves the single play icon available without the removed message');
+denied.state.blocked = false; await denied.roots[0].querySelector('[data-player-pause]').fire('click'); await flush();
+check(denied.players[0].playing && denied.players.length === 1, 'The existing play/pause icon resumes the official player without a separate start button');
 const pending = environment(['1']); pending.observers[0].visible(1); await flush();
 check(pending.players.length === 1 && pending.players[0].playing, 'Visibility detected during the initial data request still results in automatic playback');
 for (const scene of [visible, background, manual, denied, pending]) { for (const root of scene.roots) root.isConnected = false; for (const pulse of scene.pulses) pulse(); }

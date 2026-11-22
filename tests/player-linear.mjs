@@ -18,7 +18,7 @@ class Element {
 }
 const root = new Element();
 root.dataset = { bscPlayer: 'https://bsc.example/wp-json/bsc-tv/v1/player', autoplay: '0', muted: '0' };
-for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]', '[data-player-controls]', '[data-player-pause]', '[data-player-mute]', '[data-player-volume]', '[data-player-fullscreen]']) root.nodes.set(selector, new Element());
+for (const selector of ['[data-player-mount]', '.bsc-player__screen', '[data-player-message]', '[data-player-pause]', '[data-player-meta]', '[data-player-source]', '[data-player-controls]', '[data-player-mute]', '[data-player-volume]', '[data-player-fullscreen]']) root.nodes.set(selector, new Element());
 const node = selector => root.querySelector(`[data-player-${selector}]`);
 const document = new Element();
 Object.assign(document, { readyState: 'complete', hidden: false, fullscreenEnabled: true, documentElement: { lang: 'fr' }, baseURI: 'https://bsc.example/le-live/', head: new Element() });
@@ -64,7 +64,7 @@ const flush = async () => { for (let n = 0; n < 24; n++) await Promise.resolve()
 const tick = value => { clock = value; pulses[0](); };
 let checks = 0;
 const check = (value, label) => { assert.ok(value, label); checks++; };
-await flush(); await node('join').fire('click'); await flush();
+await flush(); await node('pause').fire('click'); await flush();
 let player = players.at(-1);
 check(player.position === 100 && player.state === 1, 'Initial join works before the SDK exposes its current time');
 check(player.options.playerVars.controls === 0 && player.options.playerVars.disablekb === 1, 'YouTube timeline and keyboard seeking are disabled using documented options');

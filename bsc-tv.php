@@ -2,7 +2,7 @@
 /**
  * Plugin Name: BSC TV
  * Description: Programme des directs craft beer, fiches BSC BDD et widgets Elementor.
- * Version: 1.17.3
+ * Version: 1.18.0
  * Requires at least: 6.2
  * Requires PHP: 7.4
  * Author: BSC
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BSC_TV_VERSION', '1.17.3' );
+define( 'BSC_TV_VERSION', '1.18.0' );
 define( 'BSC_TV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BSC_TV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -51,6 +51,7 @@ register_deactivation_hook( __FILE__, array( 'BSC_TV_Player_Schedule', 'deactiva
 register_deactivation_hook( __FILE__, array( 'BSC_TV_Player_Import', 'deactivate' ) );
 
 add_action( 'elementor/widgets/register', static function ( $manager ) {
+	require_once BSC_TV_DIR . 'includes/widget-style-controls.php';
 	require_once BSC_TV_DIR . 'includes/elementor.php';
 	require_once BSC_TV_DIR . 'includes/player-widget.php';
 	require_once BSC_TV_DIR . 'includes/day-widget.php';
