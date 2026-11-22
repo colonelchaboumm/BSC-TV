@@ -531,6 +531,16 @@ final class BSC_TV_Sync {
 	}
 
 	/** Explicit administration / daily music verification; never called by a public snapshot. */
+	public static function music_playlist_page( $playlist, $cursor = '' ) {
+		if ( ! is_string( $playlist ) || ! preg_match( '/^[A-Za-z0-9_-]{10,100}$/D', $playlist ) || ! is_string( $cursor ) || strlen( $cursor ) > 2048 ) { return new WP_Error( 'music_playlist_id', 'Identifiant de playlist ou pagination invalide.' ); }
+		$key = self::settings()['youtube_key'] ?? '';
+		if ( ! $key ) { return new WP_Error( 'music_key', 'Configurez la clé YouTube existante dans BSC TV → Réglages et imports pour importer une playlist.' ); }
+		$params = array( 'part' => 'snippet,contentDetails,status', 'playlistId' => $playlist, 'maxResults' => 50 );
+		if ( $cursor ) { $params['pageToken'] = $cursor; }
+		return self::yt_request( 'playlistItems', $key, $params );
+	}
+
+	/** Explicit administration / daily music verification; never called by a public snapshot. */
 	public static function music_metadata( $ids ) {
 		$key = self::settings()['youtube_key'] ?? '';
 		if ( ! $key ) { return new WP_Error( 'music_key', 'Clé YouTube absente. Renseignez les métadonnées et vérifiez manuellement la vidéo, ou configurez la clé existante.' ); }
