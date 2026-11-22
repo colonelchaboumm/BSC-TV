@@ -9,6 +9,7 @@ final class BSC_TV_Music_Admin {
 		add_action( 'admin_menu', static function () { add_submenu_page( 'bsc-tv', 'Music Interludes', 'Music Interludes', 'manage_options', 'bsc-tv-music', array( __CLASS__, 'page' ) ); }, 20 );
 		add_action( 'admin_post_bsc_tv_music_settings', array( __CLASS__, 'settings' ) );
 		add_action( 'admin_post_bsc_tv_music_clip', array( __CLASS__, 'clip' ) );
+		add_action( 'admin_post_bsc_tv_music_bulk', array( __CLASS__, 'bulk' ) );
 		add_action( 'admin_enqueue_scripts', static function ( $hook ) {
 			if ( false === strpos( $hook, 'bsc-tv-music' ) ) { return; }
 			wp_enqueue_media();
@@ -104,6 +105,68 @@ final class BSC_TV_Music_Admin {
 		if ( ! is_wp_error( $result ) && 'save' === $operation && ! empty( $_POST['fetch_metadata'] ) ) { BSC_TV_Music::refresh( array( $id => $clip ) ); }
 		self::finish( is_wp_error( $result ) ? $result->get_error_message() : 'Bibliothèque musicale mise à jour. Seuls les clips actifs, disponibles et validés peuvent être diffusés.', is_wp_error( $result ) );
 	}
+	public static function bulk_apply( $input ) {
+		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'music_bulk_permission', 'Action réservée aux administrateurs.' ); }
+		$input = is_array( $input ) ? $input : array();
+		if ( isset( $input['category'] ) && ! is_scalar( $input['category'] ) ) { return new WP_Error( 'music_bulk_category', 'Catégorie invalide.' ); }
+		$operation = is_scalar( $input['operation'] ?? null ) ? (string) $input['operation'] : '';
+		$scope = is_scalar( $input['scope'] ?? null ) ? (string) $input['scope'] : '';
+		$category = is_scalar( $input['category'] ?? null ) ? (string) $input['category'] : '';
+		if ( ! in_array( $operation, array( 'approve', 'activate', 'deactivate' ), true ) || ! in_array( $scope, array( 'selected', 'all' ), true ) ) { return new WP_Error( 'music_bulk_action', 'Action groupée ou sélection invalide.' ); }
+		if ( $category && ! isset( BSC_TV_Music::settings()['bands'][ $category ] ) ) { return new WP_Error( 'music_bulk_category', 'Catégorie inconnue.' ); }
+		$note = is_scalar( $input['rights_note'] ?? null ) ? sanitize_textarea_field( $input['rights_note'] ) : '';
+		if ( 'approve' === $operation && ( ! in_array( $input['confirm_rights'] ?? null, array( true, 1, '1' ), true ) || ! in_array( $input['confirm_official'] ?? null, array( true, 1, '1' ), true ) || ! preg_match( '/\A.{1,4000}\z/us', $note ) ) ) { return new WP_Error( 'music_bulk_confirmation', 'Pour valider ce lot, confirmez les sources officielles et les autorisations, puis renseignez une référence ou note commune (4 000 caractères maximum).' ); }
+		$ids = array();
+		foreach ( array_slice( is_array( $input['ids'] ?? null ) ? $input['ids'] : array(), 0, 500 ) as $id ) {
+			if ( is_scalar( $id ) && preg_match( '/^[0-9]+$/D', (string) $id ) && (int) $id > 0 ) { $ids[ (int) $id ] = true; }
+		}
+		if ( 'selected' === $scope && ! $ids ) { return new WP_Error( 'music_bulk_empty', 'Cochez au moins un clip ou choisissez toute la bibliothèque.' ); }
+		$report = array( 'targets' => 0, 'updated' => 0, 'unchanged' => 0, 'ready' => 0, 'skipped' => 0, 'reasons' => array() );
+		$result = self::change( static function () use ( $operation, $scope, $category, $input, $note, $ids, &$report ) {
+			delete_transient( BSC_TV_Music::CACHE );
+			$clips = BSC_TV_Music::clips();
+			$bands = BSC_TV_Music::settings()['bands'];
+			foreach ( $clips as $id => $clip ) {
+				if ( ( 'selected' === $scope && ! isset( $ids[ $id ] ) ) || ( $category && ! in_array( $category, (array) ( $clip['categories'] ?? array() ), true ) ) ) { continue; }
+				++$report['targets'];
+				unset( $clip['id'] );
+				$candidate = $clip;
+				$reason = '';
+				if ( 'deactivate' === $operation ) { $candidate['active'] = false; }
+				else {
+					$resource = BSC_TV_Player::resource( is_string( $clip['url'] ?? null ) ? $clip['url'] : '' );
+					if ( ! $resource || 'youtube' !== $resource['platform'] || $resource['id'] !== ( $clip['youtube_id'] ?? '' ) ) { $reason = 'url'; }
+					elseif ( 'available' !== ( $clip['availability'] ?? '' ) ) { $reason = 'availability'; }
+					elseif ( ( $clip['duration'] ?? 0 ) < 1 || ( $clip['duration'] ?? 0 ) > 3600 ) { $reason = 'duration'; }
+					elseif ( empty( $clip['artist'] ) || empty( $clip['title'] ) || ! array_intersect( array_keys( $bands ), (array) ( $clip['categories'] ?? array() ) ) ) { $reason = 'metadata'; }
+					elseif ( 'approve' === $operation ) {
+						$candidate['rights'] = 'confirmed'; $candidate['official'] = true;
+						if ( 'confirmed' !== ( $clip['rights'] ?? '' ) || empty( $clip['rights_note'] ) ) { $candidate['rights_note'] = trim( ( $clip['rights_note'] ?? '' ) . ( empty( $clip['rights_note'] ) ? '' : "\n" ) . $note ); }
+						if ( in_array( $input['activate'] ?? null, array( true, 1, '1' ), true ) ) { $candidate['active'] = true; }
+					} else {
+						$candidate['active'] = true;
+						if ( ! BSC_TV_Music::approved( $candidate ) ) { $reason = 'validation'; }
+					}
+				}
+				if ( $reason ) { ++$report['skipped']; $report['reasons'][ $reason ] = ( $report['reasons'][ $reason ] ?? 0 ) + 1; continue; }
+				if ( $candidate === $clip ) { ++$report['unchanged']; }
+				elseif ( false === update_post_meta( $id, BSC_TV_Music::META, wp_slash( $candidate ) ) ) { ++$report['skipped']; $report['reasons']['write'] = ( $report['reasons']['write'] ?? 0 ) + 1; continue; }
+				else { ++$report['updated']; }
+				if ( BSC_TV_Music::approved( $candidate ) ) { ++$report['ready']; }
+			}
+			if ( ! $report['targets'] ) { return new WP_Error( 'music_bulk_empty', 'Aucun clip de la bibliothèque ne correspond à cette sélection.' ); }
+		} );
+		return is_wp_error( $result ) ? $result : $report;
+	}
+	public static function bulk() {
+		self::authorize( 'bsc_tv_music_bulk' );
+		$report = self::bulk_apply( wp_unslash( $_POST['bulk'] ?? array() ) );
+		if ( is_wp_error( $report ) ) { self::finish( $report->get_error_message(), true ); }
+		$message = sprintf( 'Action groupée terminée : %d clip(s) concerné(s), %d modifié(s), %d déjà à jour, %d prêt(s) à diffuser, %d ignoré(s).', $report['targets'], $report['updated'], $report['unchanged'], $report['ready'], $report['skipped'] );
+		$labels = array( 'url' => 'Lien YouTube invalide', 'availability' => 'Disponibilité non vérifiée ou vidéo bloquée', 'duration' => 'Durée manquante ou hors limite', 'metadata' => 'Artiste, titre ou catégorie manquant', 'validation' => 'Autorisations ou source officielle non confirmées', 'write' => 'Échec de l’enregistrement' );
+		foreach ( $report['reasons'] as $reason => $count ) { $message .= ' ' . $labels[ $reason ] . ' : ' . $count . '.'; }
+		self::finish( $message, 0 === $report['updated'] && $report['skipped'] > 0 );
+	}
 	private static function form( $action ) { echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="' . esc_attr( $action ) . '">'; wp_nonce_field( $action ); }
 	private static function input( $name, $label, $value, $type = 'text', $extra = '' ) {
 		echo '<p><label>' . esc_html( $label ) . '<br><input class="regular-text" name="' . esc_attr( $name ) . '" type="' . esc_attr( $type ) . '" value="' . esc_attr( $value ) . '" ' . $extra . '></label></p>';
@@ -121,7 +184,7 @@ final class BSC_TV_Music_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) ); }
 		$config = BSC_TV_Music::settings(); $clips = BSC_TV_Music::clips(); $snapshot = BSC_TV_Player::snapshot(); $state = (array) get_option( BSC_TV_Player::STATE, array() );
 		$notice = get_transient( 'bsc_tv_music_notice_' . get_current_user_id() );
-		echo '<div class="wrap bsc-music-admin"><h1>BSC TV — Music Interludes</h1><nav><a href="#music-general">Général</a> · <a href="#music-schedule">Programmation musicale</a> · <a href="#music-library">Clips</a> · <a href="#music-identity">Identité visuelle</a> · <a href="#music-status">État actuel</a></nav>';
+		echo '<div class="wrap bsc-music-admin"><h1>BSC TV — Music Interludes</h1><nav><a href="#music-general">Général</a> · <a href="#music-schedule">Programmation musicale</a> · <a href="#music-library">Clips</a> · <a href="#bsc-music-bulk">Validation groupée</a> · <a href="#music-identity">Identité visuelle</a> · <a href="#music-status">État actuel</a></nav>';
 		if ( $notice ) { delete_transient( 'bsc_tv_music_notice_' . get_current_user_id() ); echo '<div class="notice notice-' . ( $notice[1] ? 'error' : 'success' ) . '"><p>' . esc_html( $notice[0] ) . '</p></div>'; }
 		self::form( 'bsc_tv_music_settings' ); echo '<button class="button" name="operation" value="stop">Désactiver immédiatement les futurs interludes</button></form>';
 		self::form( 'bsc_tv_music_settings' ); echo '<p><button class="button button-primary" name="operation" value="rebuild">Programmer la musique aléatoire et recalculer la grille</button></p><p class="description">Active les interludes et leur insertion dans les créneaux automatiques. Refait les choix musicaux à venir, conserve les émissions fixées et le programme courant. Les autorisations des clips restent à valider individuellement.</p></form>';
@@ -173,15 +236,29 @@ final class BSC_TV_Music_Admin {
 		self::checkbox( 'clip[confirm]', 'Je confirme explicitement la validation des autorisations pour ce clip (obligatoire pour une nouvelle validation)', false );
 		self::checkbox( 'fetch_metadata', 'Récupérer les métadonnées via la clé YouTube déjà configurée', true ); submit_button( 'Enregistrer le clip' ); echo '</form>';
 		$page = max( 1, absint( $_GET['music_page'] ?? 1 ) );
-		echo '<h3>Bibliothèque · ' . esc_html( count( $clips ) ) . ' / 500 clips</h3><div class="bsc-music-library"><table class="widefat striped"><thead><tr><th>Clip</th><th>Catégories</th><th>État</th><th>Diffusions</th><th>Actions</th></tr></thead><tbody>';
+		self::bulk_form( $names, count( $clips ) );
+		echo '<h3>Bibliothèque · ' . esc_html( count( $clips ) ) . ' / 500 clips</h3><div class="bsc-music-library"><table class="widefat striped"><thead><tr><td class="check-column"><input type="checkbox" data-music-select-page aria-label="Sélectionner tous les clips de cette page"></td><th>Clip</th><th>Catégories</th><th>État</th><th>Diffusions</th><th>Actions</th></tr></thead><tbody>';
 		foreach ( array_slice( $clips, ( $page - 1 ) * 25, 25, true ) as $clip_id => $row ) {
 			$stat = $state['music_stats'][ $clip_id ] ?? array();
-			echo '<tr><td><strong>' . esc_html( $row['artist'] . ' — ' . $row['title'] ) . '</strong><br>' . esc_html( ( $row['year'] ?? '' ) . ' · ' . ( $row['duration'] ?? 0 ) . ' s · ' . ( $row['channel'] ?? '' ) ) . '</td><td>' . esc_html( implode( ', ', array_intersect_key( $names, array_flip( $row['categories'] ?? array() ) ) ) ) . '</td><td>' . esc_html( BSC_TV_Music::approved( $row ) ? 'Prêt à diffuser' : 'Non diffusable' ) . '<br>' . esc_html( ( ! empty( $row['active'] ) ? 'Actif' : 'Inactif' ) . ' · ' . ( $row['rights'] ?? 'pending' ) . ' · ' . ( $row['availability'] ?? 'unchecked' ) ) . '</td><td>' . esc_html( ( $stat['plays'] ?? 0 ) . ' diffusion(s)' ) . '<br>' . esc_html( empty( $stat['last'] ) ? 'Jamais' : wp_date( 'd/m/Y H:i', $stat['last'], new DateTimeZone( 'Europe/Paris' ) ) ) . '</td><td><a class="button" href="' . esc_url( add_query_arg( array( 'page' => 'bsc-tv-music', 'clip_id' => $clip_id ), admin_url( 'admin.php' ) ) . '#music-library' ) . '">Modifier</a> <a class="button" href="' . esc_url( $row['url'] ) . '" target="_blank" rel="noopener">Prévisualiser sur YouTube</a>';
+			echo '<tr><th scope="row" class="check-column"><input type="checkbox" form="bsc-music-bulk" name="bulk[ids][]" value="' . esc_attr( $clip_id ) . '" data-music-selection aria-label="' . esc_attr( 'Sélectionner ' . $row['artist'] . ' — ' . $row['title'] ) . '"></th>';
+			echo '<td><strong>' . esc_html( $row['artist'] . ' — ' . $row['title'] ) . '</strong><br>' . esc_html( ( $row['year'] ?? '' ) . ' · ' . ( $row['duration'] ?? 0 ) . ' s · ' . ( $row['channel'] ?? '' ) ) . '</td><td>' . esc_html( implode( ', ', array_intersect_key( $names, array_flip( $row['categories'] ?? array() ) ) ) ) . '</td><td>' . esc_html( BSC_TV_Music::approved( $row ) ? 'Prêt à diffuser' : 'Non diffusable' ) . '<br>' . esc_html( ( ! empty( $row['active'] ) ? 'Actif' : 'Inactif' ) . ' · ' . ( $row['rights'] ?? 'pending' ) . ' · ' . ( $row['availability'] ?? 'unchecked' ) ) . '</td><td>' . esc_html( ( $stat['plays'] ?? 0 ) . ' diffusion(s)' ) . '<br>' . esc_html( empty( $stat['last'] ) ? 'Jamais' : wp_date( 'd/m/Y H:i', $stat['last'], new DateTimeZone( 'Europe/Paris' ) ) ) . '</td><td><a class="button" href="' . esc_url( add_query_arg( array( 'page' => 'bsc-tv-music', 'clip_id' => $clip_id ), admin_url( 'admin.php' ) ) . '#music-library' ) . '">Modifier</a> <a class="button" href="' . esc_url( $row['url'] ) . '" target="_blank" rel="noopener">Prévisualiser sur YouTube</a>';
 			self::form( 'bsc_tv_music_clip' ); echo '<input type="hidden" name="clip_id" value="' . esc_attr( $clip_id ) . '"><button class="button" name="operation" value="' . ( empty( $row['active'] ) ? 'activate' : 'deactivate' ) . '">' . ( empty( $row['active'] ) ? 'Activer' : 'Désactiver' ) . '</button> <button class="button" name="operation" value="refresh">Vérifier les métadonnées</button> <button class="button" name="operation" value="delete" data-music-delete>Supprimer</button></form></td></tr>';
 		}
 		echo '</tbody></table></div><p>';
 		for ( $n = 1; $n <= ceil( count( $clips ) / 25 ); ++$n ) { echo '<a class="button" href="' . esc_url( add_query_arg( array( 'page' => 'bsc-tv-music', 'music_page' => $n ), admin_url( 'admin.php' ) ) . '#music-library' ) . '">' . esc_html( $n ) . '</a> '; }
 		echo '</p></section>';
+	}
+	private static function bulk_form( $names, $total ) {
+		echo '<form id="bsc-music-bulk" class="bsc-music-bulk" data-music-bulk data-total="' . esc_attr( $total ) . '" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><h3>Actions groupées</h3><input type="hidden" name="action" value="bsc_tv_music_bulk">';
+		wp_nonce_field( 'bsc_tv_music_bulk' );
+		self::select( 'bulk[scope]', 'Clips concernés', 'selected', array( 'selected' => 'Les clips cochés sur cette page', 'all' => 'Toute la bibliothèque, toutes les pages' ) );
+		self::select( 'bulk[category]', 'Limiter à une catégorie', '', array( '' => 'Toutes les catégories' ) + $names );
+		self::select( 'bulk[operation]', 'Action à appliquer', 'approve', array( 'approve' => 'Valider les clips', 'activate' => 'Activer les clips déjà validés', 'deactivate' => 'Désactiver les clips' ) );
+		echo '<fieldset data-bulk-validation><legend>Validation du lot</legend><p><label>Référence ou note commune sur les autorisations<br><textarea name="bulk[rights_note]" class="large-text" rows="3" maxlength="4000" data-bulk-required></textarea></label></p>';
+		self::checkbox( 'bulk[confirm_official]', 'J’ai vérifié les sources officielles des clips concernés.', false );
+		self::checkbox( 'bulk[confirm_rights]', 'Je confirme les autorisations de programmation pour les clips concernés.', false );
+		self::checkbox( 'bulk[activate]', 'Activer aussi les clips validés', true );
+		echo '<p class="description">Une seule confirmation pour tout le lot. Les notes déjà associées à une autorisation confirmée sont conservées. Les vidéos bloquées, non vérifiées ou incomplètes sont ignorées.</p></fieldset><p data-bulk-summary role="status">Choisissez les clips dans le tableau ou toute la bibliothèque.</p><p><button class="button button-primary" type="submit" data-bulk-submit>Appliquer à la sélection</button></p><p class="description">La validation ne démarre pas les interludes si le module musical est désactivé. Les disponibilités et durées déjà enregistrées sont utilisées.</p></form>';
 	}
 	private static function playlist( $names ) {
 		$job = BSC_TV_Music_Playlist::status();

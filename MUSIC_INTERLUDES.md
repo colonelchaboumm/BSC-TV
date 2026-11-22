@@ -1,6 +1,6 @@
 # BSC TV — Music Interludes
 
-Version 1.17.0, branche `feature/music-programme-grid`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist. La musique est choisie aléatoirement côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée.
+Version 1.19.0, branche `feature/music-bulk-validation`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique est choisie aléatoirement côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
 
 ## Architecture réutilisée
 
@@ -10,14 +10,26 @@ Le module ajoute une référence musicale dans cette même file. Un créneau mus
 
 ## Mise en service
 
-1. Installer le ZIP 1.17.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
+1. Installer le ZIP 1.19.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
 2. Ouvrir **BSC TV → Music Interludes**. Le lecteur général doit aussi être activé dans **BSC TV → Le live**.
 3. Ajouter des clips depuis leurs URL YouTube ou utiliser **Clips → Importer une playlist YouTube**. Compléter ou vérifier artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
 4. Si une clé YouTube est configurée dans les réglages existants, cocher **Récupérer les métadonnées**. À défaut, vérifier manuellement disponibilité et durée. Une vidéo officiellement signalée comme bloquée ne peut pas être débloquée avec la case manuelle.
-5. Vérifier la source officielle, renseigner la référence ou note d’autorisation, choisir **Autorisations confirmées**, cocher la confirmation explicite et activer le clip. L’intégration YouTube disponible ne constitue pas cette autorisation. Un changement de vidéo exige une nouvelle confirmation.
+5. Vérifier la source officielle, renseigner la référence ou note d’autorisation, choisir **Autorisations confirmées**, cocher la confirmation explicite et activer le clip, ou utiliser la **Validation groupée** ci-dessous pour un lot. L’intégration YouTube disponible ne constitue pas cette autorisation. Un changement de vidéo exige une nouvelle confirmation.
 6. Configurer les horaires, l’identité et les politiques, puis activer le module. Prévoir au moins deux artistes différents pour maintenir l’alternance ; les règles peuvent volontairement laisser passer plusieurs émissions sans clip.
 7. Par défaut, seuls les espaces libres assez longs sont utilisés. Pour insérer la musique dans une rotation automatique, utiliser **Programmer la musique aléatoire et recalculer la grille**. Cette action active les interludes et le mode flexible, renouvelle les choix futurs et réserve les durées complètes. Le programme en cours et les horaires fixés sont conservés. Elle ne valide aucun clip.
 8. Vérifier **BSC TV → Le live** et l’état musical. Activer la vérification habituelle des véritables directs dans les réglages de synchronisation pour permettre leur détection. La tâche Infomaniak quotidienne existante est conservée.
+
+## Validation en masse
+
+Dans **BSC TV → Music Interludes → Validation groupée**, choisir les clips cochés sur la page ou **Toute la bibliothèque, toutes les pages**. La seconde option traite jusqu’aux 500 références de la bibliothèque, sans être limitée aux 25 lignes visibles. Le choix de catégorie limite l’action à cette catégorie ; il ne filtre pas l’affichage du tableau.
+
+Pour **Valider les clips**, renseigner une référence ou note commune, confirmer les sources officielles et les autorisations pour le lot, puis cliquer sur **Appliquer**. **Activer aussi les clips validés** est coché par défaut et peut être désactivé pour valider sans mettre de nouveaux clips en service. Les confirmations sont saisies par l’administrateur ; le plugin n’infère aucune autorisation de la seule présence d’une vidéo sur YouTube. Les notes d’autorisations déjà confirmées sont conservées ; une note antérieure non confirmée est complétée par la nouvelle référence.
+
+**Activer les clips déjà validés** ne confirme pas leurs autorisations ni leur source à leur place. **Désactiver les clips** conserve leurs références et notes. Les liens incohérents, vidéos bloquées ou non vérifiées, durées absentes ou supérieures à une heure, artistes/titres manquants et références sans catégorie restent ignorés pour la validation ou l’activation. Le bilan affiche les clips concernés, modifiés, déjà à jour, prêts à diffuser et ignorés, avec le motif des exclusions.
+
+Les actions exigent un compte administrateur et un nonce WordPress ; elles utilisent le verrou de l’antenne et les contrôles d’éligibilité existants. Elles ne téléchargent pas de vidéo, ne lancent pas de nouvel appel YouTube et n’ajoutent pas de tâche d’import. La musique reste désactivée si son module l’était. Les contrôles de disponibilité et la récupération des métadonnées restent ceux déjà disponibles dans le plugin.
+
+Validation locale de la version 1.19.0 : **163 contrôles ciblés** (38 de validation groupée, 106 du module et de sa programmation, 19 de l’import de playlists côté navigateur), plus **36 vérifications dans un navigateur local** à 1 280 et 390 pixels. Les scénarios couvrent les confirmations manquantes, les nonces, les accès non administrateurs, le verrou occupé, les notes privées, les doublons, les clips bloqués/incomplets, la sélection sur plusieurs pages, les catégories, la validation sans activation et les formulaires réels avec cases associées au lot. Aucune bibliothèque de production n’a été modifiée.
 
 ## Contrôle du site et diagnostic de la bibliothèque
 

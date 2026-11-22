@@ -11,6 +11,10 @@
 .bsc-music-library { overflow-x: auto; }
 .bsc-music-library table { min-width: 700px; }
 .bsc-music-library .button { margin: 4px 0; }
+.bsc-music-library .check-column { padding: 12px 8px; }
+.bsc-music-bulk { margin: 20px 0; padding: 16px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 6px; }
+.bsc-music-bulk [hidden] { display: none !important; }
+.bsc-music-bulk fieldset { margin-block: 16px; }
 .bsc-music-playlist { margin: 20px 0 28px; padding: 16px; border: 1px solid #c3c4c7; border-radius: 6px; background: #f6f7f7; }
 .bsc-music-playlist [hidden] { display: none !important; }
 .bsc-music-playlist progress { display: block; width: min(420px, 100%); }

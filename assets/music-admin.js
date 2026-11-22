@@ -1,5 +1,32 @@
 (() => {
 	'use strict';
+	for (const form of document.querySelectorAll('[data-music-bulk]')) {
+		const scope = form.elements.namedItem('bulk[scope]');
+		const operation = form.elements.namedItem('bulk[operation]');
+		const validation = form.querySelector('[data-bulk-validation]');
+		const summary = form.querySelector('[data-bulk-summary]');
+		const submit = form.querySelector('[data-bulk-submit]');
+		const boxes = [...document.querySelectorAll('[data-music-selection]')].filter(input => input.form === form);
+		const selectPage = document.querySelector('[data-music-select-page]');
+		const render = () => {
+			const count = boxes.filter(input => input.checked).length;
+			const all = scope.value === 'all';
+			const approving = operation.value === 'approve';
+			validation.hidden = !approving;
+			for (const field of validation.querySelectorAll('input, textarea')) {
+				field.disabled = !approving;
+				field.required = approving && field.name !== 'bulk[activate]';
+			}
+			summary.textContent = all ? `Toute la bibliothèque : jusqu’à ${form.dataset.total} clips, toutes les pages. Le filtre de catégorie s’applique.` : `${count} clip(s) coché(s) sur cette page. Le filtre de catégorie s’applique.`;
+			submit.disabled = all ? Number(form.dataset.total) < 1 : count === 0;
+			submit.textContent = all ? 'Appliquer à toute la bibliothèque' : 'Appliquer à la sélection';
+			if (selectPage) { selectPage.checked = boxes.length > 0 && count === boxes.length; selectPage.indeterminate = count > 0 && count < boxes.length; }
+		};
+		for (const input of [scope, operation, ...boxes]) input.addEventListener('change', render);
+		selectPage?.addEventListener('change', () => { for (const input of boxes) input.checked = selectPage.checked; render(); });
+		form.addEventListener('submit', () => { submit.disabled = true; submit.textContent = 'Traitement du lot…'; });
+		render();
+	}
 	for (const form of document.querySelectorAll('[data-music-playlist]')) {
 		const message = form.querySelector('[data-playlist-status]');
 		const start = form.querySelector('[data-playlist-start]');
