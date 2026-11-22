@@ -80,17 +80,42 @@
 		});
 		render();
 	}
+	const mediaDuration = file => {
+		const raw = file.length ?? file.fileLength;
+		const length = typeof raw === 'number' ? raw : typeof raw === 'string' ? raw.split(':').reduce((total, part) => total * 60 + (Number(part) || 0), 0) : 0;
+		return length > 0 && length <= 120 ? Math.ceil(length) + (Number.isInteger(length) ? 1 : 0) : 0;
+	};
+	for (const library of document.querySelectorAll('[data-music-animations]')) {
+		const list = library.querySelector('[data-animation-list]');
+		const status = library.querySelector('[data-animation-status]');
+		list.addEventListener('click', event => { const button = event.target.closest('[data-animation-remove]'); if (button) { button.closest('[data-animation-item]').remove(); status.textContent = 'Animation retirée de la sélection. Enregistrez les réglages pour mettre à jour les futurs interludes.'; } });
+		library.querySelector('[data-animation-add]').addEventListener('click', () => {
+			const frame = wp.media({ title: 'Ajouter des animations BSC', library: { type: 'video' }, multiple: true });
+			frame.on('select', () => {
+				const files = frame.state().get('selection').toJSON(); let added = 0;
+				for (const file of files) {
+					if (list.querySelector(`[data-id="${Number(file.id)}"]`) || list.children.length >= 50) continue;
+					const row = document.createElement('li'); row.dataset.animationItem = ''; row.dataset.id = String(Number(file.id)); row.dataset.url = file.url || ''; row.dataset.duration = String(mediaDuration(file));
+					const input = document.createElement('input'); input.type = 'hidden'; input.name = 'music[animation_ids][]'; input.value = row.dataset.id;
+					const name = document.createElement('span'); name.textContent = `${file.title || file.filename || 'Animation BSC'} · ${Number(row.dataset.duration) ? `${row.dataset.duration} s réservées` : 'durée à vérifier après enregistrement'}`;
+					const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'button'; remove.dataset.animationRemove = ''; remove.textContent = 'Retirer';
+					row.append(input, name, remove); list.append(row); added++;
+				}
+				status.textContent = `${added} animation(s) ajoutée(s). ${list.children.length >= 50 ? 'Limite de 50 vidéos personnalisées atteinte. ' : ''}Enregistrez les réglages pour les utiliser dans les futurs interludes.`;
+			}); frame.open();
+		});
+	}
 	for (const media of document.querySelectorAll('[data-music-media]')) {
 		const input = media.querySelector('input');
 		media.querySelector('[data-media-choose]').addEventListener('click', () => {
 			const frame = wp.media({ title: 'Choisir un fichier BSC', library: { type: media.dataset.type }, multiple: false });
 			frame.on('select', () => {
 				const file = frame.state().get('selection').first().toJSON();
-				input.value = file.id; media.dataset.url = file.url;
+				input.value = file.id; media.dataset.url = file.url; media.dataset.duration = String(mediaDuration(file));
 				media.querySelector('[data-media-name]').textContent = file.title || file.filename;
 			}); frame.open();
 		});
-		media.querySelector('[data-media-clear]').addEventListener('click', () => { input.value = '0'; media.dataset.url = ''; media.querySelector('[data-media-name]').textContent = 'Aucun fichier'; });
+		media.querySelector('[data-media-clear]').addEventListener('click', () => { input.value = '0'; media.dataset.url = ''; media.dataset.duration = '0'; media.querySelector('[data-media-name]').textContent = 'Aucun fichier'; });
 	}
 	let timer;
 	const screen = document.querySelector('[data-music-preview-screen]');
@@ -101,7 +126,11 @@
 		const identity = form.querySelector(`[name="music[${phase}_video]"]`)?.closest('[data-music-media]');
 		const logo = form.querySelector('[name="music[logo]"]')?.closest('[data-music-media]');
 		const bundled = form.querySelector('input[type="checkbox"][name="music[bundled_animation]"]')?.checked;
-		const animationURL = identity?.dataset.url || (bundled ? identity?.dataset.defaultUrl : '');
+		const library = form.querySelector('[data-music-animations]');
+		const choices = library ? [...library.querySelectorAll('[data-animation-item]'), ...(bundled ? [...library.querySelectorAll('[data-bundled-animation]')] : [])].filter(node => node.dataset.url && Number(node.dataset.duration) > 0) : [];
+		const choice = choices.length ? choices[Math.floor(Math.random() * choices.length)] : null;
+		const animationURL = identity?.dataset.url || choice?.dataset.url || '';
+		const duration = Number(identity?.dataset.url ? identity.dataset.duration : choice?.dataset.duration) || Math.max(1, Math.min(30, Number(value(phase)) || 3));
 		screen.replaceChildren(); screen.hidden = false; screen.style.backgroundColor = value('background'); screen.style.color = value('color');
 		if (animationURL) {
 			const video = document.createElement('video'); video.src = animationURL; video.muted = !form.elements.namedItem('music[sound]')?.checked; video.playsInline = true; video.controls = true; screen.append(video); video.play().catch(() => {});
@@ -111,7 +140,7 @@
 			if (checks?.checked) { const text = document.createElement('p'); text.textContent = value(`${phase}_text`); screen.append(text); }
 			screen.dataset.animation = value('animation');
 		}
-		timer = setTimeout(() => { screen.querySelector('video')?.pause(); screen.hidden = true; }, Math.max(1, Math.min(30, Number(value(phase)) || 3)) * 1000);
+		timer = setTimeout(() => { screen.querySelector('video')?.pause(); screen.hidden = true; }, duration * 1000);
 	});
 	for (const button of document.querySelectorAll('[data-music-delete]')) button.addEventListener('click', event => { if (!window.confirm('Mettre ce clip à la corbeille ?')) event.preventDefault(); });
 })();
