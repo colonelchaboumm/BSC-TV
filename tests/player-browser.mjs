@@ -24,7 +24,7 @@ class Element {
 }
 const root = new Element();
 root.dataset = { bscPlayer: 'https://bsc.example/wp-json/bsc-tv/v1/player', autoplay: '0', muted: '1' };
-const selectors = ['[data-player-mount]', '.bsc-player__screen', '[data-player-transition]', '[data-player-transition-video]', '[data-player-message]', '[data-player-join]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-times]', '[data-player-avatar]', '[data-player-poster]', '[data-player-profile]', '[data-player-next]', '[data-player-next-title]', '[data-player-next-time]', '[data-player-progress]'];
+const selectors = ['[data-player-mount]', '.bsc-player__screen', '[data-player-transition]', '[data-player-transition-video]', '[data-player-message]', '[data-player-pause]', '[data-player-controls]', '[data-player-mute]', '[data-player-volume]', '[data-player-volume-control]', '[data-player-toolbar]', '[data-player-meta]', '[data-player-source]', '[data-player-title]', '[data-player-creator]', '[data-player-times]', '[data-player-avatar]', '[data-player-poster]', '[data-player-profile]', '[data-player-next]', '[data-player-next-title]', '[data-player-next-time]', '[data-player-progress]'];
 root.nodes = new Map(selectors.map(selector => [selector, new Element()]));
 const transition = root.nodes.get('[data-player-transition]');
 const clip = root.nodes.get('[data-player-transition-video]');
@@ -61,6 +61,7 @@ class YouTubePlayer {
   constructor(id, options) { this.options = options; this.position = 0; this.seeks = []; this.destroyed = false; this.state = 2; youtubePlayers.push(this); queueMicrotask(() => options.events.onReady()); }
   seekTo(value) { this.position = value; this.seeks.push(value); }
   playVideo() { if (blocked) this.options.events.onAutoplayBlocked(); else if (!holdYouTube) { this.state = 1; this.options.events.onStateChange({ data: 1 }); } }
+  pauseVideo() { this.state = 2; this.options.events.onStateChange({ data: 2 }); }
   getPlayerState() { return this.state; }
   getCurrentTime() { return this.position; }
   mute() { this.muted = true; }
@@ -94,7 +95,7 @@ check(transition.hidden && !clip.src, 'The transition neither plays nor download
 check(root.nodes.get('[data-player-title]').textContent === 'Émission A', 'Metadata is populated without video playback');
 const poster = root.nodes.get('[data-player-poster]');
 check(!poster.hidden && poster.src === 'https://bsc.example/show-a.jpg', 'The programme image appears before joining without loading the video SDK');
-await root.nodes.get('[data-player-join]').fire('click');
+await root.nodes.get('[data-player-pause]').fire('click');
 await settle();
 const first = youtubePlayers[0];
 check(first.seeks[0] === 900 && first.muted, 'Late join seeks to server time and respects muted setting');
@@ -104,11 +105,11 @@ check(transition.hidden && clip.paused, 'YouTube PLAYING immediately hides and p
 first.options.events.onStateChange({ data: 3 });
 check(transition.hidden, 'Buffering an already started programme does not cover its picture or advertisements');
 check(first.options.playerVars.controls === 0 && first.options.playerVars.disablekb === 1 && first.options.playerVars.origin === 'https://bsc.example', 'Documented YouTube parameters remove the timeline and seeking shortcuts while retaining host identity');
-blocked = true;
-await root.nodes.get('[data-player-join]').fire('click');
-check(root.nodes.get('[data-player-message]').textContent.includes('navigateur'), 'Autoplay blocking gives actionable join message');
+blocked = true; first.state = 2;
+await root.nodes.get('[data-player-pause]').fire('click');
+check(root.nodes.get('[data-player-message]').textContent === '' && root.nodes.get('[data-player-pause]').dataset.state === 'play', 'Autoplay blocking keeps the play icon available without the removed banner');
 blocked = false;
-await root.nodes.get('[data-player-join]').fire('click');
+await root.nodes.get('[data-player-pause]').fire('click');
 check(root.nodes.get('[data-player-message]').textContent === '', 'User gesture can resume the official player');
 clockMs = 70000;
 first.position = 10;
@@ -117,7 +118,7 @@ check(first.seeks.at(-1) === 970, 'Clock drift beyond tolerance is corrected wit
 first.options.events.onError({ data: 150 });
 check(root.nodes.get('[data-player-message]').textContent.includes('150'), 'Unavailable video is reported with a source link');
 const playersBeforeRetry = youtubePlayers.length;
-await root.nodes.get('[data-player-join]').fire('click');
+await root.nodes.get('[data-player-pause]').fire('click');
 await settle();
 check(youtubePlayers.length === playersBeforeRetry + 1 && first.destroyed, 'Retry recreates a failed official player');
 clockMs = 2800000;
@@ -187,7 +188,7 @@ check(transition.hidden && clip.playCalls === gapPlayCount, 'A timed-out gap doe
 blocked = true;
 response = snapshot(programme('youtube:blocked', 'youtube', 'aqz-KE-bpKQ', { start: epoch + 6300, end: epoch + 9900 }));
 await document.fire('visibilitychange'); await settle();
-check(transition.hidden && root.nodes.get('[data-player-message]').textContent.includes('navigateur'), 'Blocked autoplay removes the transition so the official controls remain visible');
+check(transition.hidden && root.nodes.get('[data-player-message]').textContent === '' && !root.nodes.get('[data-player-controls]').hidden, 'Blocked autoplay removes the transition and banner while keeping the play icon visible');
 blocked = false; holdYouTube = true; rejectClip = true;
 response = snapshot(programme('youtube:clip-blocked', 'youtube', 'M7lc1UVf-VE', { start: epoch + 6300, end: epoch + 9900 }));
 await document.fire('visibilitychange'); await settle();
@@ -204,7 +205,7 @@ await clip.fire('error');
 check(transition.hidden && clip.paused, 'A broken animation source is hidden independently of the programme');
 response = { ...snapshot(null), enabled: false };
 await document.fire('visibilitychange'); await settle();
-check(root.nodes.get('[data-player-meta]').hidden && root.nodes.get('[data-player-join]').disabled, 'Disabling the antenna stops playback and hides old metadata');
+check(root.nodes.get('[data-player-meta]').hidden && root.nodes.get('[data-player-controls]').hidden, 'Disabling the antenna stops playback and hides old metadata and playback controls');
 check(poster.hidden && !poster.src, 'Disabling the antenna also removes its old poster');
 root.isConnected = false; intervals[0]();
 check(fetchCount > 0 && timeouts.size === 0, 'Detached Elementor widget releases its refresh timer');

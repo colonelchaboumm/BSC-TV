@@ -31,14 +31,13 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		$root = '{{WRAPPER}} .bsc-player';
 		$this->start_controls_section( 'player_content', array( 'label' => 'BSC TV 24/7' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre du widget', 'type' => Controls_Manager::TEXT, 'default' => 'BSC TV · Live 24/7' ) );
-		$this->add_control( 'join_label', array( 'label' => 'Bouton de synchronisation', 'type' => Controls_Manager::TEXT, 'default' => 'Rejoindre le direct TV' ) );
 		$this->add_control( 'logo', array( 'label' => 'Logo fixe BSC TV', 'type' => Controls_Manager::MEDIA ) );
 		foreach ( array( 'logo' => 'Logo BSC TV', 'avatar' => 'Avatar BSC BDD', 'poster' => 'Image de l’émission avant lecture', 'creator' => 'Nom du créateur', 'profile' => 'Lien vers sa fiche BSC BDD', 'title' => 'Titre de l’émission', 'next' => 'Programme suivant', 'progress' => 'Progression', 'times' => 'Horaires', 'on_air' => 'Badge ON AIR', 'live' => 'Badge LIVE', 'new' => 'Badge NOUVEAUTÉ', 'premiere' => 'Badge PREMIÈRE', 'replay' => 'Badge REDIFFUSION' ) as $key => $label ) {
 			$this->add_control( 'show_' . $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		}
 		$this->add_control( 'start_mode', array( 'label' => 'Démarrage de la vidéo', 'type' => Controls_Manager::SELECT, 'options' => array( 'auto' => 'Automatique quand le lecteur est visible', 'click' => 'Après un clic sur Lecture' ), 'default' => 'auto', 'description' => 'Le navigateur peut demander un clic pour autoriser la lecture avec le son.' ) );
 		$this->add_control( 'muted', array( 'label' => 'Démarrer sans son', 'description' => 'Désactivé par défaut : le son est actif. Un clic peut être nécessaire pour autoriser la lecture.', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => '' ) );
-		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation se règle dans BSC TV → Le live et les autorisations dans les fiches des chaînes et émissions. Les logos et métadonnées restent hors du lecteur officiel. Le bouton Lecture peut être nécessaire selon le navigateur.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
+		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation se règle dans BSC TV → Le live et les autorisations dans les fiches des chaînes et émissions. Les logos et métadonnées restent hors du lecteur officiel. L’icône Lecture permet de démarrer si le navigateur bloque la lecture automatique.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'player_transition', array( 'label' => 'Animation entre les programmes' ) );
@@ -64,7 +63,7 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		$this->add_control( 'transition_fit', array( 'label' => 'Cadrage de l’animation', 'type' => Controls_Manager::SELECT, 'options' => array( 'contain' => 'Afficher toute l’animation', 'cover' => 'Remplir l’écran' ), 'default' => 'contain', 'condition' => array( 'transition_enabled' => 'yes' ), 'selectors' => array( $root => '--bsc-player-transition-fit: {{VALUE}};' ) ) );
 		$this->size( 'gap', 'Espacements', '--bsc-player-gap', 0, 48 );
 		$this->size( 'radius', 'Arrondi du conteneur', '--bsc-player-radius', 0, 48 );
-		foreach ( array( 'surface' => 'Fond du widget', 'ink' => 'Titres et créateur', 'muted' => 'Horaires et messages', 'accent' => 'Bouton, liens et progression', 'live' => 'Badge et point LIVE' ) as $key => $label ) {
+		foreach ( array( 'surface' => 'Fond du widget', 'ink' => 'Titres et créateur', 'muted' => 'Horaires et messages', 'accent' => 'Commandes, liens et progression', 'live' => 'Badge et point LIVE' ) as $key => $label ) {
 			$this->add_control( 'color_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-player-' . $key . ': {{VALUE}};' ) ) );
 		}
 		foreach ( array( 'heading' => 'Titre du widget', 'show' => 'Titre de l’émission', 'creator' => 'Créateur', 'next' => 'Programme suivant', 'times' => 'Horaires', 'join' => 'Bouton' ) as $key => $label ) {

@@ -72,7 +72,6 @@
 @keyframes bsc-music-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes bsc-music-slide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .bsc-player__music-screen[data-animation] .bsc-player__music-identity { animation: none; } }
-.bsc-player__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-block-start: var(--bsc-player-gap); }
 .bsc-player__controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-block-start: 12px; font-size: .8125rem; }
 .bsc-player__playback-controls, .bsc-player__platform-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-inline-size: 0; }
 .bsc-player__platform-actions { flex-wrap: nowrap; max-inline-size: 100%; }
@@ -87,8 +86,6 @@
 .bsc-player__volume { display: flex; align-items: center; gap: 8px; margin: 0; }
 .bsc-player__volume input { inline-size: 100px; max-inline-size: 100%; min-block-size: 44px; margin: 0; accent-color: var(--bsc-player-accent); }
 .bsc-player:fullscreen { inline-size: 100%; block-size: 100%; overflow: auto; border-radius: 0; }
-.bsc-player .bsc-player__join { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-block-size: 44px; min-inline-size: 44px; padding: 10px 16px; border: 1px solid var(--bsc-player-accent); border-radius: 5px; background: var(--bsc-player-accent); color: #071412; font: inherit; font-size: .875rem; font-weight: 700; line-height: 1.2; cursor: pointer; }
-.bsc-player .bsc-player__join:hover { filter: brightness(1.1); }
 .bsc-player__source, .bsc-player__profile { font-size: .8125rem; }
 .bsc-player .bsc-player__message { margin: 10px 0 0; color: var(--bsc-player-muted); font-size: .8125rem; line-height: 1.5; }
 .bsc-player__meta { display: flex; align-items: center; gap: var(--bsc-player-gap); margin-block-start: var(--bsc-player-gap); }
@@ -104,5 +101,4 @@
 .bsc-player__next strong { flex: 1 1 180px; color: var(--bsc-player-ink); overflow-wrap: anywhere; }
 @media (max-width: 600px) {
 	.bsc-player__badges { flex-basis: 100%; }
-	.bsc-player__actions { align-items: flex-start; flex-direction: column; }
 }
