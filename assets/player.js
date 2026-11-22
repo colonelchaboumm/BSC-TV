@@ -52,6 +52,8 @@
 			this.button = root.querySelector('[data-player-join]');
 			this.transition = root.querySelector('[data-player-transition]');
 			this.transitionVideo = root.querySelector('[data-player-transition-video]');
+			this.musicScreen = root.querySelector('[data-music-screen]');
+			this.musicVideo = root.querySelector('[data-music-video]');
 			this.data = null;
 			this.clock = 0;
 			this.joined = false;
@@ -91,10 +93,13 @@
 			document.addEventListener('fullscreenchange', this.fullscreen);
 			root.querySelector('[data-player-avatar]')?.addEventListener('error', event => { event.target.hidden = true; });
 			root.querySelector('[data-player-poster]')?.addEventListener('error', event => { event.target.hidden = true; });
+			root.querySelector('[data-music-logo]')?.addEventListener('error', event => { event.target.hidden = true; });
 			this.transitionVideo?.addEventListener('error', () => { this.transitionBroken = true; this.stopTransition(); });
+			this.musicVideo?.addEventListener('loadedmetadata', () => this.musicVideoPosition());
+			this.musicVideo?.addEventListener('error', () => { this.musicVideo.hidden = true; });
 			this.visibility = () => {
-				if (document.hidden) this.pauseTransition();
-				else { this.claimAutoplay(); if (this.waitingForPlayback && this.transition?.hidden) this.showTransition(); this.request(); }
+				if (document.hidden) { this.pauseTransition(); this.musicVideo?.pause(); }
+				else { this.claimAutoplay(); if (this.waitingForPlayback && this.transition?.hidden) this.showTransition(); if (this.data?.current?.resource?.platform === 'identity') this.showMusic(this.data.current); this.request(); }
 			};
 			document.addEventListener('visibilitychange', this.visibility);
 			this.pulse = window.setInterval(() => this.tick(), 1000);
@@ -117,6 +122,7 @@
 		}
 
 		startTransition() {
+			if (this.data?.current?.music) return;
 			if (!this.transition || !this.transitionVideo || !this.joined || this.transitionBroken) return;
 			this.waitingForPlayback = true;
 			this.transitionDeadline = performance.now() + Math.max(5, Math.min(60, Number(this.transition.dataset.timeout) || 20)) * 1000;
@@ -147,6 +153,47 @@
 			try { this.transitionVideo?.pause(); } catch { /* A disabled animation has no media element. */ }
 		}
 		stopTransition() { this.waitingForPlayback = false; this.pauseTransition(); }
+		musicVideoPosition() {
+			const current = this.data?.current;
+			if (!this.musicVideo || current?.resource?.platform !== 'identity' || this.musicScreen?.hidden || current.end <= this.now()) return;
+			try {
+				const duration = this.musicVideo.duration;
+				this.musicVideo.currentTime = Math.max(0, Math.min(this.position(), Number.isFinite(duration) ? Math.max(0, duration - .1) : this.position()));
+			} catch { /* An unloaded local animation may not yet accept a position. */ }
+		}
+		showMusic(current) {
+			if (!this.musicScreen || current.end <= this.now()) return;
+			this.stopTransition();
+			this.mount.hidden = true;
+			this.musicScreen.hidden = false;
+			const identity = current.identity || {};
+			this.musicScreen.style.setProperty('--bsc-music-default-background', /^#[0-9a-f]{6}$/i.test(identity.background) ? identity.background : '#111116');
+			this.musicScreen.style.setProperty('--bsc-music-default-color', /^#[0-9a-f]{6}$/i.test(identity.color) ? identity.color : '#ffffff');
+			this.musicScreen.dataset.animation = ['fade', 'slide', 'none'].includes(identity.animation) ? identity.animation : 'fade';
+			const content = this.root.querySelector('[data-music-identity]');
+			content.style.animationDelay = `-${Math.max(0, this.position())}s`;
+			const logo = this.root.querySelector('[data-music-logo]');
+			const logoURL = safeURL(identity.logo);
+			logo.hidden = !logoURL;
+			if (logoURL) logo.src = logoURL; else logo.removeAttribute('src');
+			const text = this.root.querySelector('[data-music-text]');
+			text.hidden = !identity.show_text;
+			text.textContent = current.music_phase === 'entry' ? identity.entry_text || '' : identity.exit_text || '';
+			const videoURL = safeURL(current.music_phase === 'entry' ? identity.entry_video : identity.exit_video);
+			const reduced = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+			this.musicVideo.hidden = !videoURL || reduced;
+			if (!videoURL || reduced || document.hidden || !this.joined) { this.musicVideo.pause(); return; }
+			this.musicVideo.muted = !identity.sound || this.muted;
+			if (this.musicVideo.getAttribute('src') !== videoURL) this.musicVideo.src = videoURL;
+			this.musicVideoPosition();
+			const generation = this.generation;
+			try { this.musicVideo.play()?.catch(() => { if (generation === this.generation) this.musicVideo.hidden = true; }); } catch { this.musicVideo.hidden = true; }
+		}
+		stopMusic() {
+			if (this.musicScreen) this.musicScreen.hidden = true;
+			if (this.musicVideo) { this.musicVideo.pause(); this.musicVideo.removeAttribute('src'); this.musicVideo.load?.(); }
+			this.mount.hidden = false;
+		}
 		playing() { this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
 		ended(message) {
 			// Seeking to the end of a replay must not skip the shared programme.
@@ -221,7 +268,9 @@
 				window.clearTimeout(timeout);
 				this.loading = false;
 				const boundary = this.data?.current?.end || this.data?.next?.[0]?.start || 0;
-				const wait = boundary ? Math.max(5, Math.min(60, boundary - this.now() + .5)) : 60;
+				const remaining = boundary - this.now();
+				const minimum = this.data?.current?.music && remaining > 0 ? .5 : 5;
+				const wait = boundary ? Math.max(minimum, Math.min(60, remaining + .1)) : 60;
 				this.timer = window.setTimeout(() => this.request(), wait * 1000);
 			}
 		}
@@ -232,14 +281,15 @@
 			this.button.disabled = !current;
 			for (const badge of this.root.querySelectorAll('[data-player-badge]')) {
 				const name = badge.dataset.playerBadge;
-				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere : current[name]));
+				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere && !current.music : current[name]));
 			}
 			const source = this.root.querySelector('[data-player-source]');
 			const sourceURL = current ? safeURL(current.url) : '';
 			source.hidden = !sourceURL;
 			if (sourceURL) source.href = sourceURL; else source.removeAttribute('href');
-			this.text('[data-player-title]', current?.title);
-			this.text('[data-player-creator]', current?.creator);
+			const musicMeta = !current?.music || this.root.dataset.musicMeta !== '0';
+			this.text('[data-player-title]', musicMeta ? current?.title : '');
+			this.text('[data-player-creator]', musicMeta ? current?.creator : '');
 			this.text('[data-player-times]', current ? `${current.live ? 'En direct depuis' : 'À l’antenne'} ${time(current.start, this.data.timezone)}${current.end ? ` – ${time(current.end, this.data.timezone)}` : ''}` : '');
 			const avatar = this.root.querySelector('[data-player-avatar]');
 			if (avatar) {
@@ -282,6 +332,7 @@
 			}
 			this.tick();
 			if (current.end && this.now() >= current.end) return;
+			if (current.music && current.resource?.platform === 'identity') { this.showMusic(current); this.status(''); return; }
 			if (this.joined && !this.player && this.failedToken !== token && !this.starting) this.load(current, token);
 		}
 
@@ -445,6 +496,7 @@
 		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.controls(); this.status(message); }
 		destroy() {
 			this.stopTransition();
+			this.stopMusic();
 			window.clearTimeout(this.readyTimer);
 			this.generation += 1;
 			try {
