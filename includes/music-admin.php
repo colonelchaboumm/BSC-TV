@@ -178,7 +178,7 @@ final class BSC_TV_Music_Admin {
 		echo '</select></label></p>';
 	}
 	private static function media( $name, $label, $value, $type ) {
-		echo '<p data-music-media data-type="' . esc_attr( $type ) . '" data-url="' . esc_url( $value ? wp_get_attachment_url( $value ) : '' ) . '" data-default-url="' . esc_url( 'video' === $type ? BSC_TV_URL . 'assets/media/transition.mp4' : '' ) . '"><strong>' . esc_html( $label ) . '</strong><br><input type="hidden" name="music[' . esc_attr( $name ) . ']" value="' . esc_attr( $value ) . '"><span data-media-name>' . esc_html( $value ? get_the_title( $value ) : 'Aucun fichier' ) . '</span> <button type="button" class="button" data-media-choose>Choisir</button> <button type="button" class="button" data-media-clear>Retirer</button></p>';
+		echo '<p data-music-media data-type="' . esc_attr( $type ) . '" data-url="' . esc_url( $value ? wp_get_attachment_url( $value ) : '' ) . '" data-duration="' . esc_attr( 'video' === $type ? ( BSC_TV_Music::animation_asset( $value )['duration'] ?? 0 ) : 0 ) . '"><strong>' . esc_html( $label ) . '</strong><br><input type="hidden" name="music[' . esc_attr( $name ) . ']" value="' . esc_attr( $value ) . '"><span data-media-name>' . esc_html( $value ? get_the_title( $value ) : 'Aucun fichier' ) . '</span> <button type="button" class="button" data-media-choose>Choisir</button> <button type="button" class="button" data-media-clear>Retirer</button></p>';
 	}
 	public static function page() {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) ); }
@@ -191,7 +191,7 @@ final class BSC_TV_Music_Admin {
 		self::form( 'bsc_tv_music_settings' );
 		echo '<section id="music-general"><h2>Général</h2><p>Un seul clip au maximum après une émission strictement plus longue que le seuil. Aucun clip n’est fourni ou validé automatiquement.</p>';
 		self::checkbox( 'music[enabled]', 'Activer les interludes musicaux', $config['enabled'] );
-		self::input( 'music[threshold]', 'Seuil de durée d’émission, en minutes (strictement supérieur)', $config['threshold'], 'number', 'min="1" max="600" required' );
+		self::input( 'music[threshold]', 'Durée minimale d’émission, en minutes (incluse)', $config['threshold'], 'number', 'min="1" max="600" required' );
 		self::checkbox( 'music[flexible]', 'Autoriser l’insertion entre les émissions automatiques avec recalcul des horaires', $config['flexible'] );
 		echo '<p class="description">Sans cette option, seuls les espaces libres assez longs sont utilisés. Avec cette option, les choix automatiques sont repoussés du temps du clip et des animations, uniquement si la place restante avant le prochain horaire fixé le permet.</p>';
 		self::input( 'music[repeat_hours]', 'Délai minimal entre deux diffusions du même clip (heures)', $config['repeat_hours'], 'number', 'min="0" max="720" step="0.5"' );
@@ -207,10 +207,19 @@ final class BSC_TV_Music_Admin {
 			self::input( 'music[bands][' . $id . '][start]', 'Début', $band['start'], 'time', 'required' ); self::input( 'music[bands][' . $id . '][end]', 'Fin', $band['end'], 'time', 'required' );
 			self::select( 'music[bands][' . $id . '][category]', 'Jouer les clips de la catégorie', $band['category'], $names ); echo '</fieldset>';
 		}
-		echo '</section><section id="music-identity"><h2>Identité visuelle</h2><p>L’animation BSC incluse ou les médias choisis utilisent un écran distinct du lecteur YouTube. Sans animation ni logo, le fond et le texte facultatif forment une transition neutre.</p>';
-		self::media( 'logo', 'Logo officiel BSC', $config['logo'], 'image' ); self::media( 'entry_video', 'Vidéo d’entrée (facultative)', $config['entry_video'], 'video' ); self::media( 'exit_video', 'Vidéo de sortie (facultative)', $config['exit_video'], 'video' );
-		echo '<input type="hidden" name="music[bundled_animation]" value="0">'; self::checkbox( 'music[bundled_animation]', 'Utiliser l’animation Brewers Social Club déjà incluse si aucune vidéo personnalisée n’est choisie', $config['bundled_animation'] );
-		foreach ( array( 'entry' => 'Durée d’entrée (secondes)', 'exit' => 'Durée de sortie (secondes)' ) as $key => $label ) { self::input( 'music[' . $key . ']', $label, $config[ $key ], 'number', 'min="1" max="30" required' ); }
+		echo '</section><section id="music-identity"><h2>Identité visuelle</h2><p>Après une émission ayant atteint le seuil, les animations d’entrée et de sortie sont choisies aléatoirement pour l’interlude musical. Leur durée complète est réservée dans la grille. Le choix est partagé par tous les visiteurs.</p>';
+		self::media( 'logo', 'Logo officiel BSC', $config['logo'], 'image' );
+		echo '<input type="hidden" name="music[bundled_animation]" value="0">'; self::checkbox( 'music[bundled_animation]', 'Inclure les animations BSC fournies : Cirque et Lune', $config['bundled_animation'] );
+		echo '<div class="bsc-music-animations" data-music-animations><h3>Bibliothèque d’animations aléatoires</h3><p>BSC · Cirque et BSC · Lune durent environ 10 secondes (11 secondes réservées chacune). Ajoutez d’autres vidéos depuis la médiathèque pour varier les animations. Maximum : 50 vidéos personnalisées, de 120 secondes chacune.</p><input type="hidden" name="music[animation_ids][]" value="0"><ul data-animation-list>';
+		foreach ( $config['animation_ids'] as $animation_id ) {
+			$asset = BSC_TV_Music::animation_asset( $animation_id );
+			echo '<li data-animation-item data-id="' . esc_attr( $animation_id ) . '" data-url="' . esc_url( $asset['url'] ?? '' ) . '" data-duration="' . esc_attr( $asset['duration'] ?? 0 ) . '"><input type="hidden" name="music[animation_ids][]" value="' . esc_attr( $animation_id ) . '"><span>' . esc_html( get_the_title( $animation_id ) . ( $asset ? ' · ' . $asset['duration'] . ' s' : ' · vidéo ou durée non exploitable : ignorée' ) ) . '</span> <button type="button" class="button" data-animation-remove>Retirer</button></li>';
+		}
+		echo '</ul><button type="button" class="button" data-animation-add>Ajouter des animations</button><p data-animation-status role="status"></p><div data-bundled-animations hidden>';
+		foreach ( BSC_TV_Music::animations( array( 'bundled_animation' => true, 'animation_ids' => array() ) ) as $asset ) { echo '<span data-bundled-animation data-url="' . esc_url( $asset['url'] ) . '" data-duration="' . esc_attr( $asset['duration'] ) . '"></span>'; }
+		echo '</div></div><p>Les vidéos ci-dessous sont des remplacements fixes facultatifs. Retirez-les pour utiliser le tirage aléatoire sur la phase correspondante.</p>';
+		self::media( 'entry_video', 'Vidéo d’entrée fixe (facultative)', $config['entry_video'], 'video' ); self::media( 'exit_video', 'Vidéo de sortie fixe (facultative)', $config['exit_video'], 'video' );
+		foreach ( array( 'entry' => 'Durée d’entrée de secours (secondes)', 'exit' => 'Durée de sortie de secours (secondes)' ) as $key => $label ) { self::input( 'music[' . $key . ']', $label, $config[ $key ], 'number', 'min="1" max="30" required' ); }
 		self::input( 'music[background]', 'Fond', $config['background'], 'color' ); self::input( 'music[color]', 'Couleur du texte', $config['color'], 'color' );
 		self::select( 'music[animation]', 'Animation CSS', $config['animation'], array( 'fade' => 'Apparition douce', 'slide' => 'Glissement doux', 'none' => 'Sans mouvement' ) );
 		self::input( 'music[entry_text]', 'Texte d’entrée', $config['entry_text'] ); self::input( 'music[exit_text]', 'Texte de sortie', $config['exit_text'] );
@@ -277,8 +286,8 @@ final class BSC_TV_Music_Admin {
 		foreach ( array( 'inactive' => 'Clips inactifs', 'rights' => 'Autorisations ou référence à compléter', 'official' => 'Source officielle non confirmée', 'availability' => 'Disponibilité non confirmée ou bloquée', 'duration' => 'Durée absente ou hors limite', 'artist' => 'Artiste ou titre manquant' ) as $key => $label ) { echo '<li>' . esc_html( $label . ' : ' . $diagnostic['counts'][ $key ] ) . '</li>'; }
 		echo '</ul><p class="description">Un même clip peut avoir plusieurs points à compléter.</p><ul>';
 		foreach ( $diagnostic['categories'] as $category => $count ) { echo '<li>' . esc_html( $config['bands'][ $category ]['name'] . ' : ' . $count . ' clip(s) prêt(s)' ) . '</li>'; }
-		echo '</ul><p>' . esc_html( 'Durées intégrées à la grille : entrée ' . $config['entry'] . ' s + durée exacte du clip + sortie ' . $config['exit'] . ' s.' ) . '</p>';
-		echo '<p>' . esc_html( $config['bundled_animation'] ? 'Animation BSC incluse disponible ; les vidéos personnalisées restent prioritaires.' : 'Animation BSC incluse désactivée ; seuls les médias configurés ou l’identité CSS sont utilisés.' ) . '</p>';
+		echo '</ul><p>' . esc_html( 'La grille réserve la durée complète des animations choisies et du clip. Sans vidéo : entrée ' . $config['entry'] . ' s et sortie ' . $config['exit'] . ' s.' ) . '</p>';
+		echo '<p>' . esc_html( count( BSC_TV_Music::animations( $config ) ) . ' animation(s) disponible(s) pour le tirage aléatoire. Les remplacements fixes restent prioritaires.' ) . '</p>';
 		if ( $config['enabled'] && empty( BSC_TV_Sync::settings()['live_enabled'] ) ) { echo '<p class="notice notice-warning">Activez la vérification des directs dans BSC TV → Réglages et imports pour permettre leur détection et leur priorité sur la musique.</p>'; }
 		$stats = $state['music_stats'] ?? array(); uasort( $stats, static function ( $a, $b ) { return $b['last'] <=> $a['last']; } ); $last = reset( $stats );
 		echo '<p>Dernier clip diffusé : ' . esc_html( $last ? $last['artist'] . ' — ' . $last['title'] . ' · ' . wp_date( 'd/m H:i', $last['last'], new DateTimeZone( 'Europe/Paris' ) ) : 'aucun' ) . '</p>';

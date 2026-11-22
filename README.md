@@ -2,9 +2,11 @@
 
 Programme WordPress des directs craft beer. La mise en page reprend la une illustrée, le turquoise `#00d1b4`, le magenta `#bd009f` et les grands titres de BSC News. BSC BDD fournit le nom, l’avatar et le lien des créateurs associés.
 
-**Music Interludes**, facultatif et désactivé par défaut, ajoute des clips YouTube validés manuellement après une émission de plus de 40 minutes lorsque la grille le permet. Bibliothèque, horaires de Paris, autorisations, transitions et arrêt se gèrent dans **BSC TV → Music Interludes**. Le lecteur 24/7 et son horloge sont réutilisés, sans déplacer les horaires fixés. [Configuration, moteur, tests et retour arrière](MUSIC_INTERLUDES.md).
+**Music Interludes**, facultatif et désactivé par défaut, ajoute des clips YouTube validés manuellement après une émission d’au moins 40 minutes lorsque la grille le permet. Bibliothèque, horaires de Paris, autorisations, transitions et arrêt se gèrent dans **BSC TV → Music Interludes**. Le lecteur 24/7 et son horloge sont réutilisés, sans déplacer les horaires fixés. [Configuration, moteur, tests et retour arrière](MUSIC_INTERLUDES.md).
 
 **Validation groupée** permet de valider et activer les clips cochés, toute la bibliothèque ou une catégorie, avec une référence commune et les confirmations de l’administrateur pour le lot. Les clips techniquement bloqués ou incomplets restent exclus et un bilan explique les éléments ignorés. Les actions d’activation et de désactivation sont également disponibles en masse. [Mode d’emploi](MUSIC_INTERLUDES.md#validation-en-masse).
+
+Les animations BSC **Cirque** et **Lune** alternent dans les entrées et sorties des interludes après une émission de **40 minutes ou plus**. Leur durée complète est intégrée à la grille et le tirage est commun à tous les visiteurs. **Music Interludes → Identité visuelle → Ajouter des animations** permet d’en ajouter d’autres depuis la médiathèque. [Animations et fonctionnement](MUSIC_INTERLUDES.md#animations-et-lecteur).
 
 Dans **Music Interludes → Clips → Importer une playlist YouTube**, coller le lien d’une playlist et choisir une catégorie comme **BSC Morning Chill**. Les clips et métadonnées sont importés par lots avec reprise et détection des doublons. Les nouvelles références restent inactives jusqu’à leur validation manuelle. [Import de playlists](MUSIC_INTERLUDES.md#importer-une-playlist-dans-une-catégorie).
 

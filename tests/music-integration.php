@@ -15,7 +15,7 @@ require_once ABSPATH . 'wp-admin/includes/template.php';
 require_once dirname( __DIR__ ) . '/includes/music-admin.php';
 $checks = 0;
 function music_check( $condition, $message ) { global $checks; ++$checks; if ( ! $condition ) { throw new RuntimeException( $message ); } }
-function music_config( $changes = array() ) { return BSC_TV_Music::normalize( $changes + array( 'enabled' => true ) ); }
+function music_config( $changes = array() ) { return BSC_TV_Music::normalize( $changes + array( 'enabled' => true, 'bundled_animation' => false ) ); }
 function music_clip( $id, $artist, $region = 'us', $changes = array() ) {
 	return $changes + array( 'artist' => $artist, 'title' => 'Clip test ' . $id, 'year' => 1995, 'youtube_id' => $id, 'url' => 'https://www.youtube.com/watch?v=' . $id, 'duration' => 240, 'categories' => array( 'morning', 'day', 'evening', 'night' ), 'region' => $region, 'image' => 'https://example.com/music.jpg', 'channel' => 'Official test source', 'active' => true, 'official' => true, 'rights' => 'confirmed', 'rights_note' => 'Fixture only, no real music authorization.', 'availability' => 'available' );
 }
@@ -63,8 +63,8 @@ function music_state( $duration, $gap, $fixed = true ) {
 	$state['plan'] = array( array( 'id' => 'next-slot', 'key' => $other['key'], 'show_id' => $other['show_id'], 'resource' => $other['resource'], 'channel_id' => 2, 'premiere' => false, 'start' => $t + $gap, 'end' => $t + $gap + $other['duration'], 'fixed' => $fixed ) );
 	return $state;
 }
-foreach ( array( 120, 900, 2100, 2400 ) as $duration ) { $next = BSC_TV_Player::select_next( $pool, music_state( $duration, 400 ), $settings, $t ); music_check( empty( $next['music'] ), 'No music after ' . $duration . ' seconds' ); }
-foreach ( array( 2460, 5400 ) as $duration ) { $next = BSC_TV_Player::select_next( $pool, music_state( $duration, 400 ), $settings, $t ); music_check( ! empty( $next['music'] ), 'Long programme is eligible: ' . $duration ); }
+foreach ( array( 120, 900, 2100, 2399 ) as $duration ) { $next = BSC_TV_Player::select_next( $pool, music_state( $duration, 400 ), $settings, $t ); music_check( empty( $next['music'] ), 'No music after ' . $duration . ' seconds' ); }
+foreach ( array( 2400, 2460, 5400 ) as $duration ) { $next = BSC_TV_Player::select_next( $pool, music_state( $duration, 400 ), $settings, $t ); music_check( ! empty( $next['music'] ), 'Long programme is eligible: ' . $duration ); }
 $off = $settings; $off['music']['enabled'] = false;
 music_check( empty( BSC_TV_Player::select_next( $pool, music_state( 5400, 400 ), $off, $t )['music'] ), 'Disabled module adds no interlude' );
 music_check( empty( BSC_TV_Player::select_next( $pool, music_state( 5400, 245 ), $settings, $t )['music'] ), 'A gap one second too short does not truncate the clip' );

@@ -15,6 +15,9 @@
 .bsc-music-bulk { margin: 20px 0; padding: 16px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 6px; }
 .bsc-music-bulk [hidden] { display: none !important; }
 .bsc-music-bulk fieldset { margin-block: 16px; }
+.bsc-music-animations { padding: 16px; margin-block: 20px; border: 1px solid #c3c4c7; border-radius: 6px; background: #f6f7f7; }
+.bsc-music-animations [hidden] { display: none !important; }
+.bsc-music-animations li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-block: 6px; }
 .bsc-music-playlist { margin: 20px 0 28px; padding: 16px; border: 1px solid #c3c4c7; border-radius: 6px; background: #f6f7f7; }
 .bsc-music-playlist [hidden] { display: none !important; }
 .bsc-music-playlist progress { display: block; width: min(420px, 100%); }

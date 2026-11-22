@@ -1,6 +1,6 @@
 # BSC TV — Music Interludes
 
-Version 1.19.0, branche `feature/music-bulk-validation`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique est choisie aléatoirement côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
+Version 1.20.0, branche `feature/random-bsc-animations`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique et les animations d’identité sont choisies côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
 
 ## Architecture réutilisée
 
@@ -10,7 +10,7 @@ Le module ajoute une référence musicale dans cette même file. Un créneau mus
 
 ## Mise en service
 
-1. Installer le ZIP 1.19.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
+1. Installer le ZIP 1.20.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
 2. Ouvrir **BSC TV → Music Interludes**. Le lecteur général doit aussi être activé dans **BSC TV → Le live**.
 3. Ajouter des clips depuis leurs URL YouTube ou utiliser **Clips → Importer une playlist YouTube**. Compléter ou vérifier artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
 4. Si une clé YouTube est configurée dans les réglages existants, cocher **Récupérer les métadonnées**. À défaut, vérifier manuellement disponibilité et durée. Une vidéo officiellement signalée comme bloquée ne peut pas être débloquée avec la case manuelle.
@@ -67,12 +67,12 @@ La limite de bibliothèque reste de 500 clips. Un import traite au plus 50 pages
 | Réglage | Défaut / comportement |
 | --- | --- |
 | Activation générale | Désactivée ; bouton distinct d’arrêt des futurs interludes |
-| Seuil de durée | 40 minutes ; une émission doit être **strictement plus longue** que le seuil |
+| Seuil de durée | **40 minutes ou plus** ; la valeur du seuil est incluse |
 | Insertion flexible | Désactivée ; peut décaler le préfixe automatique si la place et les délais de rediffusion avant les horaires fixés le permettent |
 | Délai de rediffusion d’un clip | 6 heures, réglable entre 0 et 720 heures |
 | Désactivation en cours | Laisser terminer l’interlude ; interruption immédiate possible |
 | Arrivée d’un vrai direct | Interrompre la musique ; option explicite pour terminer d’abord l’interlude |
-| Entrée / sortie | 3 secondes chacune, réglables entre 1 et 30 secondes |
+| Entrée / sortie | Durée complète des vidéos choisies ; 11 secondes réservées pour Cirque et Lune. Sans durée vidéo connue : secours de 3 secondes, réglable de 1 à 30 |
 | Logo | Aucun ; média image officiel choisi par l’administrateur |
 | Animations | Animation Brewers Social Club déjà fournie dans le plugin, activée par défaut pour la musique ; les vidéos choisies restent prioritaires. Désactivable pour utiliser une identité CSS ou neutre |
 | Identité | Fond, texte, couleurs, textes d’entrée/sortie et son des fichiers d’animation |
@@ -91,7 +91,7 @@ Ces références ne sont pas des clips ajoutés ou validés. L’administrateur 
 
 ## Moteur et protection de la programmation
 
-- Après 2, 15, 35 ou 40 minutes, aucun interlude n’est sélectionné avec le réglage initial. Après 41 ou 90 minutes, il devient éligible si les autres conditions sont remplies.
+- Après 2, 15 ou 35 minutes, aucun interlude n’est sélectionné avec le réglage initial. Dès 40 minutes, puis après 41 ou 90 minutes, il devient éligible si les autres conditions sont remplies.
 - Le créneau doit contenir **entrée + clip intégral + sortie**. Un manque d’une seconde suffit à refuser l’insertion ; le clip n’est pas raccourci.
 - En mode normal, l’horaire du programme suivant reste identique. Le mode flexible peut repousser les émissions automatiques avant le prochain horaire fixé, dans la limite du temps disponible. Les émissions après cette limite ne sont pas déplacées. Les marges nécessaires aux rediffusions fixées ultérieures sont également protégées. Un manque de place annule le break, sans raccourcir la vidéo.
 - Les annonces de directs déjà connues dans les calendriers de chaînes constituent des limites supplémentaires : un nouvel interlude ne doit pas traverser leur heure de début. Un direct confirmé empêche le démarrage d’un nouvel interlude et ne sera jamais remplacé par la musique.
@@ -113,7 +113,15 @@ Elementor permet d’afficher/masquer les musiques, de masquer le détail des an
 
 ## Animations et lecteur
 
-Un visiteur arrivant pendant l’entrée ou la sortie rejoint la phase correspondant à l’horloge serveur. La vidéo Brewers Social Club fournie précédemment par l’utilisateur et déjà incluse est réutilisée par défaut pour les deux phases ; sa durée effective réservée reste réglable, initialement trois secondes. Elle n’est pas téléchargée de nouveau ni modifiée. Les vidéos de médiathèque sont prioritaires. Désactiver **Utiliser l’animation Brewers Social Club déjà incluse** permet de revenir au logo CSS ou au fond neutre. Le logo CSS utilise un délai négatif correspondant à la portion déjà écoulée. Un fichier d’animation se positionne à l’offset de la phase lorsque le navigateur le permet ; il est distinct du clip YouTube. Le module ne fabrique pas de logo.
+Les deux fichiers fournis **BSC-présentationcirque.mp4** et **BSC-presentationmoon.mp4** sont intégrés sans modification sous les noms `assets/media/ident-circus.mp4` et `assets/media/ident-moon.mp4`. Ils remplacent l’ancienne animation unique pour l’entrée et la sortie des interludes. Leur durée est d’environ 10,03 secondes ; la grille réserve 11 secondes pour laisser apparaître la dernière image. L’animation générale de chargement du lecteur reste distincte de ces phases programmées.
+
+Dans **BSC TV → Music Interludes → Identité visuelle**, **Inclure les animations BSC fournies : Cirque et Lune** active les deux références incluses. **Bibliothèque d’animations aléatoires → Ajouter des animations** ouvre la médiathèque WordPress et permet de sélectionner ou téléverser plusieurs vidéos. Jusqu’à 50 références personnalisées de 120 secondes chacune peuvent compléter le tirage ; les références dupliquées, sans durée exploitable, supprimées ou d’un autre type ne sont pas choisies. Les durées entières arrondies par WordPress reçoivent une seconde de réserve. **Retirer** enlève une animation de la sélection sans supprimer le fichier de la médiathèque. Enregistrer les réglages recalcule les futurs interludes en conservant le programme courant et les horaires fixés.
+
+Le tirage utilise la graine et l’horloge partagées. Avec plusieurs vidéos, l’entrée évite l’entrée précédente et la sortie évite l’animation d’entrée du même interlude. Les URL et durées choisies sont enregistrées dans chaque créneau ; elles ne changent pas selon le visiteur ou un rafraîchissement. Le total du créneau comprend les deux animations complètes et le clip musical. Un espace trop court ne tronque aucune vidéo.
+
+Les champs **Vidéo d’entrée fixe** et **Vidéo de sortie fixe** restent des remplacements explicites prioritaires : les retirer pour utiliser le tirage sur la phase concernée. Les durées de secours règlent le logo/fond ou une ancienne vidéo fixe sans durée connue. Sans animation ni logo, le fond et le texte facultatif constituent l’identité. Un visiteur arrivant pendant une phase rejoint son offset serveur ; le logo CSS utilise un délai négatif correspondant à la portion écoulée. Les aperçus d’entrée/sortie utilisent la sélection courante et sa durée complète.
+
+Validation locale de la version 1.20.0 : **251 contrôles ciblés** (107 du moteur musical, 46 de la grille et de la liste quotidienne, 20 dédiés aux animations, 38 de validation groupée, 21 du lecteur musical et 19 de l’import de playlists dans le navigateur), plus **68 vérifications dans un navigateur local** des animations réelles et de l’administration groupée à 1 280 et 390 pixels. Les deux MP4 se décodent dans Chrome ; sélection multiple, aperçu aléatoire, durées complètes, seuil exact de 40 minutes, persistance des choix, vidéos personnalisées et exclusions ont été vérifiés. Les fichiers intégrés ont été comparés octet par octet aux originaux. Aucun import ni clip de production n’a été modifié.
 
 Avant une identité, l’iframe précédente est détruite. Avant le clip, l’écran d’identité est retiré. Les identités musicales ne sont pas superposées à YouTube et ne remplacent pas une publicité par un faux écran. L’ancienne animation générale de chargement n’est pas relancée sur les phases musicales. Les erreurs tardives d’un lecteur précédent ne peuvent pas changer la nouvelle phase. La préférence de réduction des animations utilise l’identité statique.
 

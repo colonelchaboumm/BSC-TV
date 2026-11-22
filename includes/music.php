@@ -17,6 +17,8 @@ final class BSC_TV_Music {
 
 	public static function normalize( $input ) {
 		$input = (array) $input;
+		$animation_ids = array();
+		foreach ( array_slice( (array) ( $input['animation_ids'] ?? array() ), 0, 50 ) as $id ) { if ( is_scalar( $id ) && absint( $id ) ) { $animation_ids[ absint( $id ) ] = absint( $id ); } }
 		$bands = array();
 		$defaults = array( 'morning' => array( 'BSC Morning Chill', '06:00', '10:00' ), 'day' => array( 'BSC Hip-Hop Classics', '10:00', '18:00' ), 'evening' => array( 'BSC MTV Legends', '18:00', '00:00' ), 'night' => array( 'BSC Night Sessions', '00:00', '06:00' ) );
 		foreach ( $defaults as $id => $values ) {
@@ -30,6 +32,7 @@ final class BSC_TV_Music {
 			'live_policy' => 'finish' === ( $input['live_policy'] ?? '' ) ? 'finish' : 'interrupt',
 			'entry' => max( 1, min( 30, (int) ( $input['entry'] ?? 3 ) ) ), 'exit' => max( 1, min( 30, (int) ( $input['exit'] ?? 3 ) ) ),
 			'bundled_animation' => ! isset( $input['bundled_animation'] ) || ! empty( $input['bundled_animation'] ),
+			'animation_ids' => array_values( $animation_ids ),
 			'logo' => absint( $input['logo'] ?? 0 ), 'entry_video' => absint( $input['entry_video'] ?? 0 ), 'exit_video' => absint( $input['exit_video'] ?? 0 ),
 			'background' => sanitize_hex_color( $input['background'] ?? '' ) ?: '#111116', 'color' => sanitize_hex_color( $input['color'] ?? '' ) ?: '#ffffff',
 			'animation' => in_array( $input['animation'] ?? '', array( 'fade', 'slide', 'none' ), true ) ? $input['animation'] : 'fade',
@@ -82,6 +85,42 @@ final class BSC_TV_Music {
 	private static function media_url( $id, $type ) {
 		return $id && 0 === strpos( (string) get_post_mime_type( $id ), $type . '/' ) ? BSC_TV_Content::url( wp_get_attachment_url( $id ) ) : '';
 	}
+	public static function animation_asset( $id, $fallback = 0 ) {
+		if ( ! $id || 'attachment' !== get_post_type( $id ) || 'trash' === get_post_status( $id ) ) { return null; }
+		$url = self::media_url( $id, 'video' );
+		$metadata = $id ? (array) wp_get_attachment_metadata( $id ) : array();
+		$length = is_numeric( $metadata['length'] ?? null ) ? (float) $metadata['length'] : 0;
+		// WordPress may round video lengths to whole seconds; reserve the final frame too.
+		$duration = $length > 0 ? (int) ceil( $length ) + ( floor( $length ) === $length ? 1 : 0 ) : (int) $fallback;
+		return $url && $duration > 0 && $length <= 120 ? array( 'id' => $id, 'url' => $url, 'duration' => $duration, 'name' => get_the_title( $id ) ) : null;
+	}
+	public static function animations( $settings = null ) {
+		$settings = $settings ?? self::settings();
+		$choices = array();
+		if ( $settings['bundled_animation'] ) {
+			$choices[] = array( 'id' => 'circus', 'url' => BSC_TV_URL . 'assets/media/ident-circus.mp4', 'duration' => 11, 'name' => 'BSC · Cirque' );
+			$choices[] = array( 'id' => 'moon', 'url' => BSC_TV_URL . 'assets/media/ident-moon.mp4', 'duration' => 11, 'name' => 'BSC · Lune' );
+		}
+		foreach ( $settings['animation_ids'] ?? array() as $id ) {
+			$asset = self::animation_asset( $id );
+			if ( $asset && ! in_array( $asset['url'], array_column( $choices, 'url' ), true ) ) { $choices[] = $asset; }
+		}
+		return $choices;
+	}
+	private static function with_animations( $media, $state, $cursor, $seed ) {
+		$music = $media['music']; $choices = $music['animation_choices'] ?? array();
+		foreach ( array( 'entry', 'exit' ) as $phase ) {
+			if ( ! empty( $music['identity'][ $phase . '_video' ] ) || ! $choices ) { continue; }
+			$avoid = 'entry' === $phase ? ( $state['music_last_entry_animation'] ?? '' ) : ( $music['identity']['entry_video'] ?? '' );
+			$candidates = array_values( array_filter( $choices, static function ( $asset ) use ( $avoid ) { return $asset['url'] !== $avoid; } ) ) ?: $choices;
+			$asset = null; $best_rank = null; $salt = $seed . '|' . $cursor . '|' . $phase . '|' . $media['key'];
+			foreach ( $candidates as $candidate ) { $rank = hash( 'sha256', $salt . '|' . $candidate['url'] ); if ( null === $best_rank || strcmp( $rank, $best_rank ) < 0 ) { $asset = $candidate; $best_rank = $rank; } }
+			$music[ $phase ] = $asset['duration']; $music['identity'][ $phase . '_video' ] = $asset['url']; $music['identity'][ $phase . '_name' ] = $asset['name'];
+		}
+		unset( $music['animation_choices'] );
+		$media['music'] = $music; $media['duration'] = $music['duration'] + $music['entry'] + $music['exit'];
+		return $media;
+	}
 	public static function pool( $state = null ) {
 		$settings = self::settings();
 		if ( ! $settings['enabled'] ) {
@@ -89,19 +128,19 @@ final class BSC_TV_Music {
 			if ( empty( $state['vod']['music'] ) || 'finish' !== $settings['disable_policy'] ) { return array(); }
 		}
 		$identity = array_intersect_key( $settings, array_flip( array( 'background', 'color', 'animation', 'show_text', 'sound', 'entry_text', 'exit_text' ) ) );
-		$identity += array( 'logo' => self::media_url( $settings['logo'], 'image' ), 'entry_video' => self::media_url( $settings['entry_video'], 'video' ), 'exit_video' => self::media_url( $settings['exit_video'], 'video' ) );
-		if ( $settings['bundled_animation'] ) {
-			$identity['entry_video'] = $identity['entry_video'] ?: BSC_TV_URL . 'assets/media/transition.mp4';
-			$identity['exit_video'] = $identity['exit_video'] ?: BSC_TV_URL . 'assets/media/transition.mp4';
-		}
+		$entry = self::animation_asset( $settings['entry_video'], $settings['entry'] ); $exit = self::animation_asset( $settings['exit_video'], $settings['exit'] );
+		$identity += array( 'logo' => self::media_url( $settings['logo'], 'image' ), 'entry_video' => $entry['url'] ?? '', 'exit_video' => $exit['url'] ?? '' );
+		$choices = self::animations( $settings );
+		$minimum = $choices ? min( array_column( $choices, 'duration' ) ) : null;
+		$entry_duration = $entry['duration'] ?? $minimum ?? $settings['entry']; $exit_duration = $exit['duration'] ?? $minimum ?? $settings['exit'];
 		$pool = array();
 		foreach ( self::clips() as $id => $clip ) {
 			if ( ! self::approved( $clip ) ) { continue; }
 			$key = 'music:' . $id . ':' . $clip['youtube_id'];
 			if ( ! $settings['enabled'] && ( $state['vod']['key'] ?? '' ) !== $key ) { continue; }
 			$music = array_intersect_key( $clip, array_flip( array( 'artist', 'title', 'year', 'youtube_id', 'channel', 'image', 'duration', 'categories', 'region' ) ) );
-			$music += array( 'clip_id' => $id, 'entry' => $settings['entry'], 'exit' => $settings['exit'], 'identity' => $identity );
-			$pool[ $key ] = array( 'key' => $key, 'show_id' => 0, 'channel_id' => 0, 'creator_key' => 'music:' . strtolower( $clip['artist'] ), 'creator' => $clip['artist'], 'title' => $clip['title'], 'resource' => array( 'platform' => 'youtube', 'id' => $clip['youtube_id'] ), 'image' => $clip['image'] ?? '', 'duration' => $clip['duration'] + $settings['entry'] + $settings['exit'], 'published_at' => 0, 'premiere' => false, 'music' => $music );
+			$music += array( 'clip_id' => $id, 'entry' => $entry_duration, 'exit' => $exit_duration, 'identity' => $identity, 'animation_choices' => $choices );
+			$pool[ $key ] = array( 'key' => $key, 'show_id' => 0, 'channel_id' => 0, 'creator_key' => 'music:' . strtolower( $clip['artist'] ), 'creator' => $clip['artist'], 'title' => $clip['title'], 'resource' => array( 'platform' => 'youtube', 'id' => $clip['youtube_id'] ), 'image' => $clip['image'] ?? '', 'duration' => $clip['duration'] + $entry_duration + $exit_duration, 'published_at' => 0, 'premiere' => false, 'music' => $music );
 		}
 		return $pool;
 	}
@@ -109,7 +148,7 @@ final class BSC_TV_Music {
 	public static function between( $next, $pool, $state, $settings, $cursor ) {
 		$config = $settings['music'] ?? array();
 		$previous = $state['music_previous'] ?? $state['vod'] ?? null;
-		if ( ! $next || empty( $config['enabled'] ) || ! $previous || ! empty( $previous['music'] ) || ! empty( $next['music'] ) || ! empty( $state['live'] ) || ! empty( $state['manual'] ) || $previous['end'] !== $cursor || $previous['end'] - $previous['start'] <= $config['threshold'] * MINUTE_IN_SECONDS ) { return null; }
+		if ( ! $next || empty( $config['enabled'] ) || ! $previous || ! empty( $previous['music'] ) || ! empty( $next['music'] ) || ! empty( $state['live'] ) || ! empty( $state['manual'] ) || $previous['end'] !== $cursor || $previous['end'] - $previous['start'] < $config['threshold'] * MINUTE_IN_SECONDS ) { return null; }
 		$category = self::category( $cursor, $config );
 		if ( ! $category ) { return null; }
 		$space = self::space( $next, $state, $config, $cursor, $settings['repeat_hours'] ?? 0 );
@@ -117,13 +156,14 @@ final class BSC_TV_Music {
 		$candidates = array();
 		foreach ( $pool as $key => $media ) {
 			$clip = $media['music'] ?? null;
-			if ( ! $clip || ! in_array( $category, $clip['categories'] ?? array(), true ) || $media['duration'] > $space ) { continue; }
+			if ( ! $clip || ! in_array( $category, $clip['categories'] ?? array(), true ) ) { continue; }
+			$artist = strtolower( trim( $clip['artist'] ) ); $last = $state['music_rotation'][ $key ] ?? 0;
+			if ( $artist === ( $state['music_last_artist'] ?? '' ) || ( $last && $last + $config['repeat_hours'] * HOUR_IN_SECONDS > $cursor ) ) { continue; }
+			$media = self::with_animations( $media, $state, $cursor, $seed );
+			if ( $media['duration'] > $space ) { continue; }
 			$overlap = false;
 			foreach ( $media['music_deadlines'] ?? array() as $deadline ) { if ( $deadline >= $cursor && $deadline < $cursor + $media['duration'] ) { $overlap = true; break; } }
 			if ( $overlap ) { continue; }
-			$artist = strtolower( trim( $clip['artist'] ) );
-			$last = $state['music_rotation'][ $key ] ?? 0;
-			if ( $artist === ( $state['music_last_artist'] ?? '' ) || ( $last && $last + $config['repeat_hours'] * HOUR_IN_SECONDS > $cursor ) ) { continue; }
 			$prefer = 'day' === $category && in_array( $clip['region'] ?? '', array( 'us', 'fr' ), true ) && ( $clip['region'] ?? '' ) !== ( $state['music_last_region'] ?? '' );
 			$media['music']['category'] = $category;
 			$media['music']['category_label'] = $config['bands'][ $category ]['name'];
@@ -174,6 +214,7 @@ final class BSC_TV_Music {
 		$state['music_rotation'][ $slot['key'] ] = $slot['end'];
 		$state['music_last_artist'] = strtolower( trim( $slot['music']['artist'] ) );
 		$state['music_last_region'] = $slot['music']['region'] ?? '';
+		$state['music_last_entry_animation'] = $slot['music']['identity']['entry_video'] ?? '';
 		$state['music_rotation'] = array_slice( $state['music_rotation'], -500, null, true );
 	}
 	public static function tally( &$state, $slot, $now ) {
