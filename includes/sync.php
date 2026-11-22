@@ -530,6 +530,14 @@ final class BSC_TV_Sync {
 		}
 	}
 
+	/** Explicit administration / daily music verification; never called by a public snapshot. */
+	public static function music_metadata( $ids ) {
+		$key = self::settings()['youtube_key'] ?? '';
+		if ( ! $key ) { return new WP_Error( 'music_key', 'Clé YouTube absente. Renseignez les métadonnées et vérifiez manuellement la vidéo, ou configurez la clé existante.' ); }
+		list( $videos, $failed ) = self::yt_details( $key, array_slice( array_values( array_filter( $ids, static function ( $id ) { return is_string( $id ) && preg_match( '/^[\w-]{11}$/D', $id ); } ) ), 0, 50 ) );
+		return array( 'videos' => $videos, 'failed' => $failed );
+	}
+
 	private static function yt_details( $key, $video_ids ) {
 		$videos = array();
 		$failed = array();
@@ -816,15 +824,18 @@ final class BSC_TV_Sync {
 		}
 		$published = max( BSC_TV_Content::parse_date( $snippet['publishedAt'] ?? '', false ), BSC_TV_Content::parse_date( $detail['actualEndTime'] ?? '', false ) );
 		$age_restricted = 'ytAgeRestricted' === ( $item['contentDetails']['contentRating']['ytRating'] ?? '' ) ? true : ( isset( $item['contentDetails']['duration'] ) ? false : null );
+		$regions = $item['contentDetails']['regionRestriction'] ?? array();
+		$music_region = ( ! isset( $regions['allowed'] ) || in_array( 'FR', (array) $regions['allowed'], true ) ) && ! in_array( 'FR', (array) ( $regions['blocked'] ?? array() ), true );
 		$playable = $duration > 0 && ! empty( $item['status']['embeddable'] ) && 'public' === ( $item['status']['privacyStatus'] ?? '' ) && 'processed' === ( $item['status']['uploadStatus'] ?? 'processed' ) && 'none' === $flag;
 		// A complete public upload remains a replay when the daily metadata refresh reads it again.
 		if ( $playable ) { $status = 'ended'; $start = $start ?: $published; }
 		return self::event( $item['id'], $snippet['title'] ?? 'Direct YouTube', 'https://www.youtube.com/watch?v=' . $item['id'], $thumbnail, $start, $end > $start ? $end : 0 ) + array(
-			'status' => $status, 'channel_id' => $snippet['channelId'] ?? '', 'duration' => $duration,
+			'status' => $status, 'channel_id' => $snippet['channelId'] ?? '', 'channel_title' => $snippet['channelTitle'] ?? '', 'duration' => $duration,
 			'published_at' => $published,
 			'embeddable' => isset( $item['status']['embeddable'] ) ? (bool) $item['status']['embeddable'] : null,
 			'age_restricted' => $age_restricted,
 			'playable' => $playable && ! $age_restricted,
+			'music_available' => $playable && ! $age_restricted && $music_region,
 		);
 	}
 }

@@ -2,6 +2,8 @@
 
 Programme WordPress des directs craft beer. La mise en page reprend la une illustrée, le turquoise `#00d1b4`, le magenta `#bd009f` et les grands titres de BSC News. BSC BDD fournit le nom, l’avatar et le lien des créateurs associés.
 
+**Music Interludes**, facultatif et désactivé par défaut, ajoute des clips YouTube validés manuellement après une émission de plus de 40 minutes lorsque la grille le permet. Bibliothèque, horaires de Paris, autorisations, transitions et arrêt se gèrent dans **BSC TV → Music Interludes**. Le lecteur 24/7 et son horloge sont réutilisés, sans déplacer les horaires fixés. [Configuration, moteur, tests et retour arrière](MUSIC_INTERLUDES.md).
+
 ## Installation
 
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.

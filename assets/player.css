@@ -61,6 +61,17 @@
 .bsc-player__transition > img, .bsc-player__transition video { display: block; position: absolute; inset: 0; inline-size: 100%; block-size: 100%; object-fit: var(--bsc-player-transition-fit, contain); }
 .bsc-player__mount { z-index: 0; }
 .bsc-player__mount, .bsc-player__mount > div, .bsc-player__mount iframe { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; border: 0; }
+.bsc-player__music-screen { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; background: var(--bsc-player-music-background, var(--bsc-music-default-background, #111116)); color: var(--bsc-player-music-color, var(--bsc-music-default-color, #fff)); text-align: center; }
+.bsc-player__music-screen video { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; object-fit: contain; }
+.bsc-player__music-identity { padding: 24px; }
+.bsc-player .bsc-player__music-identity img { inline-size: var(--bsc-player-music-logo-size, 180px); max-inline-size: 90%; max-block-size: 65%; object-fit: contain; }
+.bsc-player .bsc-player__music-identity p { margin: 16px 0 0; color: inherit; font-size: clamp(1rem, 3vw, 1.8rem); }
+.bsc-player__music-screen[data-animation="fade"] .bsc-player__music-identity { animation: bsc-music-fade .65s both; }
+.bsc-player__music-screen[data-animation="slide"] .bsc-player__music-identity { animation: bsc-music-slide .65s both; }
+.bsc-player__badge--music { color: var(--bsc-player-music-badge, var(--bsc-player-accent)); }
+@keyframes bsc-music-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bsc-music-slide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .bsc-player__music-screen[data-animation] .bsc-player__music-identity { animation: none; } }
 .bsc-player__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-block-start: var(--bsc-player-gap); }
 .bsc-player__controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-block-start: 12px; font-size: .8125rem; }
 .bsc-player .bsc-player__controls button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; inline-size: 44px; min-block-size: 44px; padding: 10px; border: 1px solid var(--bsc-player-accent); border-radius: 5px; background: transparent; color: var(--bsc-player-ink); font: inherit; cursor: pointer; }

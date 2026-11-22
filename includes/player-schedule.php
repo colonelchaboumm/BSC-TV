@@ -51,11 +51,16 @@ final class BSC_TV_Player_Schedule {
 	/** Only values which affect selection; presentation updates do not reshuffle the queue. */
 	public static function signature( $pool, $settings ) {
 		$selection = array();
+		$has_music = false;
 		foreach ( $pool as $key => $media ) {
+			$has_music = $has_music || ! empty( $media['music'] );
 			$selection[ $key ] = array( $media['show_id'], $media['duration'], $media['published_at'], $media['channel_id'], $media['creator_key'], ! empty( $media['premiere'] ) );
 		}
 		ksort( $selection );
-		return hash( 'sha256', json_encode( array( 'mixed-v1', $selection, $settings['recent'], $settings['repeat_hours'], $settings['timezone'] ?? 'UTC' ) ) );
+		$signature = array( 'mixed-v1', $selection, $settings['recent'], $settings['repeat_hours'], $settings['timezone'] ?? 'UTC' );
+		// An untouched, disabled music module must preserve pre-existing automatic choices.
+		if ( ! empty( $settings['music']['enabled'] ) || $has_music ) { $signature[] = $settings['music'] ?? array(); }
+		return hash( 'sha256', json_encode( $signature ) );
 	}
 
 	public static function needs_refresh( $state, $pool, $settings, $now ) {
@@ -136,6 +141,7 @@ final class BSC_TV_Player_Schedule {
 
 	/** Pure projection: use the same selection and transition rules as the real player. */
 	public static function build( $state, $pool, $settings, $now ) {
+		if ( class_exists( 'BSC_TV_Music' ) ) { $state = BSC_TV_Music::reconcile( $state, $pool, $settings, $now ); }
 		$forecast = $state;
 		$forecast['plan'] = array_values( array_filter( $forecast['plan'] ?? array(), static function ( $row ) use ( $pool ) { return ! empty( $row['id'] ) && isset( $pool[ $row['key'] ] ); } ) );
 		// A live freezes the replay clock. Merely viewing the admin must not add its pause twice.
@@ -163,6 +169,7 @@ final class BSC_TV_Player_Schedule {
 			throw new InvalidArgumentException( 'Ce programme n’est plus modifiable : il a commencé ou a quitté la grille.' );
 		}
 		$row = $state['plan'][ $index ];
+		if ( ! empty( $row['music'] ) ) { throw new InvalidArgumentException( 'Gérez les interludes depuis BSC TV → Music Interludes.' ); }
 		if ( 'move' === $operation ) {
 			$minimum = max( $now, $index ? $state['plan'][ $index - 1 ]['end'] : ( $state['vod']['end'] ?? $now ) );
 			if ( $value < $minimum || $value >= $now + self::HOURS * HOUR_IN_SECONDS ) {
@@ -172,7 +179,7 @@ final class BSC_TV_Player_Schedule {
 			$state['plan'][ $index ]['start'] = $value;
 			$state['plan'][ $index ]['end'] += $delta;
 		} elseif ( 'replace' === $operation ) {
-			$matches = array_filter( $pool, static function ( $media ) use ( $value ) { return $media['show_id'] === $value; } );
+			$matches = array_filter( $pool, static function ( $media ) use ( $value ) { return empty( $media['music'] ) && $value > 0 && $media['show_id'] === $value; } );
 			if ( ! $matches ) { throw new InvalidArgumentException( 'Choisissez un replay disponible dans le catalogue du lecteur.' ); }
 			$media = reset( $matches );
 			$replacement = array_intersect_key( $media, array_fill_keys( array( 'show_id', 'key', 'resource', 'channel_id', 'premiere' ), true ) );
@@ -223,7 +230,7 @@ final class BSC_TV_Player_Schedule {
 		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'schedule_forbidden', 'Action réservée aux administrateurs.' ); }
 		$pool = BSC_TV_Player::media();
 		$settings = BSC_TV_Player::settings();
-		if ( ! in_array( $operation, array( 'next', 'clear', 'skip' ), true ) || ( 'next' === $operation && ! in_array( $id, array_column( $pool, 'show_id' ), true ) ) ) {
+		if ( ! in_array( $operation, array( 'next', 'clear', 'skip' ), true ) || ( 'next' === $operation && ( $id < 1 || ! in_array( $id, array_column( $pool, 'show_id' ), true ) ) ) ) {
 			return new WP_Error( 'schedule_invalid', 'Action ou replay de programmation indisponible.' );
 		}
 		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
@@ -245,10 +252,13 @@ final class BSC_TV_Player_Schedule {
 					update_option( BSC_TV_Player::STATE, $state, false );
 					return new WP_Error( 'schedule_stale', 'Le programme en cours a changé. Rechargez la page avant de passer au suivant.' );
 				}
-				BSC_TV_Player::shift_plan( $state, $now - $state['vod']['end'] );
-				$state['vod']['end'] = $now;
-				$state['history'][ $state['vod']['key'] ]['end'] = $now;
-				foreach ( $state['aired'] ?? array() as $index => $row ) { if ( empty( $row['live'] ) && $row['start'] <= $now && $row['end'] > $now ) { $state['aired'][ $index ]['end'] = $now; } }
+				if ( ! empty( $state['vod']['music'] ) ) { BSC_TV_Music::interrupt( $state, $now ); }
+				else {
+					BSC_TV_Player::shift_plan( $state, $now - $state['vod']['end'] );
+					$state['vod']['end'] = $now;
+					$state['history'][ $state['vod']['key'] ]['end'] = $now;
+					foreach ( $state['aired'] ?? array() as $index => $row ) { if ( empty( $row['live'] ) && $row['start'] <= $now && $row['end'] > $now ) { $state['aired'][ $index ]['end'] = $now; } }
+				}
 			}
 			$state['plan'] = self::build( $state, $pool, $settings, $now );
 			update_option( BSC_TV_Player::STATE, $state, false );

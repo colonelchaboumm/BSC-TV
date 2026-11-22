@@ -71,6 +71,7 @@ final class BSC_TV_Player_Daily {
 			$deadline = microtime( true ) + max( 30, min( 480, $budget ) );
 			$state = array();
 			try {
+				do_action( 'bsc_tv_player_daily_music' );
 				do {
 					$state = BSC_TV_Player_Import::run( true, $sync_lock );
 					if ( is_wp_error( $state ) ) { $report['error'] = $state->get_error_message(); break; }

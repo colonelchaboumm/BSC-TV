@@ -1,0 +1,22 @@
+.bsc-music-admin { max-width: 1240px; }
+.bsc-music-admin nav { margin: 16px 0; }
+.bsc-music-admin section { margin: 24px 0; padding: 16px 24px; background: #fff; border: 1px solid #dcdcde; border-radius: 6px; }
+.bsc-music-admin section:target { border-color: #2271b1; }
+.bsc-music-admin #music-schedule { display: flex; flex-wrap: wrap; gap: 16px; }
+.bsc-music-admin #music-schedule > h2, .bsc-music-admin #music-schedule > p { flex-basis: 100%; }
+.bsc-music-admin fieldset { flex: 1 1 220px; border: 1px solid #dcdcde; padding: 12px; min-width: 0; }
+.bsc-music-admin legend { font-weight: 600; }
+.bsc-music-admin .regular-text, .bsc-music-admin select, .bsc-music-admin textarea { max-width: 100%; box-sizing: border-box; }
+.bsc-music-admin .button { max-width: 100%; white-space: normal; height: auto; }
+.bsc-music-library { overflow-x: auto; }
+.bsc-music-library table { min-width: 700px; }
+.bsc-music-library .button { margin: 4px 0; }
+.bsc-music-admin [data-music-preview-screen] { min-height: 180px; padding: 24px; display: grid; place-content: center; text-align: center; }
+.bsc-music-admin [data-music-preview-screen][hidden] { display: none; }
+.bsc-music-admin [data-music-preview-screen] img { max-height: 120px; max-width: 100%; margin: auto; }
+.bsc-music-admin [data-music-preview-screen] video { width: min(640px, 100%); max-height: 360px; }
+.bsc-music-admin [data-animation="fade"] > * { animation: bsc-music-preview-fade .6s both; }
+.bsc-music-admin [data-animation="slide"] > * { animation: bsc-music-preview-slide .6s both; }
+@keyframes bsc-music-preview-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bsc-music-preview-slide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .bsc-music-admin [data-animation] > * { animation: none; } }
