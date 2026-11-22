@@ -1,6 +1,6 @@
 # BSC TV — Music Interludes
 
-Version 1.16.0, branche `feature/music-playlist-import`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist dans une catégorie. Aucune installation ni activation sur le site de production n’a été effectuée.
+Version 1.17.0, branche `feature/music-programme-grid`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist. La musique est choisie aléatoirement côté serveur, avec grille recalculée et affichage dans le widget quotidien. Aucune installation ni activation sur le site de production n’a été effectuée.
 
 ## Architecture réutilisée
 
@@ -10,14 +10,24 @@ Le module ajoute une référence musicale dans cette même file. Un créneau mus
 
 ## Mise en service
 
-1. Installer le ZIP 1.16.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
+1. Installer le ZIP 1.17.0 sur une installation de test et conserver une sauvegarde de la base et du plugin précédent.
 2. Ouvrir **BSC TV → Music Interludes**. Le lecteur général doit aussi être activé dans **BSC TV → Le live**.
 3. Ajouter des clips depuis leurs URL YouTube ou utiliser **Clips → Importer une playlist YouTube**. Compléter ou vérifier artiste, titre, durée exacte en secondes, catégories, origine US/France si pertinente et chaîne d’origine.
 4. Si une clé YouTube est configurée dans les réglages existants, cocher **Récupérer les métadonnées**. À défaut, vérifier manuellement disponibilité et durée. Une vidéo officiellement signalée comme bloquée ne peut pas être débloquée avec la case manuelle.
 5. Vérifier la source officielle, renseigner la référence ou note d’autorisation, choisir **Autorisations confirmées**, cocher la confirmation explicite et activer le clip. L’intégration YouTube disponible ne constitue pas cette autorisation. Un changement de vidéo exige une nouvelle confirmation.
 6. Configurer les horaires, l’identité et les politiques, puis activer le module. Prévoir au moins deux artistes différents pour maintenir l’alternance ; les règles peuvent volontairement laisser passer plusieurs émissions sans clip.
-7. Par défaut, seuls les espaces libres assez longs sont utilisés. Pour une antenne qui enchaîne uniquement des choix automatiques, activer **Autoriser l’insertion dans une rotation entièrement automatique sans horaire fixé**. Cette option reste désactivée par défaut.
+7. Par défaut, seuls les espaces libres assez longs sont utilisés. Pour insérer la musique dans une rotation automatique, utiliser **Programmer la musique aléatoire et recalculer la grille**. Cette action active les interludes et le mode flexible, renouvelle les choix futurs et réserve les durées complètes. Le programme en cours et les horaires fixés sont conservés. Elle ne valide aucun clip.
 8. Vérifier **BSC TV → Le live** et l’état musical. Activer la vérification habituelle des véritables directs dans les réglages de synchronisation pour permettre leur détection. La tâche Infomaniak quotidienne existante est conservée.
+
+## Contrôle du site et diagnostic de la bibliothèque
+
+Le 22 novembre 2026, les routes publiques de [l’antenne](https://brewerssocialclub.com/wp-json/bsc-tv/v1/player) et du [programme du jour](https://brewerssocialclub.com/wp-json/bsc-tv/v1/day?page_size=50&page=500) ont répondu HTTP 200. Au moment du contrôle, le programme quotidien contenait 24 entrées et aucun interlude musical ; les cinq transitions de l’antenne examinées enchaînaient directement les émissions. Il s’agit d’une observation préalable à cette mise à jour, pas d’une vérification après déploiement.
+
+L’utilisateur indique environ 429 références en bibliothèque. Les validations privées, l’activation de la musique et les médias sélectionnés n’ont pas pu être vérifiés : l’outil de contrôle a arrêté l’accès à Firefox, faute de prise en charge de sa politique d’URL sous Windows. Aucun autre moyen n’a été utilisé pour accéder à l’administration connectée. Aucune configuration de production n’a été modifiée.
+
+**Music Interludes → État actuel → Diagnostic de la programmation musicale** affiche désormais le total importé, les clips réellement prêts, les interludes planifiés et les éléments à compléter : activation, autorisations et référence, source officielle, disponibilité, durée, artiste/titre. Les raisons peuvent se cumuler. Le détail par catégorie et les durées d’entrée/sortie sont également visibles. Un total de 429 références ne signifie donc pas 429 clips diffusables.
+
+Après installation, vérifier le nombre **Prêt à diffuser**, puis utiliser le bouton de programmation. Le bilan annonce immédiatement combien de clips sont prêts et combien d’interludes ont été enregistrés. S’il reste zéro clip prêt, compléter les validations dans la bibliothèque. Les références non validées restent exclues.
 
 ## Importer une playlist dans une catégorie
 
@@ -46,13 +56,13 @@ La limite de bibliothèque reste de 500 clips. Un import traite au plus 50 pages
 | --- | --- |
 | Activation générale | Désactivée ; bouton distinct d’arrêt des futurs interludes |
 | Seuil de durée | 40 minutes ; une émission doit être **strictement plus longue** que le seuil |
-| Insertion flexible | Désactivée ; autorisée uniquement dans une file sans aucun horaire fixé |
+| Insertion flexible | Désactivée ; peut décaler le préfixe automatique si la place et les délais de rediffusion avant les horaires fixés le permettent |
 | Délai de rediffusion d’un clip | 6 heures, réglable entre 0 et 720 heures |
 | Désactivation en cours | Laisser terminer l’interlude ; interruption immédiate possible |
 | Arrivée d’un vrai direct | Interrompre la musique ; option explicite pour terminer d’abord l’interlude |
 | Entrée / sortie | 3 secondes chacune, réglables entre 1 et 30 secondes |
 | Logo | Aucun ; média image officiel choisi par l’administrateur |
-| Animations | CSS légère : apparition, glissement ou sans mouvement ; vidéo de médiathèque facultative pour chaque phase |
+| Animations | Animation Brewers Social Club déjà fournie dans le plugin, activée par défaut pour la musique ; les vidéos choisies restent prioritaires. Désactivable pour utiliser une identité CSS ou neutre |
 | Identité | Fond, texte, couleurs, textes d’entrée/sortie et son des fichiers d’animation |
 | Elementor | Badge MUSIC BREAK, affichage titre/artiste, fond et texte des transitions, couleur du badge, dimension du logo, typographie |
 
@@ -71,19 +81,27 @@ Ces références ne sont pas des clips ajoutés ou validés. L’administrateur 
 
 - Après 2, 15, 35 ou 40 minutes, aucun interlude n’est sélectionné avec le réglage initial. Après 41 ou 90 minutes, il devient éligible si les autres conditions sont remplies.
 - Le créneau doit contenir **entrée + clip intégral + sortie**. Un manque d’une seconde suffit à refuser l’insertion ; le clip n’est pas raccourci.
-- En mode normal, l’horaire du programme suivant reste identique. Le mode flexible peut repousser une file entièrement automatique du temps du break ; la présence d’un seul programme fixé, même plus loin dans la file, interdit ce déplacement. Cette règle volontairement conservatrice protège aussi les anciennes grilles.
+- En mode normal, l’horaire du programme suivant reste identique. Le mode flexible peut repousser les émissions automatiques avant le prochain horaire fixé, dans la limite du temps disponible. Les émissions après cette limite ne sont pas déplacées. Les marges nécessaires aux rediffusions fixées ultérieures sont également protégées. Un manque de place annule le break, sans raccourcir la vidéo.
 - Les annonces de directs déjà connues dans les calendriers de chaînes constituent des limites supplémentaires : un nouvel interlude ne doit pas traverser leur heure de début. Un direct confirmé empêche le démarrage d’un nouvel interlude et ne sera jamais remplacé par la musique.
 - Par défaut, l’arrivée d’un direct interrompt l’interlude ; celui-ci n’est pas repris après le direct. Le choix **Terminer** peut retarder l’accès au direct de la durée restante du clip et de la sortie. La priorité aux directs s’applique lorsque la musique est active, même si la priorité facultative de la rotation normale était désactivée ; leur détection existante doit être opérationnelle.
 - Le choix est effectué côté serveur : clips actifs, source officielle et autorisations confirmées avec note, disponibilité connue, durée positive de 3 600 secondes au maximum et catégorie de Paris correspondant au **début de l’interlude**.
-- Les artistes consécutifs identiques sont exclus. Le clip diffusé le moins récemment est préféré, avec alternance US/France pour la catégorie hip-hop quand des candidats existent. Le délai du même clip reste prioritaire. Aucun candidat compatible signifie aucune musique.
+- Les artistes consécutifs identiques sont exclus. Le tirage utilise une graine enregistrée dans l’antenne, l’heure du créneau et les identifiants éligibles ; il privilégie les clips encore non diffusés et l’alternance US/France dans la catégorie hip-hop, puis mélange les candidats. Les délais de rediffusion restent prioritaires. Aucun candidat compatible signifie aucune musique.
 - Les compteurs sont conservés dans l’horloge commune : dernier passage et nombre de diffusions. L’entrée seule ne compte pas comme clip diffusé. Les projections futures ne modifient pas les compteurs réels.
 - Une révocation de droits, une désactivation du clip ou une indisponibilité confirmée retire la référence. Le retrait d’une source courante interrompt son interlude ; l’option « terminer à la désactivation » ne permet pas de continuer une source retirée.
 
 Les interventions musicales utilisent le même verrou que l’antenne. En cas d’interruption, seuls les programmes automatiques avant le prochain horaire fixé peuvent utiliser le temps libéré ; les horaires fixés sont conservés. Le bouton Passer de la page Le live applique également cette règle aux interludes. Les clips ne passent pas par la file manuelle des émissions.
 
+Les choix musicaux sont enregistrés dans `plan` ; aucun visiteur ne fait son propre tirage. La graine `music_seed` persiste dans l’horloge commune. Un simple rafraîchissement ne remélange pas les morceaux. Le bouton de recalcul renouvelle cette graine sous verrou, retire les anciens interludes futurs et reconstruit les horaires avec les durées actuelles d’entrée, de vidéo et de sortie. Une modification des réglages musicaux recalcule également les créneaux futurs. Les compteurs de diffusion et le programme courant restent conservés.
+
+## Musiques dans le programme de la journée
+
+Le widget Elementor existant **Programme de la journée** inclut par défaut les interludes présents dans l’antenne commune : titre, artiste, miniature, lien réel du clip et badge **MUSIC BREAK**, sans fausse fiche BSC BDD ni badge LIVE. La même plage réserve l’entrée, la vidéo complète et la sortie. Une note indique les horaires précis du clip et les secondes d’animation BSC ; les émissions suivantes utilisent les horaires recalculés.
+
+Elementor permet d’afficher/masquer les musiques, de masquer le détail des animations, de personnaliser le libellé et la couleur du badge, et de choisir la précision des heures. Le défaut affiche les secondes pour la musique et les minutes pour les émissions. Le chargement initial reste limité à cinq entrées futures plus celle en cours ; **Afficher plus** inclut les morceaux supplémentaires. Masquer les musiques dans le widget ne modifie pas l’antenne ni les horaires des émissions. La grille d’administration Le live identifie également les breaks et détaille leurs durées.
+
 ## Animations et lecteur
 
-Un visiteur arrivant pendant l’entrée ou la sortie rejoint la phase correspondant à l’horloge serveur. Le logo CSS utilise un délai négatif correspondant à la portion déjà écoulée. Un fichier d’animation se positionne à l’offset de la phase lorsque le navigateur le permet ; il est distinct du clip YouTube. Sans logo, le fond et le texte facultatif forment une transition neutre. Le module ne fabrique pas de logo.
+Un visiteur arrivant pendant l’entrée ou la sortie rejoint la phase correspondant à l’horloge serveur. La vidéo Brewers Social Club fournie précédemment par l’utilisateur et déjà incluse est réutilisée par défaut pour les deux phases ; sa durée effective réservée reste réglable, initialement trois secondes. Elle n’est pas téléchargée de nouveau ni modifiée. Les vidéos de médiathèque sont prioritaires. Désactiver **Utiliser l’animation Brewers Social Club déjà incluse** permet de revenir au logo CSS ou au fond neutre. Le logo CSS utilise un délai négatif correspondant à la portion déjà écoulée. Un fichier d’animation se positionne à l’offset de la phase lorsque le navigateur le permet ; il est distinct du clip YouTube. Le module ne fabrique pas de logo.
 
 Avant une identité, l’iframe précédente est détruite. Avant le clip, l’écran d’identité est retiré. Les identités musicales ne sont pas superposées à YouTube et ne remplacent pas une publicité par un faux écran. L’ancienne animation générale de chargement n’est pas relancée sur les phases musicales. Les erreurs tardives d’un lecteur précédent ne peuvent pas changer la nouvelle phase. La préférence de réduction des animations utilise l’identité statique.
 
@@ -103,7 +121,7 @@ Module désactivé sans break en cours : aucun accès à la bibliothèque ni vé
 
 ## Vérifications effectuées
 
-**649 contrôles locaux** : les 580 contrôles précédents, 50 vérifications WordPress/API de l’import de playlists et 19 scénarios de son interface AJAX. Les tests utilisent une copie SQLite jetable de WordPress, Elementor et BSC BDD. API et SDK sont simulés. Les scénarios couvrent aussi les 25 points du cahier des charges : limites de durée, activation, tranches, trois phases et retours, arrivées tardives, visiteurs multiples, absence de validation, indisponibilité, manque d’espace, directs, désactivation, Elementor, grilles et changements d’heure. Les formulaires et le contrôleur AJAX sont exercés avec capacités et nonces WordPress.
+**695 contrôles locaux** : les 649 précédents et 46 vérifications du choix aléatoire partagé, du recalcul avec protection des horaires fixés et des délais de rediffusion, des changements de durée, du diagnostic et des morceaux dans le widget quotidien. Les tests utilisent une copie SQLite jetable de WordPress, Elementor et BSC BDD. API et SDK sont simulés. Les scénarios couvrent aussi les 25 points du cahier des charges : limites de durée, activation, tranches, trois phases et retours, arrivées tardives, visiteurs multiples, absence de validation, indisponibilité, manque d’espace, directs, désactivation, Elementor, grilles et changements d’heure. Les formulaires et le contrôleur AJAX sont exercés avec capacités et nonces WordPress.
 
 L’import vérifie notamment la pagination, la reprise après réponse perdue, les droits d’accès, les jetons et sessions d’administrateurs, les doublons, les catégories multiples, la conservation des réglages existants, les restrictions nouvelles, les erreurs réseau et de métadonnées, les verrous, les réponses qui se répètent et la bibliothèque à sa limite de 500 clips. L’interface arrête une réponse qui n’avance pas au lieu de boucler.
 
@@ -112,6 +130,7 @@ php tests/music-integration.php /chemin/wordpress-de-test
 node tests/music-browser.mjs
 php tests/music-playlist.php /chemin/wordpress-de-test
 node tests/music-playlist-browser.mjs
+php tests/music-grid.php /chemin/wordpress-de-test
 php tests/player-clock.php
 php tests/player-integration.php /chemin/wordpress-de-test
 php tests/player-import.php /chemin/wordpress-de-test
@@ -124,7 +143,7 @@ node tests/day-browser.mjs
 node tests/badge-browser.mjs
 ```
 
-L’aperçu local de l’entrée, du clip, de la sortie et de l’émission suivante ainsi que l’administration ont été vérifiés à 1 200 et 390 pixels, sans débordement horizontal. Le parcours réel du formulaire de playlist (coller l’URL, choisir Morning Chill, traiter plusieurs pages, consulter la progression et ouvrir la bibliothèque) a également été contrôlé dans un navigateur local aux deux largeurs, avec réponses API simulées. Les tests ne constituent ni une validation des droits réels ni une preuve de lecture de chaque clip sur YouTube. Deux avertissements Elementor préexistants peuvent apparaître dans la fixture PHP 8.4.
+L’aperçu local de l’entrée, du clip, de la sortie et de l’émission suivante ainsi que l’administration ont été vérifiés à 1 200 et 390 pixels, sans débordement horizontal. Le formulaire d’import, la liste quotidienne avec morceaux et pagination AJAX, les notes de durée, le diagnostic et la prévisualisation de l’animation incluse ont également été contrôlés sur des fixtures locales aux deux largeurs. Ces contrôles locaux n’utilisent pas la session Firefox du site. Les tests ne constituent ni une validation des droits réels ni une preuve de lecture de chaque clip sur YouTube. Deux avertissements Elementor préexistants peuvent apparaître dans la fixture PHP 8.4.
 
 ## Limites techniques
 
@@ -145,3 +164,5 @@ Ajouts : `includes/music.php`, `includes/music-admin.php`, `assets/music-admin.j
 Adaptations : `bsc-tv.php`, `includes/player.php`, `includes/player-schedule.php`, `includes/player-daily.php`, `includes/player-admin.php`, `includes/player-view.php`, `includes/player-widget.php`, `includes/sync.php`, `assets/player.js`, `assets/player.css`, `README.md` et `LIVE_PLAYER.md`.
 
 La version 1.16.0 ajoute `includes/music-playlist.php`, `tests/music-playlist.php` et `tests/music-playlist-browser.mjs`, avec adaptation de l’administration musicale, de son script, de ses styles et de l’accès YouTube existant. Pour revenir de 1.16.0 à 1.15.0, réinstaller le ZIP précédent : les références importées restent des clips ordinaires de la bibliothèque ; l’état de reprise inutilisé expire après 24 heures.
+
+La version 1.17.0 ajoute `tests/music-grid.php` et adapte le moteur musical, son administration, l’horloge/programmation, le widget quotidien et ses styles. Les clips et notes d’autorisation existants restent conservés. Pour revenir à 1.16.0, désactiver les futurs interludes avec la politique d’interruption souhaitée, sauvegarder puis réinstaller le ZIP précédent ; les réglages de présentation supplémentaires et la graine musicale sont ignorés par l’ancienne version.

@@ -73,9 +73,11 @@
 		const value = name => form.elements.namedItem(`music[${name}]`)?.value;
 		const identity = form.querySelector(`[name="music[${phase}_video]"]`)?.closest('[data-music-media]');
 		const logo = form.querySelector('[name="music[logo]"]')?.closest('[data-music-media]');
+		const bundled = form.querySelector('input[type="checkbox"][name="music[bundled_animation]"]')?.checked;
+		const animationURL = identity?.dataset.url || (bundled ? identity?.dataset.defaultUrl : '');
 		screen.replaceChildren(); screen.hidden = false; screen.style.backgroundColor = value('background'); screen.style.color = value('color');
-		if (identity?.dataset.url) {
-			const video = document.createElement('video'); video.src = identity.dataset.url; video.muted = !form.elements.namedItem('music[sound]')?.checked; video.playsInline = true; video.controls = true; screen.append(video); video.play().catch(() => {});
+		if (animationURL) {
+			const video = document.createElement('video'); video.src = animationURL; video.muted = !form.elements.namedItem('music[sound]')?.checked; video.playsInline = true; video.controls = true; screen.append(video); video.play().catch(() => {});
 		} else {
 			if (logo?.dataset.url) { const image = document.createElement('img'); image.src = logo.dataset.url; image.alt = 'Logo officiel BSC'; screen.append(image); }
 			const checks = form.querySelector('input[type="checkbox"][name="music[show_text]"]');

@@ -6,6 +6,8 @@ Programme WordPress des directs craft beer. La mise en page reprend la une illus
 
 Dans **Music Interludes → Clips → Importer une playlist YouTube**, coller le lien d’une playlist et choisir une catégorie comme **BSC Morning Chill**. Les clips et métadonnées sont importés par lots avec reprise et détection des doublons. Les nouvelles références restent inactives jusqu’à leur validation manuelle. [Import de playlists](MUSIC_INTERLUDES.md#importer-une-playlist-dans-une-catégorie).
 
+**Programmer la musique aléatoire et recalculer la grille** choisit les morceaux dans l’antenne commune et réserve leur durée complète avec les animations BSC d’entrée/sortie. Les émissions automatiques sont recalées lorsque les horaires fixés le permettent. Le programme du jour affiche également les musiques, leurs artistes et leurs horaires. Un diagnostic distingue le total importé des clips effectivement prêts à diffuser.
+
 ## Installation
 
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.

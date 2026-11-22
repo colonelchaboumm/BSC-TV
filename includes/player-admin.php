@@ -244,6 +244,10 @@ final class BSC_TV_Player_Admin {
 						$media = $pool[ $row['key'] ] ?? array();
 						$title = $row['title'] ?? $media['title'] ?? get_the_title( $row['show_id'] ?? 0 );
 						$channel = ! empty( $row['channel_id'] ) ? get_the_title( $row['channel_id'] ) : ( $media['creator'] ?? 'Créateur non renseigné' );
+						if ( ! empty( $row['music'] ) ) {
+							$title = 'MUSIC BREAK · ' . $row['music']['artist'] . ' — ' . $row['music']['title'];
+							$channel = sprintf( 'Animation BSC %d s + clip %d s + animation BSC %d s', $row['music']['entry'], $row['music']['duration'], $row['music']['exit'] );
+						}
 						$editable = 'future' === $row['phase'] && ! empty( $row['id'] ) && empty( $row['music'] ); ?>
 						<?php if ( null !== $previous_end && $row['display_start'] > max( $previous_end, $now ) && empty( $snapshot['current']['live'] ) ) : ?><tr class="bsc-player-grid-gap"><td colspan="4"><?php echo esc_html( 'Pause de programmation · ' . wp_date( 'H:i:s', max( $previous_end, $now ) ) . ' → ' . wp_date( 'H:i:s', $row['display_start'] ) ); ?></td></tr><?php endif; ?>
 						<tr class="bsc-player-phase-<?php echo esc_attr( $row['phase'] ); ?>"><td class="bsc-player-grid-time"><?php echo esc_html( wp_date( 'H:i:s', $row['display_start'] ) . ' → ' . ( $row['end'] ? wp_date( 'H:i:s', $row['display_end'] ) : 'En direct' ) ); ?><?php if ( $row['continued'] ) : ?><br><small>Suite du programme précédent</small><?php endif; ?></td><td><strong><?php echo esc_html( $title ?: 'Émission retirée' ); ?></strong><br><?php echo esc_html( $channel ); ?></td><td><?php echo esc_html( 'current' === $row['phase'] ? ( ! $snapshot['enabled'] ? 'Préparé' : ( ! empty( $row['live'] ) ? '● LIVE' : 'En cours' ) ) : ( 'past' === $row['phase'] ? 'Diffusé' : 'À venir' ) ); ?></td><td class="bsc-player-grid-actions"><?php if ( $editable ) : ?><a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'move' ) ); ?>">Décaler</a> <a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'replace' ) ); ?>">Remplacer</a><?php else : ?>—<?php endif; ?></td></tr>
