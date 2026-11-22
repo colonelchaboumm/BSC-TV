@@ -226,9 +226,20 @@
 		}
 
 		controls() {
+			const current = this.data?.enabled ? this.data.current : null;
+			const platform = current?.resource?.platform;
+			const available = this.ready && !!this.player && this.failedToken !== this.token && ['youtube', 'twitch'].includes(platform);
+			const toolbar = this.root.querySelector('[data-player-toolbar]');
+			if (toolbar) toolbar.hidden = !available && !safeURL(current?.url);
+			const fullscreen = this.root.querySelector('[data-player-fullscreen]');
+			if (fullscreen) {
+				fullscreen.hidden = !available || !document.fullscreenEnabled || !this.root.requestFullscreen;
+				const expanded = document.fullscreenElement === this.root;
+				this.control('[data-player-fullscreen]', expanded ? 'Quitter le plein écran' : 'Plein écran', expanded ? 'collapse' : 'expand');
+			}
 			const controls = this.root.querySelector('[data-player-controls]');
 			if (!controls) return;
-			controls.hidden = !this.ready || this.failedToken === this.token || this.data?.current?.resource.platform !== 'youtube';
+			controls.hidden = !available || platform !== 'youtube';
 			if (controls.hidden) return;
 			try {
 				const playing = this.player.getPlayerState() === window.YT.PlayerState.PLAYING;
@@ -237,10 +248,6 @@
 				this.control('[data-player-mute]', this.muted ? 'Activer le son' : 'Couper le son', this.muted ? 'muted' : 'sound');
 				mute.setAttribute('aria-pressed', String(this.muted));
 				this.root.querySelector('[data-player-volume]').value = this.volume;
-				const fullscreen = this.root.querySelector('[data-player-fullscreen]');
-				fullscreen.hidden = !document.fullscreenEnabled || !this.root.requestFullscreen;
-				const expanded = document.fullscreenElement === this.root;
-				this.control('[data-player-fullscreen]', expanded ? 'Quitter le plein écran' : 'Plein écran', expanded ? 'collapse' : 'expand');
 			} catch { /* SDK state may be unavailable during replacement. */ }
 		}
 
@@ -287,6 +294,12 @@
 			const sourceURL = current ? safeURL(current.url) : '';
 			source.hidden = !sourceURL;
 			if (sourceURL) source.href = sourceURL; else source.removeAttribute('href');
+			const provider = current?.resource?.platform;
+			const providerName = provider === 'youtube' ? 'YouTube' : provider === 'twitch' ? 'Twitch' : '';
+			source.setAttribute('aria-label', providerName ? `Regarder sur ${providerName} (nouvel onglet)` : 'Regarder sur la plateforme');
+			for (const icon of this.root.querySelectorAll('[data-player-provider]')) {
+				if (sourceURL && icon.dataset.playerProvider === provider) icon.removeAttribute('hidden'); else icon.setAttribute('hidden', '');
+			}
 			const musicMeta = !current?.music || this.root.dataset.musicMeta !== '0';
 			this.text('[data-player-title]', musicMeta ? current?.title : '');
 			this.text('[data-player-creator]', musicMeta ? current?.creator : '');
