@@ -25,7 +25,7 @@
 		</div>
 	</div>
 	<div class="bsc-player__actions">
-		<button class="bsc-player__join" type="button" data-player-join aria-label="<?php echo esc_attr( $join_label ?: 'Lire le programme BSC TV' ); ?>"><svg class="bsc-player__play-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M7 4v16l13-8z"/></svg><?php if ( $join_label ) : ?><span><?php echo esc_html( $join_label ); ?></span><?php endif; ?></button>
+		<button class="bsc-player__join" type="button" data-player-join aria-label="<?php echo esc_attr( $join_label ?: 'Lire le programme BSC TV' ); ?>"><span><?php echo esc_html( $join_label ?: 'Lire le programme BSC TV' ); ?></span></button>
 	</div>
 	<p class="bsc-player__message" data-player-message role="status" aria-live="polite">Chargement du programme…</p>
 	<div class="bsc-player__meta" data-player-meta hidden>
