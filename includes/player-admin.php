@@ -9,6 +9,7 @@ final class BSC_TV_Player_Admin {
 		add_action( 'add_meta_boxes', array( __CLASS__, 'boxes' ) );
 		add_action( 'save_post', array( __CLASS__, 'save_media' ), 30, 2 );
 		add_action( 'admin_post_bsc_tv_player_settings', array( __CLASS__, 'save_settings' ) );
+		add_action( 'admin_post_bsc_tv_player_compose', array( __CLASS__, 'compose' ) );
 		add_action( 'admin_post_bsc_tv_player_queue', array( __CLASS__, 'queue' ) );
 		add_action( 'admin_post_bsc_tv_player_schedule', array( __CLASS__, 'schedule' ) );
 		add_action( 'admin_post_bsc_tv_player_import', array( __CLASS__, 'import_replays' ) );
@@ -27,7 +28,7 @@ final class BSC_TV_Player_Admin {
 
 	public static function page() {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) ); }
-		echo '<div class="wrap"><h1>Le live</h1><p><a href="#bsc-player-grid">Programmation</a> · <a href="#bsc-tv-player-settings">Réglages du lecteur</a> · <a href="#bsc-player-import">Import Infomaniak</a></p>';
+		echo '<div class="wrap"><h1>Le live</h1><p><a href="#bsc-player-grid">Programmation</a> · <a href="#bsc-player-diversity">Diversité et musique</a> · <a href="#bsc-tv-player-settings">Réglages du lecteur</a> · <a href="#bsc-player-import">Import Infomaniak</a></p>';
 		self::section();
 		echo '</div>';
 	}
@@ -111,12 +112,65 @@ final class BSC_TV_Player_Admin {
 		$previous = BSC_TV_Player::settings();
 		$input = (array) wp_unslash( $_POST['bsc_player'] ?? array() );
 		$settings = array( 'enabled' => ! empty( $input['enabled'] ), 'live_priority' => ! empty( $input['live_priority'] ), 'recent' => in_array( $input['recent'] ?? '', array( 'strong', 'balanced', 'rotation' ), true ) ? $input['recent'] : 'strong', 'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ), 'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ) );
+		$settings['max_channel_streak'] = max( 0, min( 10, (int) ( $input['max_channel_streak'] ?? 3 ) ) );
+		$settings['enrich_archives'] = ! empty( $input['enrich_archives'] );
 		update_option( BSC_TV_Player::SETTINGS, $settings, false );
 		if ( $settings['enabled'] && ! $previous['enabled'] ) {
 			BSC_TV_Sync::queue( BSC_TV_Sync::DAILY_NOW );
 		}
 		self::message( 'Réglages du lecteur 24/7 enregistrés.' );
 		self::redirect();
+	}
+	public static function compose_programme() {
+		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'compose_forbidden', 'Action réservée aux administrateurs.' ); }
+		require_once __DIR__ . '/music-admin.php';
+		$ready = count( array_filter( BSC_TV_Music::clips(), array( 'BSC_TV_Music', 'approved' ) ) );
+		return BSC_TV_Music_Admin::change( static function () use ( $ready ) {
+			$player = (array) get_option( BSC_TV_Player::SETTINGS, array() );
+			$player['recent'] = 'rotation'; $player['max_channel_streak'] = 3; $player['enrich_archives'] = true;
+			update_option( BSC_TV_Player::SETTINGS, $player, false );
+			$music = BSC_TV_Music::settings();
+			if ( $ready ) { $music['enabled'] = true; $music['flexible'] = true; update_option( BSC_TV_Music::SETTINGS, $music, false ); }
+			delete_transient( BSC_TV_Player::CACHE );
+		}, true, true, true );
+	}
+	public static function compose() {
+		self::authorize( 'bsc_tv_player_compose' );
+		$result = self::compose_programme();
+		self::message( is_wp_error( $result ) ? $result->get_error_message() : 'Grille recomposée : chaînes et archives variées, clips validés selon leurs horaires et animations BSC. Le programme courant et les horaires fixés sont conservés. L’enrichissement des replays se fera au prochain import quotidien Infomaniak.' );
+		self::redirect( 'bsc-player-diversity' );
+	}
+	private static function diversity( $pool, $state, $settings ) {
+		$counts = array(); $planned = array(); $music_slots = 0;
+		foreach ( $pool as $media ) { if ( empty( $media['music'] ) ) { $counts[ $media['channel_id'] ] = ( $counts[ $media['channel_id'] ] ?? 0 ) + 1; } }
+		$bounds = BSC_TV_Player::day_bounds( time(), wp_timezone_string(), 3 );
+		foreach ( array_merge( ! empty( $state['vod'] ) ? array( $state['vod'] ) : array(), $state['plan'] ?? array() ) as $row ) {
+			if ( $row['start'] >= $bounds[1] || ( $row['end'] ?? 0 ) <= time() ) { continue; }
+			if ( ! empty( $row['music'] ) ) { ++$music_slots; continue; }
+			$id = $pool[ $row['key'] ]['channel_id'] ?? $row['channel_id'] ?? 0; $planned[ $id ] = ( $planned[ $id ] ?? 0 ) + 1;
+		}
+		$channels = get_posts( array( 'post_type' => BSC_TV_Content::CHANNEL, 'post_status' => array( 'publish', 'draft', 'pending', 'private', 'future' ), 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$music = BSC_TV_Music::diagnostic( $state );
+		echo '<section id="bsc-player-diversity"><h2>Diversité du catalogue et musique</h2><p>' . esc_html( count( $channels ) . ' chaîne(s) enregistrée(s), ' . count( array_filter( $counts ) ) . ' source(s) avec des replays utilisables. ' . $music['counts']['ready'] . ' clip(s) musical(aux) prêt(s), ' . $music_slots . ' interlude(s) prévu(s) sur les trois journées affichées.' ) . '</p>';
+		echo '<p>' . esc_html( $settings['music']['flexible'] ? 'Les clips peuvent être insérés dans les programmes automatiques en respectant leurs catégories et horaires.' : 'La musique utilise uniquement les espaces libres : une grille sans pause ne peut donc pas accueillir de clip.' ) . '</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="bsc_tv_player_compose">'; wp_nonce_field( 'bsc_tv_player_compose' );
+		echo '<p><button class="button button-primary">Recomposer avec les chaînes et la musique</button></p><p class="description">Utilise toutes les archives disponibles, limite les séries à trois programmes d’une même chaîne quand une autre est disponible, et active l’insertion des clips déjà validés. Les tranches musicales, animations, validations et horaires fixés sont conservés.</p></form>';
+		echo '<details><summary>Comprendre pourquoi certaines chaînes ne passent pas</summary><div class="bsc-player-grid-scroll"><table class="widefat striped"><thead><tr><th scope="col">Chaîne</th><th scope="col">Replays utilisables</th><th scope="col">Passages prévus</th><th scope="col">Diagnostic</th></tr></thead><tbody>';
+		$api = BSC_TV_Sync::settings();
+		foreach ( $channels as $post ) {
+			$data = BSC_TV_Content::data( $post->ID ); $config = (array) get_post_meta( $post->ID, BSC_TV_Player::CHANNEL, true ); $report = (array) get_post_meta( $post->ID, BSC_TV_Player_Import::REPORT, true ); $reason = '';
+			if ( 'publish' !== $post->post_status || $post->post_password ) { $reason = 'Chaîne non publique : exclue de la diffusion.'; }
+			elseif ( ! in_array( $data['platform'] ?? '', array( 'youtube', 'twitch' ), true ) ) { $reason = 'Cette plateforme ne fournit pas de replays intégrables au lecteur.'; }
+			elseif ( ! BSC_TV_Content::channel_key( $data['platform'], $data['url'] ?? '' ) ) { $reason = 'URL ou identifiant de chaîne non reconnu.'; }
+			elseif ( isset( $config['replays'] ) && ! $config['replays'] ) { $reason = 'Replays désactivés pour cette chaîne.'; }
+			elseif ( empty( $counts[ $post->ID ] ) ) {
+				$missing = 'youtube' === $data['platform'] ? empty( $api['youtube_key'] ) : empty( $api['twitch_id'] ) || empty( $api['twitch_secret'] );
+				$reason = $missing ? 'Identifiants API de la plateforme manquants.' : ( $report['error'] ?? '' );
+				$reason = $reason ?: ( empty( $report['at'] ) ? 'Aucun import de replays terminé pour cette chaîne.' : ( empty( $report['done'] ) ? 'Import encore en cours : la progression est conservée pour le prochain passage quotidien.' : 'Aucun replay éligible dans le catalogue : vérifier disponibilité, durée et autorisations de la chaîne.' ) );
+			} else { $reason = 'Disponible pour la rotation.'; }
+			echo '<tr><td>' . esc_html( get_the_title( $post ) ) . '</td><td>' . esc_html( $counts[ $post->ID ] ?? 0 ) . '</td><td>' . esc_html( $planned[ $post->ID ] ?? 0 ) . '</td><td>' . esc_html( $reason ) . '</td></tr>';
+		}
+		echo '</tbody></table></div></details></section>';
 	}
 
 	public static function queue() {
@@ -287,6 +341,7 @@ final class BSC_TV_Player_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_queue"><input type="hidden" name="operation" value="skip"><input type="hidden" name="current_key" value="<?php echo esc_attr( $snapshot['current']['key'] . ':' . ( $snapshot['current']['interlude_start'] ?? $snapshot['current']['start'] ) ); ?>"><?php wp_nonce_field( 'bsc_tv_player_queue' ); ?><button class="button" type="submit">Passer au programme suivant</button></form>
 		<?php endif; ?>
 		<?php self::grid( $prepared, $pool, $snapshot ); ?>
+		<?php self::diversity( $pool, $prepared, $settings ); ?>
 		<p><?php echo esc_html( sprintf( '%d replay(s) utilisable(s).', count( array_filter( $pool, static function ( $item ) { return empty( $item['music'] ); } ) ) ) ); ?> <a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . BSC_TV_Content::SHOW ) ); ?>">Gérer les émissions et les archives</a></p>
 		<?php if ( count( array_unique( array_map( array( 'BSC_TV_Player', 'mix_channel' ), $pool ) ) ) < 2 ) : ?><p class="notice notice-info">L’alternance nécessite au moins deux chaînes avec des replays utilisables. Consultez les résultats d’import par chaîne ci-dessous.</p><?php endif; ?>
 		<?php if ( $pool ) : ?>
@@ -306,6 +361,8 @@ final class BSC_TV_Player_Admin {
 				</select></p>
 				<?php self::field( 'repeat_hours', 'Délai minimum avant la rediffusion d’un même replay (heures)', $settings['repeat_hours'], 'number', 'min="0" max="168" step="0.5"' ); ?>
 				<?php self::field( 'tolerance', 'Tolérance de synchronisation (secondes)', $settings['tolerance'], 'number', 'min="3" max="30"' ); ?>
+				<?php self::field( 'max_channel_streak', 'Maximum de programmes consécutifs de la même chaîne (0 : sans limite)', $settings['max_channel_streak'], 'number', 'min="0" max="10"' ); ?>
+				<p><label><input type="checkbox" name="bsc_player[enrich_archives]" value="1" <?php checked( $settings['enrich_archives'] ); ?>> Enrichir les chaînes peu fournies : jusqu’à 12 mois d’archives pour atteindre environ huit replays utilisables par chaîne.</label></p>
 				<?php submit_button( 'Enregistrer le lecteur 24/7' ); ?>
 			</form>
 		</section>

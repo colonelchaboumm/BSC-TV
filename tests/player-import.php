@@ -31,7 +31,7 @@ foreach ( array( BSC_TV_Content::SHOW, BSC_TV_Content::CHANNEL ) as $type ) {
 delete_option( BSC_TV_Player_Import::STATE );
 delete_option( BSC_TV_Player::STATE );
 delete_transient( BSC_TV_Player::CACHE );
-update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => false, 'repeat_hours' => 0, 'recent' => 'strong' ) );
+update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => false, 'repeat_hours' => 0, 'recent' => 'strong', 'enrich_archives' => false ) );
 update_option( BSC_TV_Sync::SETTINGS, array( 'youtube_key' => 'fixture-youtube-key', 'twitch_id' => 'fixture-client-id', 'twitch_secret' => 'fixture-client-secret', 'live_enabled' => false ) );
 $now = time();
 $remote_channel = 'UC' . str_repeat( 'a', 22 );
@@ -113,7 +113,7 @@ add_filter( 'pre_http_request', static function ( $pre, $args, $url ) use ( &$re
 	if ( null === $body ) { ++$unexpected; throw new RuntimeException( 'Unexpected HTTP endpoint ' . $host . $path ); }
 	return array( 'response' => array( 'code' => 200 ), 'body' => wp_json_encode( $body ) );
 }, 10, 3 );
-update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => true, 'repeat_hours' => 0, 'recent' => 'strong' ) );
+update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => true, 'repeat_hours' => 0, 'recent' => 'strong', 'enrich_archives' => false ) );
 import_check( ! wp_next_scheduled( BSC_TV_Player_Import::JOB ), 'Activation no longer schedules historical import in WP-Cron' );
 wp_clear_scheduled_hook( BSC_TV_Player_Import::JOB );
 BSC_TV_Player_Import::schedule();
@@ -135,10 +135,12 @@ $request_count = count( $requests );
 BSC_TV_Player::snapshot();
 import_check( $request_count === count( $requests ), 'Public playback still makes no platform API calls' );
 BSC_TV_Player_Import::run( true );
+import_check( isset( BSC_TV_Player::media()['twitch:v101'] ), 'Other channels are scanned before the first channel consumes its next page' );
+BSC_TV_Player_Import::run( true );
 import_check( isset( BSC_TV_Player::media()['youtube:beer0000018'] ) && get_option( BSC_TV_Player_Import::STATE )['pending'][ $youtube ]['cursor'] === 'old-page', 'Next cron worker resumes the saved page and imports an older video inside the two-month window' );
 BSC_TV_Player_Import::run( true );
-import_check( ! isset( get_option( BSC_TV_Player_Import::STATE )['pending'][ $youtube ] ) && ! isset( BSC_TV_Player::media()['youtube:beer0000019'] ), 'A page older than the two-month window ends that channel scan' );
 BSC_TV_Player_Import::run( true );
+import_check( ! isset( get_option( BSC_TV_Player_Import::STATE )['pending'][ $youtube ] ) && ! isset( BSC_TV_Player::media()['youtube:beer0000019'] ), 'A page older than the two-month window ends that channel scan' );
 $pool = BSC_TV_Player::media();
 import_check( isset( $pool['twitch:v101'] ) && 3723 === $pool['twitch:v101']['duration'], 'Twitch VODs receive exact official durations and participate in automatic playback' );
 import_check( 5 === count( $pool ) && ! isset( $pool['twitch:v103'] ), 'Active Twitch broadcasts, expired dates, private items, wrong owner and invalid durations are not imported' );
@@ -148,7 +150,6 @@ $edited = BSC_TV_Content::data( $twitch_show );
 foreach ( array( 'duration', 'published_at', 'playable', 'embeddable' ) as $field ) { unset( $edited[ $field ] ); }
 update_post_meta( $twitch_show, BSC_TV_Content::DATA, $edited );
 import_check( isset( BSC_TV_Player::media()['twitch:v101'] ), 'A later editorial save does not lose Twitch replay metadata' );
-BSC_TV_Player_Import::run( true );
 $state = get_option( BSC_TV_Player_Import::STATE );
 import_check( ! $state['pending'] && ! empty( $state['finished_at'] ) && ! wp_next_scheduled( BSC_TV_Player_Import::JOB ), 'Completed recovery clears its continuation event and records a report' );
 import_check( $on_air === get_option( BSC_TV_Player::STATE )['vod'], 'Later batches never interrupt or restart the already broadcasting programme' );
@@ -167,7 +168,7 @@ BSC_TV_Player_Import::request();
 import_check( ! wp_next_scheduled( BSC_TV_Player_Import::JOB ), 'Legacy manual requests do not recreate a WP-Cron import' );
 delete_option( BSC_TV_Player_Import::STATE );
 $fail_youtube = true;
-for ( $step = 0; $step < 3; ++$step ) { BSC_TV_Player_Import::run( true ); }
+for ( $step = 0; $step < 8; ++$step ) { $progress = BSC_TV_Player_Import::run( true ); if ( ! isset( $progress['pending'][ $youtube ] ) ) { break; } }
 $report = get_post_meta( $youtube, BSC_TV_Player_Import::REPORT, true );
 import_check( ! empty( $report['error'] ) && 1 === get_option( BSC_TV_Player_Import::STATE )['errors'] && ! isset( get_option( BSC_TV_Player_Import::STATE )['pending'][ $youtube ] ), 'API failures retry three times and report the failure without blocking the other channels' );
 $fail_youtube = false;
@@ -203,6 +204,9 @@ foreach ( array( 0, $administrators[0] ) as $user_id ) {
 remove_filter( 'wp_die_handler', $die_handler );
 unset( $_REQUEST['_wpnonce'] );
 wp_set_current_user( 0 );
+$disabled_test = get_option( BSC_TV_Player_Import::STATE );
+$disabled_test['pending'] = array( $twitch => array( 'key' => BSC_TV_Player_Import::channels()[ $twitch ]['key'], 'cursor' => '', 'pages' => 0, 'attempts' => 0, 'seen' => array(), 'created' => 0, 'updated' => 0, 'skipped' => 0 ) );
+update_option( BSC_TV_Player_Import::STATE, $disabled_test, false );
 $lock = BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
 $before_lock = get_option( BSC_TV_Player_Import::STATE );
 $request_count = count( $requests );
@@ -226,7 +230,7 @@ update_option( BSC_TV_Sync::SETTINGS, array() );
 import_check( ! BSC_TV_Player_Import::channels(), 'Missing API credentials are not treated as a successful compatible source' );
 import_check( 0 === $unexpected, 'All source API responses were mocked; no real API traffic was used' );
 update_option( BSC_TV_Sync::SETTINGS, array( 'youtube_key' => 'fixture-youtube-key', 'twitch_id' => 'fixture-client-id', 'twitch_secret' => 'fixture-client-secret', 'live_enabled' => false ) );
-update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => true, 'repeat_hours' => 0, 'recent' => 'strong' ) );
+update_option( BSC_TV_Player::SETTINGS, array( 'enabled' => true, 'repeat_hours' => 0, 'recent' => 'strong', 'enrich_archives' => false ) );
 update_post_meta( $twitch, BSC_TV_Player::CHANNEL, array( 'replays' => 1 ) );
 delete_option( BSC_TV_Player_Import::STATE );
 delete_option( BSC_TV_Player_Daily::REPORT );
@@ -271,7 +275,7 @@ import_check( 'already_run' === rest_do_request( $request )->get_data()['status'
 delete_option( BSC_TV_Player_Daily::REPORT );
 $partial = BSC_TV_Player_Daily::execute( 1 );
 $checkpoint = get_option( BSC_TV_Player_Import::STATE );
-import_check( 'partial' === $partial['status'] && $checkpoint['pending'] && 'page-two' === $checkpoint['pending'][ $youtube ]['cursor'], 'A bounded daily run saves its remaining pages for the next day' );
+import_check( 'partial' === $partial['status'] && $checkpoint['pending'] && count( array_filter( $checkpoint['pending'], static function ( $job ) { return ! empty( $job['pages'] ) && ! empty( $job['cursor'] ); } ) ) === 1, 'A bounded daily run saves the processed channel cursor and remaining channels for the next day' );
 $request_count = count( $requests );
 import_check( 'already_run' === BSC_TV_Player_Daily::execute()['status'] && $request_count === count( $requests ), 'An interrupted or partial run still consumes the one permitted daily execution' );
 $partial['day'] = '2000-01-01';

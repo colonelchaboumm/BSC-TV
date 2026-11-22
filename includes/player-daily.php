@@ -85,6 +85,7 @@ final class BSC_TV_Player_Daily {
 				$report['status'] = 'partial';
 				$report['error'] = 'Le traitement a été interrompu. La progression est conservée pour le prochain passage quotidien.';
 			} finally {
+				BSC_TV_Player_Schedule::refresh();
 				$report['finished_at'] = time();
 				update_option( self::REPORT, $report, false );
 			}

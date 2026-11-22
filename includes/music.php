@@ -148,7 +148,7 @@ final class BSC_TV_Music {
 	public static function between( $next, $pool, $state, $settings, $cursor ) {
 		$config = $settings['music'] ?? array();
 		$previous = $state['music_previous'] ?? $state['vod'] ?? null;
-		if ( ! $next || empty( $config['enabled'] ) || ! $previous || ! empty( $previous['music'] ) || ! empty( $next['music'] ) || ! empty( $state['live'] ) || ! empty( $state['manual'] ) || $previous['end'] !== $cursor || $previous['end'] - $previous['start'] < $config['threshold'] * MINUTE_IN_SECONDS ) { return null; }
+		if ( ! $next || empty( $config['enabled'] ) || ! $previous || ! empty( $previous['music'] ) || ! empty( $next['music'] ) || ! empty( $state['live'] ) || $previous['end'] !== $cursor || $previous['end'] - $previous['start'] < $config['threshold'] * MINUTE_IN_SECONDS ) { return null; }
 		$category = self::category( $cursor, $config );
 		if ( ! $category ) { return null; }
 		$space = self::space( $next, $state, $config, $cursor, $settings['repeat_hours'] ?? 0 );

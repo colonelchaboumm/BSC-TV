@@ -26,7 +26,7 @@ final class BSC_TV_Music_Admin {
 		wp_safe_redirect( admin_url( 'admin.php?page=bsc-tv-music' ) ); exit;
 	}
 	/** Administrative changes and public playback use the same database lock. */
-	public static function change( $callback, $rebuild = false, $randomize = false ) {
+	public static function change( $callback, $rebuild = false, $randomize = false, $mix_programmes = false ) {
 		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'music_busy', 'L’antenne se met à jour. Réessayez.' ); }
 		try {
@@ -39,6 +39,7 @@ final class BSC_TV_Music_Admin {
 			update_option( BSC_TV_Player::STATE, $state, false );
 			$state = BSC_TV_Player::advance_clock( $state, time() );
 			if ( $randomize ) { $state['music_seed'] = bin2hex( random_bytes( 16 ) ); }
+			if ( $mix_programmes ) { $state['rotation_seed'] = bin2hex( random_bytes( 16 ) ); $state['plan_source'] = ''; }
 			if ( $rebuild ) { $state = BSC_TV_Music::reset_future( $state, time() ); }
 			$state = BSC_TV_Player_Schedule::replenish( $state, BSC_TV_Player::media(), BSC_TV_Player::settings(), time(), true );
 			update_option( BSC_TV_Player::STATE, $state, false );
