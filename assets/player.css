@@ -74,9 +74,14 @@
 @media (prefers-reduced-motion: reduce) { .bsc-player__music-screen[data-animation] .bsc-player__music-identity { animation: none; } }
 .bsc-player__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-block-start: var(--bsc-player-gap); }
 .bsc-player__controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-block-start: 12px; font-size: .8125rem; }
+.bsc-player__playback-controls, .bsc-player__platform-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-inline-size: 0; }
 .bsc-player .bsc-player__controls button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; inline-size: 44px; min-block-size: 44px; padding: 10px; border: 1px solid var(--bsc-player-accent); border-radius: 5px; background: transparent; color: var(--bsc-player-ink); font: inherit; cursor: pointer; }
 .bsc-player .bsc-player__controls button:hover { background: #ffffff15; }
-.bsc-player__controls [data-control-icon] { display: none; inline-size: 20px; block-size: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bsc-player__controls [data-control-icon] { display: none; inline-size: 22px; block-size: 22px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+.bsc-player__controls [data-icon-solid] { fill: currentColor; stroke: none; }
+.bsc-player .bsc-player__source { display: inline-flex; align-items: center; gap: 8px; min-block-size: 44px; max-inline-size: 100%; text-decoration: none; line-height: 1.4; }
+.bsc-player .bsc-player__source:hover { text-decoration: underline; }
+.bsc-player__provider-icon { display: block; inline-size: 22px; block-size: 22px; flex: 0 0 22px; }
 .bsc-player__controls [data-state="pause"] [data-control-icon="pause"], .bsc-player__controls [data-state="play"] [data-control-icon="play"], .bsc-player__controls [data-state="sound"] [data-control-icon="sound"], .bsc-player__controls [data-state="muted"] [data-control-icon="muted"], .bsc-player__controls [data-state="expand"] [data-control-icon="expand"], .bsc-player__controls [data-state="collapse"] [data-control-icon="collapse"] { display: block; }
 .bsc-player__volume { display: flex; align-items: center; gap: 8px; margin: 0; }
 .bsc-player__volume input { inline-size: 100px; max-inline-size: 100%; min-block-size: 44px; margin: 0; accent-color: var(--bsc-player-accent); }
