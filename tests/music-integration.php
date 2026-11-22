@@ -75,7 +75,7 @@ $flex = $settings; $flex['music']['flexible'] = true;
 music_check( ! empty( BSC_TV_Player::select_next( $pool, music_state( 5400, 0, false ), $flex, $t )['music'] ), 'Explicitly enabled automatic rotation can insert a break' );
 music_check( empty( BSC_TV_Player::select_next( $pool, music_state( 5400, 0, true ), $flex, $t )['music'] ), 'Flexible mode cannot move a fixed programme' );
 $with_fixed = music_state( 5400, 0, false ); $with_fixed['plan'][] = array_replace( $with_fixed['plan'][0], array( 'id' => 'later-fixed', 'start' => $t + 10000, 'end' => $t + 12000, 'fixed' => true ) );
-music_check( empty( BSC_TV_Player::select_next( $pool, $with_fixed, $flex, $t )['music'] ), 'A later fixed programme also prevents shifting the automatic tail' );
+music_check( ! empty( BSC_TV_Player::select_next( $pool, $with_fixed, $flex, $t )['music'] ), 'A later fixed programme permits a break when the automatic prefix has enough slack' );
 $state = music_state( 5400, 400 ); $next = BSC_TV_Player::select_next( $pool, $state, $settings, $t ); $slot = BSC_TV_Player::begin( $next, $state ); $state['vod'] = $slot;
 music_check( $state['plan'][0]['start'] === $t + 400 && 246 === $slot['end'] - $slot['start'], 'Gap insertion preserves the exact fixed start time' );
 music_check( empty( BSC_TV_Player::select_next( $pool, $state, $settings, $slot['end'] )['music'] ), 'An interlude cannot be followed by another interlude' );

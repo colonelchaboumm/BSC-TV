@@ -14,14 +14,15 @@ final class BSC_TV_Day {
 	public static function config( $input ) {
 		$input = (array) $input;
 		$result = array();
-		foreach ( array( 'show_past', 'show_date', 'show_times', 'show_images', 'show_channel', 'show_creator', 'show_profile', 'show_badges' ) as $key ) {
+		foreach ( array( 'show_past', 'show_date', 'show_times', 'show_images', 'show_channel', 'show_creator', 'show_profile', 'show_badges', 'show_music', 'show_music_timing' ) as $key ) {
 			$result[ $key ] = in_array( $input[ $key ] ?? ( 'show_past' === $key ? 'no' : 'yes' ), array( 'yes', '1', 1, true ), true ) ? 'yes' : 'no';
 		}
 		$result['page_size'] = is_numeric( $input['page_size'] ?? null ) ? max( 1, min( 50, (int) $input['page_size'] ) ) : 5;
-		foreach ( array( 'current_label' => 'En cours', 'live_label' => 'LIVE', 'past_label' => 'Diffusé', 'future_label' => 'À venir', 'more_label' => 'Afficher plus', 'empty_label' => 'Aucun programme prévu aujourd’hui.', 'disabled_label' => 'Le lecteur est désactivé.' ) as $key => $default ) {
+		foreach ( array( 'current_label' => 'En cours', 'live_label' => 'LIVE', 'past_label' => 'Diffusé', 'future_label' => 'À venir', 'music_label' => 'MUSIC BREAK', 'more_label' => 'Afficher plus', 'empty_label' => 'Aucun programme prévu aujourd’hui.', 'disabled_label' => 'Le lecteur est désactivé.' ) as $key => $default ) {
 			$result[ $key ] = is_scalar( $input[ $key ] ?? null ) ? wp_html_excerpt( sanitize_text_field( $input[ $key ] ), 200, '' ) : $default;
 		}
 		$result['link_mode'] = in_array( $input['link_mode'] ?? '', array( 'source', 'watch', 'none' ), true ) ? $input['link_mode'] : 'source';
+		$result['time_precision'] = in_array( $input['time_precision'] ?? '', array( 'auto', 'minutes', 'seconds' ), true ) ? $input['time_precision'] : 'auto';
 		$watch = $input['watch_url'] ?? '';
 		$value = is_array( $watch ) ? ( $watch['url'] ?? '' ) : $watch;
 		$result['watch_url'] = is_scalar( $value ) ? BSC_TV_Content::url( $value ) : '';
@@ -33,6 +34,7 @@ final class BSC_TV_Day {
 		$data = BSC_TV_Player::day_snapshot( $now );
 		$page = $date && $date !== $data['date'] ? 1 : max( 1, min( 500, (int) $page ) );
 		if ( 'yes' !== $config['show_past'] ) { $data['items'] = array_values( array_filter( $data['items'], static function ( $item ) { return 'past' !== $item['phase']; } ) ); }
+		if ( 'yes' !== $config['show_music'] ) { $data['items'] = array_values( array_filter( $data['items'], static function ( $item ) { return empty( $item['music'] ); } ) ); }
 		$current = array_filter( $data['items'], static function ( $item ) { return $item['on_air']; } );
 		$others = array_filter( $data['items'], static function ( $item ) { return ! $item['on_air']; } );
 		$limit = $page * $config['page_size'];

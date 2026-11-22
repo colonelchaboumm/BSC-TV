@@ -1,6 +1,6 @@
 # BSC TV — Le live 24/7
 
-Version 1.16.0, branche `feature/music-playlist-import`. Le module **Music Interludes** permet d’importer une playlist YouTube dans une catégorie musicale ; les nouveaux clips restent inactifs et à valider. [Import, gestion et configuration musicale](MUSIC_INTERLUDES.md). Le lecteur et la programmation partagée conservent leur fonctionnement. Le ZIP doit être installé sur WordPress pour activer cette version.
+Version 1.17.0, branche `feature/music-programme-grid`. La musique est choisie aléatoirement dans l’antenne commune, avec recalcul des horaires automatiques incluant les animations BSC. Les morceaux à venir apparaissent dans le widget de la journée. [Diagnostic, programmation et configuration musicale](MUSIC_INTERLUDES.md). Les clips doivent rester validés individuellement. Le ZIP doit être installé sur WordPress pour activer cette version.
 
 ## Mise en service
 
@@ -153,7 +153,9 @@ L’intégration Twitch nécessite HTTPS en production et les bons domaines `par
 
 ## Validation
 
-Version 1.16.0 : **649 contrôles locaux**, dont 50 contrôles WordPress/API des playlists et 19 de leur interface AJAX, en complément des 580 contrôles de la version précédente. [Détails des scénarios musicaux et limites de validation](MUSIC_INTERLUDES.md#vérifications-effectuées).
+Version 1.17.0 : **695 contrôles locaux**, dont 46 pour les choix musicaux partagés, le recalcul des horaires protégés et le widget quotidien. [Détails, contrôle public du site et limites de validation](MUSIC_INTERLUDES.md).
+
+Version 1.16.0 : **649 contrôles locaux**, dont 50 contrôles WordPress/API des playlists et 19 de leur interface AJAX, en complément des 580 contrôles de la version précédente.
 
 Version 1.15.0 : **580 contrôles locaux**, dont 106 WordPress/programmation des interludes et 21 scénarios JavaScript de leurs phases. La suite antérieure complète de 453 contrôles est également exécutée.
 

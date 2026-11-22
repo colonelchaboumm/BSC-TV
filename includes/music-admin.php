@@ -25,7 +25,7 @@ final class BSC_TV_Music_Admin {
 		wp_safe_redirect( admin_url( 'admin.php?page=bsc-tv-music' ) ); exit;
 	}
 	/** Administrative changes and public playback use the same database lock. */
-	public static function change( $callback ) {
+	public static function change( $callback, $rebuild = false, $randomize = false ) {
 		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'music_busy', 'L’antenne se met à jour. Réessayez.' ); }
 		try {
@@ -37,6 +37,8 @@ final class BSC_TV_Music_Admin {
 			// Persist the reconciled old clock before computing the disabled/finish pool.
 			update_option( BSC_TV_Player::STATE, $state, false );
 			$state = BSC_TV_Player::advance_clock( $state, time() );
+			if ( $randomize ) { $state['music_seed'] = bin2hex( random_bytes( 16 ) ); }
+			if ( $rebuild ) { $state = BSC_TV_Music::reset_future( $state, time() ); }
 			$state = BSC_TV_Player_Schedule::replenish( $state, BSC_TV_Player::media(), BSC_TV_Player::settings(), time(), true );
 			update_option( BSC_TV_Player::STATE, $state, false );
 			return true;
@@ -47,10 +49,17 @@ final class BSC_TV_Music_Admin {
 		$input = (array) wp_unslash( $_POST['music'] ?? array() );
 		$operation = sanitize_key( $_POST['operation'] ?? '' );
 		if ( 'stop' === $operation ) { $input = BSC_TV_Music::settings(); $input['enabled'] = false; }
+		if ( 'rebuild' === $operation ) { $input = BSC_TV_Music::settings(); $input['enabled'] = true; $input['flexible'] = true; }
 		$config = BSC_TV_Music::normalize( $input );
 		if ( ! BSC_TV_Music::valid_bands( $config ) ) { self::finish( 'Les tranches horaires actives ne doivent pas se chevaucher ni avoir la même heure de début et de fin.', true ); }
-		$result = self::change( static function () use ( $config ) { update_option( BSC_TV_Music::SETTINGS, $config, false ); } );
-		self::finish( is_wp_error( $result ) ? $result->get_error_message() : ( 'stop' === $operation ? 'Futurs interludes désactivés. La politique choisie s’applique au clip courant.' : 'Réglages musicaux enregistrés dans l’antenne commune.' ), is_wp_error( $result ) );
+		$result = self::change( static function () use ( $config ) { update_option( BSC_TV_Music::SETTINGS, $config, false ); }, true, 'rebuild' === $operation );
+		$message = 'rebuild' === $operation ? 'Musique aléatoire activée et grille recalculée avec les durées complètes des clips et animations. Les clips doivent être prêts à diffuser ; les horaires fixés et le programme en cours sont conservés.' : ( 'stop' === $operation ? 'Futurs interludes désactivés. La politique choisie s’applique au clip courant.' : 'Réglages musicaux enregistrés et grille future recalculée.' );
+		if ( 'rebuild' === $operation && ! is_wp_error( $result ) ) {
+			$diagnostic = BSC_TV_Music::diagnostic();
+			$message .= sprintf( ' %d clip(s) prêt(s), %d interlude(s) programmé(s).', $diagnostic['counts']['ready'], $diagnostic['planned'] );
+			if ( ! $diagnostic['counts']['ready'] ) { $message .= ' Complétez les validations des clips dans la bibliothèque : un import seul ne les active pas.'; }
+		}
+		self::finish( is_wp_error( $result ) ? $result->get_error_message() : $message, is_wp_error( $result ) );
 	}
 	public static function sanitize_clip( $input, $old = array() ) {
 		$url = BSC_TV_Content::url( $input['url'] ?? '' );
@@ -106,7 +115,7 @@ final class BSC_TV_Music_Admin {
 		echo '</select></label></p>';
 	}
 	private static function media( $name, $label, $value, $type ) {
-		echo '<p data-music-media data-type="' . esc_attr( $type ) . '" data-url="' . esc_url( $value ? wp_get_attachment_url( $value ) : '' ) . '"><strong>' . esc_html( $label ) . '</strong><br><input type="hidden" name="music[' . esc_attr( $name ) . ']" value="' . esc_attr( $value ) . '"><span data-media-name>' . esc_html( $value ? get_the_title( $value ) : 'Aucun fichier' ) . '</span> <button type="button" class="button" data-media-choose>Choisir</button> <button type="button" class="button" data-media-clear>Retirer</button></p>';
+		echo '<p data-music-media data-type="' . esc_attr( $type ) . '" data-url="' . esc_url( $value ? wp_get_attachment_url( $value ) : '' ) . '" data-default-url="' . esc_url( 'video' === $type ? BSC_TV_URL . 'assets/media/transition.mp4' : '' ) . '"><strong>' . esc_html( $label ) . '</strong><br><input type="hidden" name="music[' . esc_attr( $name ) . ']" value="' . esc_attr( $value ) . '"><span data-media-name>' . esc_html( $value ? get_the_title( $value ) : 'Aucun fichier' ) . '</span> <button type="button" class="button" data-media-choose>Choisir</button> <button type="button" class="button" data-media-clear>Retirer</button></p>';
 	}
 	public static function page() {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) ); }
@@ -115,12 +124,13 @@ final class BSC_TV_Music_Admin {
 		echo '<div class="wrap bsc-music-admin"><h1>BSC TV — Music Interludes</h1><nav><a href="#music-general">Général</a> · <a href="#music-schedule">Programmation musicale</a> · <a href="#music-library">Clips</a> · <a href="#music-identity">Identité visuelle</a> · <a href="#music-status">État actuel</a></nav>';
 		if ( $notice ) { delete_transient( 'bsc_tv_music_notice_' . get_current_user_id() ); echo '<div class="notice notice-' . ( $notice[1] ? 'error' : 'success' ) . '"><p>' . esc_html( $notice[0] ) . '</p></div>'; }
 		self::form( 'bsc_tv_music_settings' ); echo '<button class="button" name="operation" value="stop">Désactiver immédiatement les futurs interludes</button></form>';
+		self::form( 'bsc_tv_music_settings' ); echo '<p><button class="button button-primary" name="operation" value="rebuild">Programmer la musique aléatoire et recalculer la grille</button></p><p class="description">Active les interludes et leur insertion dans les créneaux automatiques. Refait les choix musicaux à venir, conserve les émissions fixées et le programme courant. Les autorisations des clips restent à valider individuellement.</p></form>';
 		self::form( 'bsc_tv_music_settings' );
 		echo '<section id="music-general"><h2>Général</h2><p>Un seul clip au maximum après une émission strictement plus longue que le seuil. Aucun clip n’est fourni ou validé automatiquement.</p>';
 		self::checkbox( 'music[enabled]', 'Activer les interludes musicaux', $config['enabled'] );
 		self::input( 'music[threshold]', 'Seuil de durée d’émission, en minutes (strictement supérieur)', $config['threshold'], 'number', 'min="1" max="600" required' );
-		self::checkbox( 'music[flexible]', 'Autoriser l’insertion dans une rotation entièrement automatique sans horaire fixé', $config['flexible'] );
-		echo '<p class="description">Sans cette option, seuls les espaces libres assez longs sont utilisés. Avec cette option, les choix automatiques sont repoussés du temps de l’interlude ; toute présence d’un programme fixé dans la file empêche cette insertion flexible.</p>';
+		self::checkbox( 'music[flexible]', 'Autoriser l’insertion entre les émissions automatiques avec recalcul des horaires', $config['flexible'] );
+		echo '<p class="description">Sans cette option, seuls les espaces libres assez longs sont utilisés. Avec cette option, les choix automatiques sont repoussés du temps du clip et des animations, uniquement si la place restante avant le prochain horaire fixé le permet.</p>';
 		self::input( 'music[repeat_hours]', 'Délai minimal entre deux diffusions du même clip (heures)', $config['repeat_hours'], 'number', 'min="0" max="720" step="0.5"' );
 		self::select( 'music[disable_policy]', 'En cas de désactivation pendant un interlude', $config['disable_policy'], array( 'finish' => 'Laisser terminer l’interlude courant', 'interrupt' => 'Interrompre et rendre l’antenne aux émissions' ) );
 		self::select( 'music[live_policy]', 'Lorsqu’un véritable direct prioritaire est confirmé', $config['live_policy'], array( 'interrupt' => 'Interrompre l’interlude immédiatement (recommandé)', 'finish' => 'Terminer l’interlude avant de rejoindre le direct' ) );
@@ -134,8 +144,9 @@ final class BSC_TV_Music_Admin {
 			self::input( 'music[bands][' . $id . '][start]', 'Début', $band['start'], 'time', 'required' ); self::input( 'music[bands][' . $id . '][end]', 'Fin', $band['end'], 'time', 'required' );
 			self::select( 'music[bands][' . $id . '][category]', 'Jouer les clips de la catégorie', $band['category'], $names ); echo '</fieldset>';
 		}
-		echo '</section><section id="music-identity"><h2>Identité visuelle</h2><p>Les transitions sont des écrans distincts du lecteur YouTube. Sans logo configuré, un fond neutre est affiché.</p>';
+		echo '</section><section id="music-identity"><h2>Identité visuelle</h2><p>L’animation BSC incluse ou les médias choisis utilisent un écran distinct du lecteur YouTube. Sans animation ni logo, le fond et le texte facultatif forment une transition neutre.</p>';
 		self::media( 'logo', 'Logo officiel BSC', $config['logo'], 'image' ); self::media( 'entry_video', 'Vidéo d’entrée (facultative)', $config['entry_video'], 'video' ); self::media( 'exit_video', 'Vidéo de sortie (facultative)', $config['exit_video'], 'video' );
+		echo '<input type="hidden" name="music[bundled_animation]" value="0">'; self::checkbox( 'music[bundled_animation]', 'Utiliser l’animation Brewers Social Club déjà incluse si aucune vidéo personnalisée n’est choisie', $config['bundled_animation'] );
 		foreach ( array( 'entry' => 'Durée d’entrée (secondes)', 'exit' => 'Durée de sortie (secondes)' ) as $key => $label ) { self::input( 'music[' . $key . ']', $label, $config[ $key ], 'number', 'min="1" max="30" required' ); }
 		self::input( 'music[background]', 'Fond', $config['background'], 'color' ); self::input( 'music[color]', 'Couleur du texte', $config['color'], 'color' );
 		self::select( 'music[animation]', 'Animation CSS', $config['animation'], array( 'fade' => 'Apparition douce', 'slide' => 'Glissement doux', 'none' => 'Sans mouvement' ) );
@@ -182,6 +193,15 @@ final class BSC_TV_Music_Admin {
 
 	private static function status( $config, $state, $snapshot ) {
 		echo '<section id="music-status"><h2>État actuel</h2><p>Interludes : <strong>' . esc_html( $config['enabled'] ? 'activés' : 'désactivés' ) . '</strong>. Lecteur : ' . esc_html( $snapshot['enabled'] ? 'activé' : 'désactivé' ) . '.</p>';
+		$diagnostic = BSC_TV_Music::diagnostic( $state );
+		echo '<h3>Diagnostic de la programmation musicale</h3><p><strong>' . esc_html( $diagnostic['counts']['ready'] . ' / ' . $diagnostic['total'] ) . '</strong> clip(s) prêt(s) à diffuser · ' . esc_html( $diagnostic['planned'] ) . ' interlude(s) à venir dans la grille.</p>';
+		if ( ! $diagnostic['counts']['ready'] ) { echo '<p class="notice notice-warning">Les clips importés ne sont pas automatiquement diffusables : ouvrez leurs fiches pour vérifier la source, les autorisations, la disponibilité, la durée et l’activation.</p>'; }
+		echo '<ul>';
+		foreach ( array( 'inactive' => 'Clips inactifs', 'rights' => 'Autorisations ou référence à compléter', 'official' => 'Source officielle non confirmée', 'availability' => 'Disponibilité non confirmée ou bloquée', 'duration' => 'Durée absente ou hors limite', 'artist' => 'Artiste ou titre manquant' ) as $key => $label ) { echo '<li>' . esc_html( $label . ' : ' . $diagnostic['counts'][ $key ] ) . '</li>'; }
+		echo '</ul><p class="description">Un même clip peut avoir plusieurs points à compléter.</p><ul>';
+		foreach ( $diagnostic['categories'] as $category => $count ) { echo '<li>' . esc_html( $config['bands'][ $category ]['name'] . ' : ' . $count . ' clip(s) prêt(s)' ) . '</li>'; }
+		echo '</ul><p>' . esc_html( 'Durées intégrées à la grille : entrée ' . $config['entry'] . ' s + durée exacte du clip + sortie ' . $config['exit'] . ' s.' ) . '</p>';
+		echo '<p>' . esc_html( $config['bundled_animation'] ? 'Animation BSC incluse disponible ; les vidéos personnalisées restent prioritaires.' : 'Animation BSC incluse désactivée ; seuls les médias configurés ou l’identité CSS sont utilisés.' ) . '</p>';
 		if ( $config['enabled'] && empty( BSC_TV_Sync::settings()['live_enabled'] ) ) { echo '<p class="notice notice-warning">Activez la vérification des directs dans BSC TV → Réglages et imports pour permettre leur détection et leur priorité sur la musique.</p>'; }
 		$stats = $state['music_stats'] ?? array(); uasort( $stats, static function ( $a, $b ) { return $b['last'] <=> $a['last']; } ); $last = reset( $stats );
 		echo '<p>Dernier clip diffusé : ' . esc_html( $last ? $last['artist'] . ' — ' . $last['title'] . ' · ' . wp_date( 'd/m H:i', $last['last'], new DateTimeZone( 'Europe/Paris' ) ) : 'aucun' ) . '</p>';

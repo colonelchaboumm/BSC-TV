@@ -29,6 +29,7 @@ final class BSC_TV_Music {
 			'disable_policy' => 'interrupt' === ( $input['disable_policy'] ?? '' ) ? 'interrupt' : 'finish',
 			'live_policy' => 'finish' === ( $input['live_policy'] ?? '' ) ? 'finish' : 'interrupt',
 			'entry' => max( 1, min( 30, (int) ( $input['entry'] ?? 3 ) ) ), 'exit' => max( 1, min( 30, (int) ( $input['exit'] ?? 3 ) ) ),
+			'bundled_animation' => ! isset( $input['bundled_animation'] ) || ! empty( $input['bundled_animation'] ),
 			'logo' => absint( $input['logo'] ?? 0 ), 'entry_video' => absint( $input['entry_video'] ?? 0 ), 'exit_video' => absint( $input['exit_video'] ?? 0 ),
 			'background' => sanitize_hex_color( $input['background'] ?? '' ) ?: '#111116', 'color' => sanitize_hex_color( $input['color'] ?? '' ) ?: '#ffffff',
 			'animation' => in_array( $input['animation'] ?? '', array( 'fade', 'slide', 'none' ), true ) ? $input['animation'] : 'fade',
@@ -89,6 +90,10 @@ final class BSC_TV_Music {
 		}
 		$identity = array_intersect_key( $settings, array_flip( array( 'background', 'color', 'animation', 'show_text', 'sound', 'entry_text', 'exit_text' ) ) );
 		$identity += array( 'logo' => self::media_url( $settings['logo'], 'image' ), 'entry_video' => self::media_url( $settings['entry_video'], 'video' ), 'exit_video' => self::media_url( $settings['exit_video'], 'video' ) );
+		if ( $settings['bundled_animation'] ) {
+			$identity['entry_video'] = $identity['entry_video'] ?: BSC_TV_URL . 'assets/media/transition.mp4';
+			$identity['exit_video'] = $identity['exit_video'] ?: BSC_TV_URL . 'assets/media/transition.mp4';
+		}
 		$pool = array();
 		foreach ( self::clips() as $id => $clip ) {
 			if ( ! self::approved( $clip ) ) { continue; }
@@ -100,20 +105,19 @@ final class BSC_TV_Music {
 		}
 		return $pool;
 	}
-	/** Choose only inside a genuine gap, or an explicitly enabled wholly automatic tail. */
+	/** Choose inside a gap, or delay an automatic prefix within its fixed-anchor budget. */
 	public static function between( $next, $pool, $state, $settings, $cursor ) {
 		$config = $settings['music'] ?? array();
 		$previous = $state['music_previous'] ?? $state['vod'] ?? null;
 		if ( ! $next || empty( $config['enabled'] ) || ! $previous || ! empty( $previous['music'] ) || ! empty( $next['music'] ) || ! empty( $state['live'] ) || ! empty( $state['manual'] ) || $previous['end'] !== $cursor || $previous['end'] - $previous['start'] <= $config['threshold'] * MINUTE_IN_SECONDS ) { return null; }
 		$category = self::category( $cursor, $config );
 		if ( ! $category ) { return null; }
-		$space = $next ? max( 0, $next['available'] - $cursor ) : PHP_INT_MAX;
-		$flexible = ! empty( $config['flexible'] ) && $next && empty( $next['fixed'] );
-		foreach ( $state['plan'] ?? array() as $row ) { if ( $row['fixed'] ?? true ) { $flexible = false; break; } }
+		$space = self::space( $next, $state, $config, $cursor, $settings['repeat_hours'] ?? 0 );
+		$seed = $state['music_seed'] ?? $state['rotation_seed'] ?? 'bsc-music';
 		$candidates = array();
 		foreach ( $pool as $key => $media ) {
 			$clip = $media['music'] ?? null;
-			if ( ! $clip || ! in_array( $category, $clip['categories'] ?? array(), true ) || ( ! $flexible && $media['duration'] > $space ) ) { continue; }
+			if ( ! $clip || ! in_array( $category, $clip['categories'] ?? array(), true ) || $media['duration'] > $space ) { continue; }
 			$overlap = false;
 			foreach ( $media['music_deadlines'] ?? array() as $deadline ) { if ( $deadline >= $cursor && $deadline < $cursor + $media['duration'] ) { $overlap = true; break; } }
 			if ( $overlap ) { continue; }
@@ -121,10 +125,48 @@ final class BSC_TV_Music {
 			$last = $state['music_rotation'][ $key ] ?? 0;
 			if ( $artist === ( $state['music_last_artist'] ?? '' ) || ( $last && $last + $config['repeat_hours'] * HOUR_IN_SECONDS > $cursor ) ) { continue; }
 			$prefer = 'day' === $category && in_array( $clip['region'] ?? '', array( 'us', 'fr' ), true ) && ( $clip['region'] ?? '' ) !== ( $state['music_last_region'] ?? '' );
-			$candidates[] = $media + array( 'available' => $cursor, 'music_prefer' => $prefer, 'music_last' => $last );
+			$media['music']['category'] = $category;
+			$media['music']['category_label'] = $config['bands'][ $category ]['name'];
+			$candidates[] = $media + array( 'available' => $cursor, 'music_prefer' => $prefer, 'music_last' => $last, 'music_rank' => hash( 'sha256', $seed . '|' . $cursor . '|' . $previous['key'] . '|' . $key ) );
 		}
-		usort( $candidates, static function ( $a, $b ) { return $b['music_prefer'] <=> $a['music_prefer'] ?: $a['music_last'] <=> $b['music_last'] ?: strcmp( $a['key'], $b['key'] ); } );
+		usort( $candidates, static function ( $a, $b ) { return $b['music_prefer'] <=> $a['music_prefer'] ?: ( $a['music_last'] > 0 ) <=> ( $b['music_last'] > 0 ) ?: strcmp( $a['music_rank'], $b['music_rank'] ); } );
 		return $candidates[0] ?? null;
+	}
+	/** Only automatic rows before the next fixed anchor may be delayed. */
+	public static function space( $next, $state, $config, $cursor, $repeat_hours = 0 ) {
+		$gap = max( 0, $next['available'] - $cursor );
+		if ( empty( $config['flexible'] ) || ! empty( $next['fixed'] ) ) { return $gap; }
+		$end = $cursor; $last = array(); $anchored = false; $slack = PHP_INT_MAX;
+		foreach ( $state['plan'] ?? array() as $row ) {
+			if ( $row['fixed'] ?? true ) {
+				if ( ! $anchored ) { $slack = max( 0, $row['start'] - $end ); $anchored = true; }
+				// Delaying a repeat must not make a later fixed replay miss its availability window.
+				if ( isset( $last[ $row['key'] ] ) ) { $slack = min( $slack, max( 0, $row['start'] - $last[ $row['key'] ] - $repeat_hours * HOUR_IN_SECONDS ) ); }
+			} elseif ( ! $anchored ) { $end = max( $end, $row['end'] ); $last[ $row['key'] ] = max( $last[ $row['key'] ] ?? 0, $row['end'] ); }
+		}
+		return $anchored ? $gap + $slack : PHP_INT_MAX;
+	}
+	public static function delay_automatic( &$state, $seconds ) {
+		foreach ( $state['plan'] ?? array() as $i => $row ) {
+			if ( $row['fixed'] ?? true ) { break; }
+			$state['plan'][ $i ]['start'] += $seconds; $state['plan'][ $i ]['end'] += $seconds;
+		}
+	}
+	/** Rebuild future breaks with their new durations while keeping fixed programmes and the current slot. */
+	public static function reset_future( $state, $now ) {
+		$cursor = ! empty( $state['live'] ) ? ( $state['vod']['end'] ?? $state['plan'][0]['start'] ?? $now ) : max( $now, $state['vod']['end'] ?? $now );
+		$release = 0; $rows = array();
+		foreach ( $state['plan'] ?? array() as $row ) {
+			if ( ! empty( $row['music'] ) ) { $release += $row['end'] - $row['start']; continue; }
+			if ( $row['fixed'] ?? true ) { $release = 0; }
+			else {
+				$start = max( $cursor, $row['start'] - $release );
+				$row['end'] += $start - $row['start']; $row['start'] = $start;
+			}
+			$cursor = $row['end']; $rows[] = $row;
+		}
+		$state['plan'] = $rows; $state['plan_source'] = '';
+		return $state;
 	}
 	public static function begun( &$state, $slot ) {
 		$state['music_previous'] = $slot;
@@ -168,6 +210,33 @@ final class BSC_TV_Music {
 		$start = 'entry' === $phase ? $slot['start'] : ( 'clip' === $phase ? $entry_end : $clip_end );
 		$end = 'entry' === $phase ? $entry_end : ( 'clip' === $phase ? $clip_end : $slot['end'] );
 		return array( 'key' => $slot['key'], 'show_id' => 0, 'resource' => array( 'platform' => 'clip' === $phase ? 'youtube' : 'identity', 'id' => $music['youtube_id'] ), 'url' => 'clip' === $phase ? 'https://www.youtube.com/watch?v=' . $music['youtube_id'] : '', 'title' => $music['title'], 'creator' => $music['artist'], 'avatar' => '', 'profile_url' => '', 'image' => $music['image'] ?? '', 'live' => false, 'new' => false, 'premiere' => false, 'music' => true, 'music_phase' => $phase, 'identity' => 'clip' === $phase ? null : $music['identity'], 'start' => $start, 'end' => $end, 'offset' => max( 0, $now - $start ), 'interlude_start' => $slot['start'], 'interlude_end' => $slot['end'] );
+	}
+	/** A daily-list row describes the complete persisted break, with the clip's real source and timings. */
+	public static function programme( $slot, $now ) {
+		$item = self::decorate( $slot, array(), $now ); $music = $slot['music'];
+		$item['start'] = $slot['start']; $item['end'] = $slot['end'];
+		$item['url'] = 'https://www.youtube.com/watch?v=' . $music['youtube_id'];
+		$item['resource']['platform'] = 'youtube';
+		$item['clip_start'] = $slot['start'] + $music['entry']; $item['clip_end'] = $item['clip_start'] + $music['duration'];
+		$item['music_entry'] = $music['entry']; $item['music_exit'] = $music['exit'];
+		$item['music_category'] = $music['category_label'] ?? '';
+		return $item;
+	}
+	public static function diagnostic( $state = null ) {
+		$config = self::settings(); $clips = self::clips();
+		$counts = array_fill_keys( array( 'ready', 'inactive', 'rights', 'official', 'availability', 'duration', 'artist' ), 0 );
+		$categories = array_fill_keys( array_keys( $config['bands'] ), 0 );
+		foreach ( $clips as $clip ) {
+			if ( self::approved( $clip ) ) { ++$counts['ready']; foreach ( $clip['categories'] ?? array() as $category ) { if ( isset( $categories[ $category ] ) ) { ++$categories[ $category ]; } } }
+			$counts['inactive'] += empty( $clip['active'] ) ? 1 : 0;
+			$counts['rights'] += 'confirmed' !== ( $clip['rights'] ?? '' ) || empty( $clip['rights_note'] ) ? 1 : 0;
+			$counts['official'] += empty( $clip['official'] ) ? 1 : 0;
+			$counts['availability'] += 'available' !== ( $clip['availability'] ?? '' ) ? 1 : 0;
+			$counts['duration'] += ( $clip['duration'] ?? 0 ) < 1 || ( $clip['duration'] ?? 0 ) > 3600 ? 1 : 0;
+			$counts['artist'] += empty( $clip['artist'] ) || empty( $clip['title'] ) ? 1 : 0;
+		}
+		$state = $state ?? (array) get_option( BSC_TV_Player::STATE, array() );
+		return array( 'total' => count( $clips ), 'counts' => $counts, 'categories' => $categories, 'planned' => count( array_filter( $state['plan'] ?? array(), static function ( $row ) { return ! empty( $row['music'] ); } ) ), 'enabled' => $config['enabled'], 'flexible' => $config['flexible'], 'entry' => $config['entry'], 'exit' => $config['exit'], 'bundled_animation' => $config['bundled_animation'] );
 	}
 	/** At most one existing-credentials batch during the already authenticated daily worker. */
 	public static function daily() {

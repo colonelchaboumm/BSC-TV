@@ -59,7 +59,7 @@ final class BSC_TV_Player_Schedule {
 		ksort( $selection );
 		$signature = array( 'mixed-v1', $selection, $settings['recent'], $settings['repeat_hours'], $settings['timezone'] ?? 'UTC' );
 		// An untouched, disabled music module must preserve pre-existing automatic choices.
-		if ( ! empty( $settings['music']['enabled'] ) || $has_music ) { $signature[] = $settings['music'] ?? array(); }
+		if ( ! empty( $settings['music']['enabled'] ) || $has_music ) { $signature[] = array( 'random-music-v2', $settings['music'] ?? array() ); }
 		return hash( 'sha256', json_encode( $signature ) );
 	}
 

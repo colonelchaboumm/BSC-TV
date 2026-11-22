@@ -21,6 +21,10 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 		$this->start_controls_section( 'day_content', array( 'label' => 'Programme de la journée' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre du widget', 'type' => Controls_Manager::TEXT, 'default' => 'Au programme aujourd’hui' ) );
 		$this->add_control( 'page_size', array( 'label' => 'Programmes par chargement', 'type' => Controls_Manager::NUMBER, 'default' => 5, 'min' => 1, 'max' => 50, 'description' => 'Le programme en cours reste visible en plus de cette limite.' ) );
+		$this->add_control( 'show_music', array( 'label' => 'Afficher les musiques programmées', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->add_control( 'show_music_timing', array( 'label' => 'Détailler les horaires des clips et les animations BSC', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'condition' => array( 'show_music' => 'yes' ) ) );
+		$this->add_control( 'music_label', array( 'label' => 'Libellé des interludes musicaux', 'type' => Controls_Manager::TEXT, 'default' => 'MUSIC BREAK', 'condition' => array( 'show_music' => 'yes' ) ) );
+		$this->add_control( 'time_precision', array( 'label' => 'Précision des horaires', 'type' => Controls_Manager::SELECT, 'default' => 'auto', 'options' => array( 'auto' => 'Secondes pour la musique, minutes pour les émissions', 'seconds' => 'Toujours afficher les secondes', 'minutes' => 'Toujours afficher les minutes' ) ) );
 		foreach ( array( 'show_past' => 'Programmes déjà diffusés', 'show_date' => 'Date et fuseau du site', 'show_times' => 'Horaires', 'show_images' => 'Vignettes des émissions', 'show_channel' => 'Nom de la chaîne', 'show_creator' => 'Nom du créateur', 'show_profile' => 'Lien vers sa fiche BSC BDD', 'show_badges' => 'État de diffusion et point LIVE' ) as $key => $label ) {
 			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'show_past' === $key ? '' : 'yes' ) );
 		}
@@ -33,6 +37,7 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'day_style', array( 'label' => 'Liste et couleurs', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->add_control( 'day_color_music', array( 'label' => 'Badge et repère musical', 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-day-music: {{VALUE}};' ) ) );
 		foreach ( array( 'surface' => 'Fond du widget', 'row' => 'Fond des lignes', 'current' => 'Fond du programme en cours', 'ink' => 'Titres', 'muted' => 'Horaires et informations', 'accent' => 'Liens et programme en cours', 'line' => 'Séparateurs', 'live' => 'Point et badge LIVE' ) as $key => $label ) {
 			$this->add_control( 'day_color_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-day-' . $key . ': {{VALUE}};' ) ) );
 		}

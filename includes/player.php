@@ -398,9 +398,11 @@ final class BSC_TV_Player {
 			$slot['id'] = $media['plan_id'];
 			$index = array_search( $media['plan_id'], array_column( $state['plan'], 'id' ), true );
 			$state['plan'] = array_slice( $state['plan'], $index + 1 );
-			self::shift_plan( $state, max( 0, $slot['end'] - $media['plan_end'] ) );
+			$delay = max( 0, $slot['end'] - $media['plan_end'] );
+			if ( ! empty( $media['music'] ) ) { BSC_TV_Music::delay_automatic( $state, $delay ); } else { self::shift_plan( $state, $delay ); }
 		} elseif ( ! empty( $state['plan'] ) ) {
-			self::shift_plan( $state, max( 0, $slot['end'] - $state['plan'][0]['start'] ) );
+			$delay = max( 0, $slot['end'] - $state['plan'][0]['start'] );
+			if ( ! empty( $media['music'] ) ) { BSC_TV_Music::delay_automatic( $state, $delay ); } else { self::shift_plan( $state, $delay ); }
 		}
 		$slot['premiere'] = $slot['premiere'] && empty( $state['premiered'][ $media['key'] ] );
 		$state['premiered'][ $media['key'] ] = true;
@@ -425,6 +427,7 @@ final class BSC_TV_Player {
 		}
 		$state += array( 'vod' => null, 'live' => null, 'paused_at' => 0, 'history' => array(), 'manual' => array(), 'plan' => array(), 'last_creator' => '', 'premiered' => array() );
 		if ( empty( $state['rotation_seed'] ) ) { $state['rotation_seed'] = bin2hex( random_bytes( 16 ) ); }
+		if ( ! empty( $settings['music']['enabled'] ) && empty( $state['music_seed'] ) ) { $state['music_seed'] = bin2hex( random_bytes( 16 ) ); }
 		if ( empty( $state['aired'] ) && ! empty( $state['vod'] ) ) { self::log_slot( $state, $state['vod'] ); }
 		$state['plan'] = array_values( array_filter( $state['plan'], static function ( $row ) use ( $pool ) { return isset( $pool[ $row['key'] ] ); } ) );
 		if ( $state['vod'] && ! isset( $pool[ $state['vod']['key'] ] ) ) {
@@ -615,7 +618,7 @@ final class BSC_TV_Player {
 				}
 			}
 			$item = self::decorate( $row, $catalogue, $now, $live );
-			if ( ! empty( $row['music'] ) ) { $item['start'] = $row['start']; $item['end'] = $row['end']; }
+			if ( ! empty( $row['music'] ) ) { $item = BSC_TV_Music::programme( $row, $now ); }
 			$item['phase'] = $row['phase'];
 			$item['on_air'] = 'current' === $row['phase'] && ( $snapshot['current']['key'] ?? '' ) === $row['key'];
 			if ( $live && 'current' === $row['phase'] && ! $item['on_air'] ) { continue; }
