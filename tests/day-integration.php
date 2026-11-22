@@ -69,6 +69,26 @@ day_check( 1 === count( array_filter( $day['items'], static function ( $item ) {
 day_check( ! array_filter( $day['items'], static function ( $item ) use ( $bounds ) { return $item['display_start'] < $bounds[0] || $item['display_end'] > $bounds[1]; } ), 'Only the current calendar day is exposed' );
 $with_profile = array_values( array_filter( $day['items'], static function ( $item ) use ( $show ) { return $item['show_id'] === $show; } ) )[0];
 day_check( $with_profile['profile_url'] && 'Créateur bière du jour' === $with_profile['creator'] && 'https://example.com/ipa-day.jpg' === $with_profile['image'], 'The show image and inherited BSC BDD profile are reused' );
+$render_creator = static function ( $item, $overrides = array() ) use ( $day ) {
+	$data = $day;
+	$data['items'] = array( $item );
+	$config = BSC_TV_Day::config( $overrides );
+	ob_start();
+	require BSC_TV_DIR . 'includes/day-view.php';
+	return ob_get_clean();
+};
+$duplicate_creator = array_replace( $with_profile, array( 'channel' => $with_profile['creator'] ) );
+$single_creator = $render_creator( $duplicate_creator );
+day_check( 1 === substr_count( $single_creator, esc_html( $with_profile['creator'] ) ) && false === strpos( $single_creator, 'class="bsc-day__channel"' ) && false !== strpos( $single_creator, '<a href="' . esc_url( $with_profile['profile_url'] ) . '">' ), 'Identical channel and creator names appear once, preserving the clickable BSC BDD creator' );
+$case_creator = $render_creator( array_replace( $duplicate_creator, array( 'channel' => ' ' . strtoupper( $with_profile['creator'] ) . ' ' ) ) );
+day_check( false === strpos( $case_creator, 'class="bsc-day__channel"' ) && false !== strpos( $case_creator, 'class="bsc-day__creator"' ), 'Whitespace and ASCII case differences do not repeat the linked creator' );
+$plain_creator = $render_creator( array_replace( $duplicate_creator, array( 'profile_url' => '' ) ) );
+day_check( 1 === substr_count( $plain_creator, esc_html( $with_profile['creator'] ) ) && false !== strpos( $plain_creator, 'class="bsc-day__channel"' ), 'A creator without a BSC BDD link remains visible once' );
+$hidden_profile = $render_creator( $duplicate_creator, array( 'show_profile' => 'no' ) );
+$hidden_creator = $render_creator( $duplicate_creator, array( 'show_creator' => 'no' ) );
+day_check( 1 === substr_count( $hidden_profile, esc_html( $with_profile['creator'] ) ) && 1 === substr_count( $hidden_creator, esc_html( $with_profile['creator'] ) ) && false === strpos( $hidden_profile . $hidden_creator, 'class="bsc-day__creator"' ), 'Hiding creator links or creator rows retains one plain channel name' );
+$distinct_creator = $render_creator( $with_profile );
+day_check( false !== strpos( $distinct_creator, 'class="bsc-day__channel"' ) && false !== strpos( $distinct_creator, '<a href="' . esc_url( $with_profile['profile_url'] ) . '">' ), 'Distinct channel and creator names retain their information and BSC BDD link' );
 $default = BSC_TV_Day::programme( BSC_TV_Day::config( array( 'show_past' => 'yes', 'page_size' => 50 ) ), $at );
 $initial = BSC_TV_Day::programme( BSC_TV_Day::config( array() ), $at );
 day_check( 6 === $initial['count'] && 5 === substr_count( $initial['html'], 'bsc-day__item--future' ) && 1 === substr_count( $initial['html'], 'aria-current="true"' ) && false === strpos( $initial['html'], 'bsc-day__item--past' ), 'The default view contains the current programme and exactly five upcoming programmes' );
