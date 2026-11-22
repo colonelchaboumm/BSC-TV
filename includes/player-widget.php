@@ -8,6 +8,7 @@ use Elementor\Group_Control_Border;
 use Elementor\Group_Control_Box_Shadow;
 
 final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
+	use BSC_TV_Widget_Style_Controls;
 	public function get_name() { return 'bsc-tv-player'; }
 	public function get_title() { return 'BSC TV — Live Player 24/7'; }
 	public function get_icon() { return 'eicon-youtube'; }
@@ -66,10 +67,37 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		foreach ( array( 'surface' => 'Fond du widget', 'ink' => 'Titres et créateur', 'muted' => 'Horaires et messages', 'accent' => 'Commandes, liens et progression', 'live' => 'Badge et point LIVE' ) as $key => $label ) {
 			$this->add_control( 'color_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-player-' . $key . ': {{VALUE}};' ) ) );
 		}
-		foreach ( array( 'heading' => 'Titre du widget', 'show' => 'Titre de l’émission', 'creator' => 'Créateur', 'next' => 'Programme suivant', 'times' => 'Horaires', 'join' => 'Bouton' ) as $key => $label ) {
+		foreach ( array( 'heading' => 'Titre du widget', 'show' => 'Titre de l’émission', 'creator' => 'Créateur', 'next' => 'Programme suivant', 'times' => 'Horaires', 'source' => 'Lien vers la plateforme' ) as $key => $label ) {
 			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'player_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-player__' . $key ) );
 		}
 		$this->add_responsive_control( 'padding', array( 'label' => 'Marges intérieures', 'type' => Controls_Manager::DIMENSIONS, 'size_units' => array( 'px', 'em', '%' ), 'selectors' => array( $root => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};' ) ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'player_border', 'selector' => $root ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'player_shadow', 'selector' => $root ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'player_toolbar_style', array( 'label' => 'Barre de commandes et volume', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$toolbar = $root . ' .bsc-player__controls';
+		$this->bsc_color( 'toolbar_background', 'Fond de la barre', $toolbar, 'background-color' );
+		$this->bsc_dimensions( 'toolbar_padding', 'Marges intérieures', $toolbar, 'padding' );
+		$this->bsc_dimensions( 'toolbar_radius', 'Arrondis', $toolbar, 'border-radius', array( 'px', '%' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'toolbar_border', 'selector' => $toolbar ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'toolbar_shadow', 'selector' => $toolbar ) );
+		$this->size( 'controls_gap', 'Espacement entre les commandes', '--bsc-player-controls-gap', 0, 48 );
+		$this->add_responsive_control( 'toolbar_align', array( 'label' => 'Alignement', 'type' => Controls_Manager::SELECT, 'options' => array( 'flex-start' => 'À gauche', 'center' => 'Centré', 'flex-end' => 'À droite', 'space-between' => 'Réparti' ), 'selectors' => array( $toolbar => 'justify-content: {{VALUE}};' ) ) );
+		$this->bsc_color( 'volume_color', 'Couleur du curseur de volume', $root, '--bsc-player-volume-color' );
+		$this->bsc_color( 'volume_label_color', 'Couleur du texte Volume', $root . ' .bsc-player__volume', 'color' );
+		$this->size( 'volume_width', 'Largeur du curseur de volume', '--bsc-player-volume-width', 40, 240 );
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'volume_typography', 'label' => 'Texte Volume', 'selector' => $root . ' .bsc-player__volume' ) );
+		$this->end_controls_section();
+		$this->bsc_button_style( 'player_buttons', 'Boutons · style commun', $toolbar . ' button', '--bsc-player-control', true );
+		foreach ( array( 'pause' => 'Bouton Lecture / Pause', 'mute' => 'Bouton Son', 'fullscreen' => 'Bouton Plein écran' ) as $key => $label ) {
+			$this->bsc_button_style( 'player_button_' . $key, $label, $toolbar . ' [data-player-' . $key . ']', '--bsc-player-control', true );
+		}
+		$this->bsc_button_style( 'player_source', 'Lien vers la plateforme', $root . ' .bsc-player__source', '--bsc-player-source', false, false );
+		$this->start_controls_section( 'player_provider_style', array( 'label' => 'Logo de la plateforme', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->size( 'provider_size', 'Taille du logo', '--bsc-player-provider-size', 12, 64 );
+		$this->bsc_color( 'provider_youtube_color', 'Couleur du logo YouTube', $root . ' [data-player-provider="youtube"] path:first-child', 'fill' );
+		$this->bsc_color( 'provider_twitch_color', 'Couleur du logo Twitch', $root . ' [data-player-provider="twitch"] path', 'fill' );
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'player_crt_style', array( 'label' => 'Écran bombé et CRT', 'tab' => Controls_Manager::TAB_STYLE ) );
@@ -110,6 +138,32 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 			}
 		}
 		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'player_badges_typography', 'label' => 'Typographie des badges', 'selector' => $root . ' .bsc-player__badge' ) );
+		$this->bsc_dimensions( 'player_badges_padding', 'Marges intérieures', $root . ' .bsc-player__badge', 'padding' );
+		$this->bsc_dimensions( 'player_badges_radius', 'Arrondis', $root . ' .bsc-player__badge', 'border-radius', array( 'px', '%' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'player_badges_border', 'selector' => $root . ' .bsc-player__badge' ) );
+		$this->bsc_color( 'player_live_dot_color', 'Couleur du point LIVE', $root . ' .bsc-player__badge--live::before', 'background-color' );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'player_screen_style', array( 'label' => 'Cadre de l’écran', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->bsc_color( 'screen_background', 'Fond de l’écran sans vidéo', $root . ' .bsc-player__screen', 'background-color' );
+		$this->bsc_color( 'screen_frame_background', 'Fond du cadre', $root . ' .bsc-player__screen-wrap', 'background-color' );
+		$this->bsc_dimensions( 'screen_frame_padding', 'Marges intérieures du cadre', $root . ' .bsc-player__screen-wrap', 'padding' );
+		$this->bsc_dimensions( 'screen_frame_radius', 'Arrondis du cadre', $root . ' .bsc-player__screen-wrap', 'border-radius', array( 'px', '%' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'screen_frame_border', 'selector' => $root . ' .bsc-player__screen-wrap' ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'screen_frame_shadow', 'selector' => $root . ' .bsc-player__screen-wrap' ) );
+		$this->add_control( 'controls_style_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'Ces styles personnalisent les commandes et l’habillage BSC TV. L’intérieur des lecteurs YouTube et Twitch reste géré par les plateformes.' ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'player_text_style', array( 'label' => 'Textes et progression', 'tab' => Controls_Manager::TAB_STYLE ) );
+		foreach ( array( 'heading' => 'Titre du widget', 'show' => 'Titre de l’émission', 'creator' => 'Créateur', 'times' => 'Horaires', 'message' => 'Messages' ) as $key => $label ) {
+			$this->bsc_color( 'player_text_' . $key, $label, $root . ' .bsc-player__' . $key, 'color' );
+		}
+		$this->bsc_color( 'player_profile_color', 'Lien BSC BDD · normal', $root . ' .bsc-player__profile', 'color' );
+		$this->bsc_color( 'player_profile_hover_color', 'Lien BSC BDD · survol et focus', $root . ' .bsc-player__profile:is(:hover, :focus-visible)', 'color' );
+		$this->bsc_color( 'player_next_color', 'Titre du programme suivant', $root . ' .bsc-player__next strong', 'color' );
+		$this->bsc_color( 'progress_color', 'Couleur de la progression', $root, '--bsc-player-progress-color' );
+		$this->bsc_color( 'progress_background', 'Fond de la progression', $root, '--bsc-player-progress-background' );
+		$this->size( 'progress_height', 'Hauteur de la progression', '--bsc-player-progress-height', 2, 24 );
 		$this->end_controls_section();
 	}
 

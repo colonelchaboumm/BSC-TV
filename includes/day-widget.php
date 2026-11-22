@@ -8,6 +8,7 @@ use Elementor\Group_Control_Border;
 use Elementor\Group_Control_Box_Shadow;
 
 final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
+	use BSC_TV_Widget_Style_Controls;
 	public function get_name() { return 'bsc-tv-day'; }
 	public function get_title() { return 'BSC TV — Programme du jour (liste)'; }
 	public function get_icon() { return 'eicon-post-list'; }
@@ -49,11 +50,71 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 		}
 		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'day_border', 'selector' => $root ) );
 		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'day_shadow', 'selector' => $root ) );
+		$this->bsc_dimensions( 'day_container_radius', 'Arrondis du widget', $root, 'border-radius', array( 'px', '%' ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'day_rows_style', array( 'label' => 'Lignes des programmes', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$row = $root . ' .bsc-day__item';
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'day_row_border', 'selector' => $row ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'day_row_shadow', 'selector' => $row ) );
+		$this->bsc_color( 'day_row_hover_background', 'Fond au survol et au focus', $row . ':is(:hover, :focus-within)', 'background-color' );
+		$this->bsc_color( 'day_row_hover_border', 'Contour au survol et au focus', $row . ':is(:hover, :focus-within)', 'border-color' );
+		$current = $row . '.bsc-day__item--current';
+		$this->add_control( 'day_current_heading', array( 'label' => 'Programme en cours', 'type' => Controls_Manager::HEADING, 'separator' => 'before' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'day_current_border', 'selector' => $current ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'day_current_shadow', 'selector' => $current ) );
+		$this->bsc_dimensions( 'day_current_radius', 'Arrondis du programme en cours', $current, 'border-radius', array( 'px', '%' ) );
+		$this->bsc_color( 'day_current_title_color', 'Titre du programme en cours', $current . ' .bsc-day__title', 'color' );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'day_images_style', array( 'label' => 'Vignettes et icône de remplacement', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$image = $root . ' .bsc-day__image';
+		$this->bsc_color( 'day_image_background', 'Fond des vignettes', $image, 'background-color' );
+		$this->bsc_color( 'day_image_icon_color', 'Couleur de l’icône sans image', $image . ' span', 'color' );
+		$this->add_responsive_control( 'day_image_icon_size', array( 'label' => 'Taille de l’icône', 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => 10, 'max' => 80 ) ), 'selectors' => array( $image . ' span' => 'font-size: {{SIZE}}{{UNIT}};' ) ) );
+		$this->add_responsive_control( 'day_image_ratio', array( 'label' => 'Format des vignettes', 'type' => Controls_Manager::SELECT, 'options' => array( '16 / 9' => '16:9', '4 / 3' => '4:3', '1 / 1' => 'Carré' ), 'selectors' => array( $image => 'aspect-ratio: {{VALUE}};' ) ) );
+		$this->add_control( 'day_image_fit', array( 'label' => 'Cadrage des images', 'type' => Controls_Manager::SELECT, 'options' => array( 'cover' => 'Remplir', 'contain' => 'Image entière' ), 'selectors' => array( $image . ' img' => 'object-fit: {{VALUE}};' ) ) );
+		$this->bsc_dimensions( 'day_image_radius', 'Arrondis', $image, 'border-radius', array( 'px', '%' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'day_image_border', 'selector' => $image ) );
+		$this->add_group_control( Group_Control_Box_Shadow::get_type(), array( 'name' => 'day_image_shadow', 'selector' => $image ) );
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'day_links_style', array( 'label' => 'Textes et liens', 'tab' => Controls_Manager::TAB_STYLE ) );
+		foreach ( array( 'heading' => 'Titre du widget', 'title' => 'Titre de l’émission sans lien', 'date' => 'Date et fuseau', 'channel' => 'Chaîne', 'creator' => 'Créateur sans lien', 'times' => 'Heure de fin', 'note' => 'Informations et musique' ) as $key => $label ) {
+			$this->bsc_color( 'day_text_' . $key, $label, $root . ' .bsc-day__' . $key, 'color' );
+		}
+		$this->bsc_color( 'day_text_time_start', 'Heure de début', $root . ' .bsc-day__times time', 'color' );
+		foreach ( array( 'title' => 'Titre de l’émission', 'creator' => 'Créateur BSC BDD' ) as $key => $label ) {
+			$this->bsc_color( 'day_link_' . $key . '_color', $label . ' · normal', $root . ' .bsc-day__' . $key . ' a', 'color' );
+			$this->bsc_color( 'day_link_' . $key . '_hover', $label . ' · survol et focus', $root . ' .bsc-day__' . $key . ' a:is(:hover, :focus-visible)', 'color' );
+		}
+		$this->end_controls_section();
+
+		$this->start_controls_section( 'day_badges_style', array( 'label' => 'Badges et point LIVE', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$badge = $root . ' .bsc-day__badge';
+		foreach ( array( 'current' => 'En cours', 'live' => 'LIVE', 'future' => 'À venir', 'past' => 'Diffusé', 'music' => 'MUSIC BREAK' ) as $key => $label ) {
+			$this->bsc_color( 'day_badge_' . $key . '_color', $label . ' · texte', $badge . '--' . $key, 'color' );
+			$this->bsc_color( 'day_badge_' . $key . '_background', $label . ' · fond', $badge . '--' . $key, 'background-color' );
+		}
+		$this->bsc_dimensions( 'day_badge_padding', 'Marges intérieures', $badge, 'padding' );
+		$this->bsc_dimensions( 'day_badge_radius', 'Arrondis', $badge, 'border-radius', array( 'px', '%' ) );
+		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'day_badge_border', 'selector' => $badge ) );
+		$this->bsc_color( 'day_live_dot_color', 'Couleur du point LIVE', $badge . '--live::before', 'background-color' );
+		$this->add_responsive_control( 'day_live_dot_size', array( 'label' => 'Taille du point LIVE', 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => 3, 'max' => 24 ) ), 'selectors' => array( $badge . '--live::before' => 'inline-size: {{SIZE}}{{UNIT}}; block-size: {{SIZE}}{{UNIT}};' ) ) );
+		$this->end_controls_section();
+
+		$this->bsc_button_style( 'day_more_button', 'Bouton Afficher plus', $root . ' .bsc-day__more', '--bsc-day-button' );
+		$this->start_controls_section( 'day_more_layout', array( 'label' => 'Position du bouton Afficher plus', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->add_responsive_control( 'day_more_align', array( 'label' => 'Alignement', 'type' => Controls_Manager::SELECT, 'options' => array( 'left' => 'À gauche', 'center' => 'Centré', 'right' => 'À droite' ), 'selectors_dictionary' => array( 'left' => '0 auto 0 0', 'center' => '0 auto', 'right' => '0 0 0 auto' ), 'selectors' => array( $root . ' .bsc-day__more' => 'margin: {{VALUE}}; margin-block-start: var(--bsc-day-more-gap, 16px);' ) ) );
+		$this->add_responsive_control( 'day_more_gap', array( 'label' => 'Espace avant le bouton', 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => 0, 'max' => 80 ) ), 'selectors' => array( $root => '--bsc-day-more-gap: {{SIZE}}{{UNIT}};' ) ) );
+		$this->add_responsive_control( 'day_more_width', array( 'label' => 'Largeur du bouton', 'type' => Controls_Manager::SLIDER, 'size_units' => array( 'px', '%' ), 'range' => array( 'px' => array( 'min' => 80, 'max' => 700 ), '%' => array( 'min' => 10, 'max' => 100 ) ), 'selectors' => array( $root . ' .bsc-day__more' => 'width: {{SIZE}}{{UNIT}}; max-width: 100%;' ) ) );
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'day_typography', array( 'label' => 'Typographies', 'tab' => Controls_Manager::TAB_STYLE ) );
 		foreach ( array( 'heading' => 'Titre du widget', 'date' => 'Date du jour', 'title' => 'Titres des émissions', 'times' => 'Horaires', 'channel' => 'Chaînes', 'creator' => 'Créateurs', 'badge' => 'Badges', 'more' => 'Bouton Afficher plus' ) as $key => $label ) {
-			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'day_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-day__' . $key ) );
+			$selector = $root . ' .bsc-day__' . $key;
+			if ( 'times' === $key ) { $selector .= ', ' . $root . ' .bsc-day__times time'; }
+			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'day_' . $key . '_typography', 'label' => $label, 'selector' => $selector ) );
 		}
 		$this->end_controls_section();
 	}

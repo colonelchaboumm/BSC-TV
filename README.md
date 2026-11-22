@@ -50,6 +50,8 @@ Le lecteur utilise l’animation Brewers Social Club incluse entre les émission
 
 Le lecteur suit l’antenne commune : barre de navigation et raccourcis de déplacement masqués sur YouTube, correction automatique des déplacements sur les replays Twitch. Après une pause, la reprise rejoint l’horaire courant. Le son, le volume, la pause et le plein écran restent disponibles. Twitch conserve sa barre officielle ; le retour à l’antenne peut prendre une à deux secondes et dépend du lecteur. [Lecture synchronisée et limites](LIVE_PLAYER.md#lecture-à-lheure-de-lantenne).
 
+Dans **Elementor → Style**, le lecteur et le programme du jour proposent des réglages séparés pour les boutons, icônes, couleurs de fond et de contour, arrondis, ombres, marges et dimensions par appareil. Chaque commande du lecteur peut compléter le style commun. Le lien de plateforme, les logos YouTube/Twitch, les lignes, vignettes, badges et le bouton **Afficher plus** possèdent leurs propres réglages, avec des états de survol/focus, actif et chargement pour les boutons. [Réglages détaillés](LIVE_PLAYER.md#réglages-elementor).
+
 ## Collecte et vérification des directs
 
 | Plateforme | Programme à venir | Direct en cours |
