@@ -114,6 +114,8 @@ final class BSC_TV_Player_Admin {
 		$settings = array( 'enabled' => ! empty( $input['enabled'] ), 'live_priority' => ! empty( $input['live_priority'] ), 'recent' => in_array( $input['recent'] ?? '', array( 'strong', 'balanced', 'rotation' ), true ) ? $input['recent'] : 'strong', 'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ), 'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ) );
 		$settings['max_channel_streak'] = max( 0, min( 10, (int) ( $input['max_channel_streak'] ?? 3 ) ) );
 		$settings['enrich_archives'] = ! empty( $input['enrich_archives'] );
+		$settings['live_lead'] = max( 0, min( 30, (int) ( $input['live_lead'] ?? 2 ) ) );
+		$settings['live_wait'] = max( 0, min( 1440, (int) ( $input['live_wait'] ?? 120 ) ) );
 		update_option( BSC_TV_Player::SETTINGS, $settings, false );
 		if ( $settings['enabled'] && ! $previous['enabled'] ) {
 			BSC_TV_Sync::queue( BSC_TV_Sync::DAILY_NOW );
@@ -286,7 +288,8 @@ final class BSC_TV_Player_Admin {
 			<h2>Programmation · aujourd’hui et les deux journées à venir</h2>
 			<p><?php echo esc_html( 'Fuseau : ' . wp_timezone_string() ); ?>. La grille est enregistrée et suivie par le lecteur. Les chaînes et les émissions sont mélangées ; les programmes à venir peuvent être décalés ou remplacés.</p>
 			<?php if ( ! $snapshot['enabled'] ) : ?><p class="notice notice-info">Le lecteur est désactivé. Cette programmation est préparée pour son activation.</p><?php endif; ?>
-			<?php if ( ! empty( $snapshot['current']['live'] ) ) : ?><p class="notice notice-warning">Un véritable direct est en cours. Les horaires suivants sont prévisionnels et seront décalés à sa fin.</p><?php endif; ?>
+			<?php if ( ! empty( $snapshot['current']['live'] ) ) : ?><p class="notice notice-info">Un véritable direct est prioritaire jusqu’à sa fin confirmée. Les horaires de la grille restent fixes : la reprise rejoindra le programme prévu à l’heure courante.</p><?php endif; ?>
+			<?php if ( ! empty( $snapshot['current']['standby'] ) ) : ?><p class="notice notice-info">Animations BSC en boucle dans l’attente du direct annoncé. La grille initiale reste enregistrée.</p><?php endif; ?>
 			<?php if ( is_wp_error( $prepared ) ) : ?><p><?php echo esc_html( $prepared->get_error_message() ); ?></p><?php else : ?>
 				<?php self::editor( $prepared, $pool, 3, $now ); ?>
 				<?php $offset = 0; foreach ( BSC_TV_Player_Schedule::days( $prepared, $now, wp_timezone_string() ) as $group ) :
@@ -304,7 +307,7 @@ final class BSC_TV_Player_Admin {
 						}
 						$editable = 'future' === $row['phase'] && ! empty( $row['id'] ) && empty( $row['music'] ); ?>
 						<?php if ( null !== $previous_end && $row['display_start'] > max( $previous_end, $now ) && empty( $snapshot['current']['live'] ) ) : ?><tr class="bsc-player-grid-gap"><td colspan="4"><?php echo esc_html( 'Pause de programmation · ' . wp_date( 'H:i:s', max( $previous_end, $now ) ) . ' → ' . wp_date( 'H:i:s', $row['display_start'] ) ); ?></td></tr><?php endif; ?>
-						<tr class="bsc-player-phase-<?php echo esc_attr( $row['phase'] ); ?>"><td class="bsc-player-grid-time"><?php echo esc_html( wp_date( 'H:i:s', $row['display_start'] ) . ' → ' . ( $row['end'] ? wp_date( 'H:i:s', $row['display_end'] ) : 'En direct' ) ); ?><?php if ( $row['continued'] ) : ?><br><small>Suite du programme précédent</small><?php endif; ?></td><td><strong><?php echo esc_html( $title ?: 'Émission retirée' ); ?></strong><br><?php echo esc_html( $channel ); ?></td><td><?php echo esc_html( 'current' === $row['phase'] ? ( ! $snapshot['enabled'] ? 'Préparé' : ( ! empty( $row['live'] ) ? '● LIVE' : 'En cours' ) ) : ( 'past' === $row['phase'] ? 'Diffusé' : 'À venir' ) ); ?></td><td class="bsc-player-grid-actions"><?php if ( $editable ) : ?><a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'move' ) ); ?>">Décaler</a> <a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'replace' ) ); ?>">Remplacer</a><?php else : ?>—<?php endif; ?></td></tr>
+						<tr class="bsc-player-phase-<?php echo esc_attr( $row['phase'] ); ?>"><td class="bsc-player-grid-time"><?php echo esc_html( wp_date( 'H:i:s', $row['display_start'] ) . ' → ' . ( $row['end'] ? wp_date( 'H:i:s', $row['display_end'] ) : ( ! empty( $row['standby'] ) ? 'Attente du direct' : 'En direct' ) ) ); ?><?php if ( $row['continued'] ) : ?><br><small>Suite du programme précédent</small><?php endif; ?></td><td><strong><?php echo esc_html( $title ?: 'Émission retirée' ); ?></strong><br><?php echo esc_html( $channel ); ?></td><td><?php echo esc_html( 'current' === $row['phase'] ? ( ! $snapshot['enabled'] ? 'Préparé' : ( ! empty( $row['live'] ) ? '● LIVE' : 'En cours' ) ) : ( 'past' === $row['phase'] ? 'Diffusé' : 'À venir' ) ); ?></td><td class="bsc-player-grid-actions"><?php if ( $editable ) : ?><a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'move' ) ); ?>">Décaler</a> <a class="button" href="<?php echo esc_url( self::grid_url( 3, $row['id'], 'replace' ) ); ?>">Remplacer</a><?php else : ?>—<?php endif; ?></td></tr>
 					<?php $previous_end = max( $previous_end ?? 0, $row['display_end'] ); endforeach; ?>
 					</tbody></table></div><?php endif; ?></details>
 				<?php endforeach; ?>
@@ -356,6 +359,9 @@ final class BSC_TV_Player_Admin {
 				<p><label><input type="checkbox" name="bsc_player[enabled]" value="1" <?php checked( $settings['enabled'] ); ?>> Activer le lecteur 24/7</label></p>
 				<p><label><input type="checkbox" name="bsc_player[live_priority]" value="1" <?php checked( $settings['live_priority'] ); ?>> Donner la priorité aux véritables directs confirmés</label></p>
 				<p class="description">Le contrôle des directs existant doit être activé dans Réglages et imports. Il reste indépendant de l’import quotidien des replays.</p>
+				<?php self::field( 'live_lead', 'Animations BSC avant un direct annoncé (minutes)', $settings['live_lead'], 'number', 'min="0" max="30"' ); ?>
+				<?php self::field( 'live_wait', 'Attente maximale après l’heure annoncée sans confirmation de direct (minutes, 0 : illimitée)', $settings['live_wait'], 'number', 'min="0" max="1440"' ); ?>
+				<p class="description">Le direct confirmé interrompt immédiatement replays et musique, et reste à l’antenne jusqu’à sa fin confirmée, même s’il dépasse son horaire estimé. Ensuite, reprise à l’heure courante de la grille initiale, éventuellement en cours de vidéo. Le délai d’attente ne limite jamais un direct en cours. Le contrôle des plateformes s’effectue toutes les cinq minutes. Pendant un direct ou son attente, modifiez les créneaux à venir avec Décaler ou Remplacer ; Jouer ensuite reste réservé à la rotation normale.</p>
 				<p><label for="bsc-player-recent">Priorité aux nouveautés parmi les programmes disponibles</label><br><select id="bsc-player-recent" name="bsc_player[recent]">
 					<?php foreach ( array( 'strong' => 'Forte · priorité aux nouveautés', 'balanced' => 'Équilibrée · une semaine puis archives', 'rotation' => 'Rotation · toutes les archives' ) as $key => $label ) : ?><option value="<?php echo esc_attr( $key ); ?>" <?php selected( $settings['recent'], $key ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?>
 				</select></p>

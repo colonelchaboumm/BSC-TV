@@ -184,6 +184,7 @@
 			this.musicVideo.hidden = !videoURL || reduced;
 			if (!videoURL || reduced || document.hidden || !this.joined) { this.musicVideo.pause(); return; }
 			this.musicVideo.muted = !identity.sound || this.muted;
+			this.musicVideo.loop = !!current.standby;
 			if (this.musicVideo.getAttribute('src') !== videoURL) this.musicVideo.src = videoURL;
 			this.musicVideoPosition();
 			const generation = this.generation;
@@ -191,7 +192,7 @@
 		}
 		stopMusic() {
 			if (this.musicScreen) this.musicScreen.hidden = true;
-			if (this.musicVideo) { this.musicVideo.pause(); this.musicVideo.removeAttribute('src'); this.musicVideo.load?.(); }
+			if (this.musicVideo) { this.musicVideo.pause(); this.musicVideo.loop = false; this.musicVideo.removeAttribute('src'); this.musicVideo.load?.(); }
 			this.mount.hidden = false;
 		}
 		playing() { this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
@@ -284,8 +285,9 @@
 				this.loading = false;
 				const boundary = this.data?.current?.end || this.data?.next?.[0]?.start || 0;
 				const remaining = boundary - this.now();
-				const minimum = this.data?.current?.music && remaining > 0 ? .5 : 5;
-				const wait = boundary ? Math.max(minimum, Math.min(60, remaining + .1)) : 60;
+				const minimum = (this.data?.current?.music || this.data?.current?.standby) && remaining > 0 ? .5 : 5;
+				const polling = Math.max(1, Math.min(60, Number(this.data?.poll_after) || 60));
+				const wait = boundary ? Math.max(minimum, Math.min(polling, remaining + .1)) : polling;
 				this.timer = window.setTimeout(() => this.request(), wait * 1000);
 			}
 		}
@@ -295,7 +297,7 @@
 			this.root.querySelector('[data-player-meta]').hidden = !current;
 			for (const badge of this.root.querySelectorAll('[data-player-badge]')) {
 				const name = badge.dataset.playerBadge;
-				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere && !current.music : current[name]));
+				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere && !current.music && !current.standby : current[name]));
 			}
 			const source = this.root.querySelector('[data-player-source]');
 			const sourceURL = current ? safeURL(current.url) : '';
@@ -310,7 +312,7 @@
 			const musicMeta = !current?.music || this.root.dataset.musicMeta !== '0';
 			this.text('[data-player-title]', musicMeta ? current?.title : '');
 			this.text('[data-player-creator]', musicMeta ? current?.creator : '');
-			this.text('[data-player-times]', current ? `${current.live ? 'En direct depuis' : 'À l’antenne'} ${time(current.start, this.data.timezone)}${current.end ? ` – ${time(current.end, this.data.timezone)}` : ''}` : '');
+			this.text('[data-player-times]', current?.standby ? `En attente du direct prévu à ${time(current.expected_start, this.data.timezone)}` : current ? `${current.live ? 'En direct depuis' : 'À l’antenne'} ${time(current.start, this.data.timezone)}${current.end ? ` – ${time(current.end, this.data.timezone)}` : ''}` : '');
 			const avatar = this.root.querySelector('[data-player-avatar]');
 			if (avatar) {
 				const url = current ? safeURL(current.avatar) : '';
@@ -353,7 +355,7 @@
 			this.controls();
 			this.tick();
 			if (current.end && this.now() >= current.end) return;
-			if (current.music && current.resource?.platform === 'identity') { this.showMusic(current); this.status(''); return; }
+			if ((current.music || current.standby) && current.resource?.platform === 'identity') { this.showMusic(current); this.status(''); return; }
 			if (this.joined && !this.player && this.failedToken !== token && !this.starting) this.load(current, token);
 		}
 
@@ -498,8 +500,8 @@
 			const current = this.data?.current;
 			const progress = this.root.querySelector('[data-player-progress]');
 			if (progress) {
-				progress.hidden = !current || current.live;
-				if (current && !current.live) progress.value = Math.min(100, Math.max(0, 100 * (this.now() - current.start) / (current.end - current.start)));
+				progress.hidden = !current || current.live || current.standby;
+				if (current && !current.live && !current.standby) progress.value = Math.min(100, Math.max(0, 100 * (this.now() - current.start) / (current.end - current.start)));
 			}
 			if (document.hidden || !current) return;
 			this.controls();
@@ -507,6 +509,7 @@
 				const boundary = `${current.key}/${current.start}/${current.end}`;
 				if (boundary !== this.boundaryToken) {
 					this.boundaryToken = boundary;
+					if (current.standby) { this.request(); return; }
 					this.destroy();
 					this.startTransition();
 					this.status('Synchronisation avec le programme suivant…');

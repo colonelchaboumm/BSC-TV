@@ -58,7 +58,22 @@ Chaque ligne indique l’horaire, le titre, la chaîne et l’état **Diffusé**
 - **Remélanger la programmation automatique** crée une nouvelle séquence pour les prochains programmes et remplace les choix manuels futurs. Le programme courant reste stable.
 - **Passer au programme suivant** agit sur un replay courant, jamais sur un vrai direct. Un ancien formulaire de saut est refusé si le programme courant a changé.
 
-Un vrai direct confirmé reste prioritaire lorsque cette option est activée. Il suspend la rotation puis le replay reprend à sa position d’interruption. Les horaires suivants sont prévisionnels pendant le direct et sont décalés à sa fin. Les formulaires d’édition sont protégés par une capacité administrateur, un nonce et une empreinte de la file ; une grille obsolète ne peut pas écraser une modification concurrente.
+Les formulaires d’édition sont protégés par une capacité administrateur, un nonce et une empreinte de la file ; une grille obsolète ne peut pas écraser une modification concurrente. Un programme dont l’heure initiale a commencé n’est plus modifiable, y compris pendant un direct.
+
+## Priorité des directs et attente
+
+Depuis **1.22.0**, activer **Le live → Donner la priorité aux véritables directs confirmés**, ainsi que le contrôle des directs dans **Réglages et imports**. Les annonces publiées des chaînes suivies et des émissions YouTube existantes sont utilisées ; les sources privées, annulées, exclues du direct ou refusant l’intégration ne réservent pas l’antenne.
+
+- **Avant l’heure annoncée** : arrêt du replay ou du clip et animations BSC en boucle, par défaut **deux minutes avant**. Cirque, Lune et les animations valides de la médiathèque partagent la même horloge pour tous les visiteurs. Ce n’est pas encore un direct confirmé.
+- **Pendant le direct** : le lecteur officiel remplace les animations dès la confirmation enregistrée par le contrôle existant. Un direct spontané confirmé interrompt immédiatement l’antenne. Le réglage historique « terminer l’interlude » ne retarde plus un direct. Un autre direct ne provoque pas de changement de chaîne tant que le premier reste confirmé en cours.
+- **Dépassement** : l’heure de fin estimée n’arrête jamais le direct. Une erreur temporaire ou un contrôle retardé conserve le direct déjà à l’antenne ; un cache périmé ne peut en revanche pas démarrer un nouveau direct. Une confirmation de fin ou de chaîne hors ligne, un retrait ou une exclusion explicite libère l’antenne.
+- **Après la fin** : reprise du programme correspondant à l’heure courante de la grille enregistrée, avec son décalage dans la vidéo. Exemple : un replay prévu de 21 h à 22 h est rejoint à **21 h 20**, vingt minutes après son début, si le direct se termine à cette heure. Les programmes suivants restent aux horaires initiaux ; les créneaux recouverts ne sont pas inscrits comme diffusés dans l’historique.
+
+L’avance se règle de 0 à 30 minutes. L’attente après l’heure annoncée, **uniquement tant que le direct n’a pas commencé**, est limitée par défaut à 120 minutes ; 0 permet une attente illimitée. Une annulation ou un report connu rend l’antenne immédiatement à la grille jusqu’au nouvel horaire. Cette limite ne coupe jamais un direct confirmé.
+
+Le contrôle des plateformes reste effectué **toutes les cinq minutes** : démarrage et fin sont donc constatés au contrôle suivant, selon son exécution effective. Pendant l’attente et le direct, le lecteur et la liste du jour relisent seulement la route locale toutes les cinq secondes. Aucun appel API ni nouvel import n’est lancé par les visiteurs. L’import lourd Infomaniak reste quotidien. Références : [état des streams Twitch](https://dev.twitch.tv/docs/api/reference/streams/#get-streams), [horaires réels et prévus YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos#liveStreamingDetails).
+
+Les horaires déjà préparés, dont les musiques et choix manuels, restent protégés lors d’une actualisation automatique du catalogue. Les sources retirées restent exclues. La grille couvre 72 heures au maximum et 500 créneaux ; si un direct exceptionnel dépasse toute la période préparée sans aucune actualisation, une nouvelle rotation démarre à l’heure courante. Un remélange ou une modification éditoriale explicite peut toujours changer les choix futurs.
 
 ## Programmation automatique
 
@@ -160,11 +175,13 @@ L’option non autoloadée `bsc_tv_player_clock` contient l’antenne, la file `
 
 La route publique `GET /wp-json/bsc-tv/v1/player` renvoie l’émission en cours et seulement les cinq suivantes, sans réglage privé ni appel externe. Son rafraîchissement est généralement de 60 secondes et se rapproche d’une transition. Les SDK externes sont chargés lorsque le lecteur visible tente le démarrage automatique ou lors du clic en mode manuel.
 
-Les plateformes peuvent bloquer ou retarder une intégration selon le compte, la région, la publicité, l’autoplay ou la disponibilité de la vidéo. La synchronisation reste celle permise par leurs lecteurs officiels. Un direct spontané non découvert ne peut pas prendre la priorité ; une confirmation de direct expire selon la durée existante de vingt minutes. Une erreur de lecture conserve un lien vers la source et ne permet pas à un visiteur de changer l’antenne globale.
+Les plateformes peuvent bloquer ou retarder une intégration selon le compte, la région, la publicité, l’autoplay ou la disponibilité de la vidéo. La synchronisation reste celle permise par leurs lecteurs officiels. Un direct spontané non découvert ne peut pas prendre la priorité. Une confirmation vieille de vingt minutes ne démarre pas un nouveau direct ; le direct déjà à l’antenne attend une fin confirmée, sans coupure sur une durée estimée. Une erreur de lecture conserve un lien vers la source et ne permet pas à un visiteur de changer l’antenne globale.
 
 L’intégration Twitch nécessite HTTPS en production et les bons domaines `parent`. Les filtres CSS ne suivent pas le plein écran interne des plateformes. Les règles d’intégration des plateformes restent applicables aux calques visuels demandés.
 
 ## Validation
+
+Version **1.22.0** : **912 contrôles locaux** réussis (717 PHP et 195 JavaScript). Les 85 nouveaux contrôles d’horloge et 21 contrôles WordPress vérifient l’attente avant un direct, les animations partagées, les démarrages tardifs, les dépassements, le maintien pendant une panne API, la fin confirmée, la reprise au milieu d’un programme ou d’un interlude, l’historique réel et les exclusions. Les contrats JavaScript vérifient également le passage replay → animations en boucle → lecteur officiel en direct → reprise au décalage initial. Les SDK et API de plateforme sont simulés ; les bases WordPress de test sont jetables. Syntaxes PHP/JavaScript et diff vérifiés. Aucun déploiement sur un site ni essai d’un vrai direct n’est inclus dans ces tests.
 
 Version 1.21.0 : **521 contrôles PHP ciblés** réussis : 22 pour la diversité sur 50 chaînes, la recomposition avec clips et animations, les catégories, horaires fixés, capacités, nonce et verrou ; 82 pour l’import, sa pagination alternée et sa limite quotidienne ; 73 pour l’horloge ; 91 pour le lecteur WordPress/Elementor ; 42 pour la liste du jour ; 107 pour le moteur musical ; 46 pour sa grille ; 20 pour les animations ; 38 pour la validation groupée. **16 contrôles de navigateur local** vérifient le formulaire réel et l’administration à 1 280 et 390 pixels. Syntaxe des fichiers PHP modifiés et diff vérifiés. Les API sont simulées et les données privées du site n’ont pas été inspectées.
 

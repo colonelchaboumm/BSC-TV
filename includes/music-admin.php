@@ -39,7 +39,7 @@ final class BSC_TV_Music_Admin {
 			update_option( BSC_TV_Player::STATE, $state, false );
 			$state = BSC_TV_Player::advance_clock( $state, time() );
 			if ( $randomize ) { $state['music_seed'] = bin2hex( random_bytes( 16 ) ); }
-			if ( $mix_programmes ) { $state['rotation_seed'] = bin2hex( random_bytes( 16 ) ); $state['plan_source'] = ''; }
+			if ( $mix_programmes ) { $state['rotation_seed'] = bin2hex( random_bytes( 16 ) ); $state['plan_source'] = ''; $state['live_grid_until'] = 0; }
 			if ( $rebuild ) { $state = BSC_TV_Music::reset_future( $state, time() ); }
 			$state = BSC_TV_Player_Schedule::replenish( $state, BSC_TV_Player::media(), BSC_TV_Player::settings(), time(), true );
 			update_option( BSC_TV_Player::STATE, $state, false );
@@ -197,7 +197,7 @@ final class BSC_TV_Music_Admin {
 		echo '<p class="description">Sans cette option, seuls les espaces libres assez longs sont utilisés. Avec cette option, les choix automatiques sont repoussés du temps du clip et des animations, uniquement si la place restante avant le prochain horaire fixé le permet.</p>';
 		self::input( 'music[repeat_hours]', 'Délai minimal entre deux diffusions du même clip (heures)', $config['repeat_hours'], 'number', 'min="0" max="720" step="0.5"' );
 		self::select( 'music[disable_policy]', 'En cas de désactivation pendant un interlude', $config['disable_policy'], array( 'finish' => 'Laisser terminer l’interlude courant', 'interrupt' => 'Interrompre et rendre l’antenne aux émissions' ) );
-		self::select( 'music[live_policy]', 'Lorsqu’un véritable direct prioritaire est confirmé', $config['live_policy'], array( 'interrupt' => 'Interrompre l’interlude immédiatement (recommandé)', 'finish' => 'Terminer l’interlude avant de rejoindre le direct' ) );
+		echo '<p>Un véritable direct prioritaire interrompt immédiatement la musique. À sa fin confirmée, le lecteur rejoint l’heure courante de la grille initiale, sans décaler les émissions ni les clips suivants.</p>';
 		echo '<p class="description">Le choix Terminer peut retarder l’accès au vrai direct de la durée restante du clip et de sa sortie. Un véritable direct déjà à l’antenne ne sera jamais interrompu par la musique. Les artistes consécutifs identiques sont exclus ; le hip-hop alterne les références US/France lorsque le catalogue le permet.</p></section>';
 		echo '<section id="music-schedule"><h2>Programmation musicale · Europe/Paris</h2><p>La tranche est choisie à l’heure de début de l’interlude, avec les changements d’heure été/hiver. Les tranches peuvent traverser minuit ; aucun chevauchement actif n’est accepté.</p>';
 		$names = array_map( static function ( $band ) { return $band['name']; }, $config['bands'] );
