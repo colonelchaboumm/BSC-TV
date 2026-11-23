@@ -6,6 +6,7 @@
 		<div class="bsc-player__badges">
 			<?php foreach ( array( 'on_air' => 'ON AIR', 'live' => 'LIVE', 'new' => 'NOUVEAUTÉ', 'premiere' => 'PREMIÈRE', 'replay' => 'REDIFFUSION', 'music' => 'MUSIC BREAK' ) as $badge => $label ) : ?>
 				<?php if ( 'yes' === $settings[ 'show_' . $badge ] ) : ?><span class="bsc-player__badge bsc-player__badge--<?php echo esc_attr( $badge ); ?>" data-player-badge="<?php echo esc_attr( $badge ); ?>" hidden><?php echo esc_html( $label ); ?></span><?php endif; ?>
+				<?php if ( 'replay' === $badge && 'yes' === $settings['show_replay'] && 'yes' === $settings['show_publication'] ) : ?><time class="bsc-player__badge bsc-player__badge--publication" data-player-publication hidden></time><?php endif; ?>
 			<?php endforeach; ?>
 		</div>
 	</div>

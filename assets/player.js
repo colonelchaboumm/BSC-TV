@@ -299,6 +299,23 @@
 				const name = badge.dataset.playerBadge;
 				badge.hidden = !current || !(name === 'on_air' || (name === 'replay' ? !current.live && !current.premiere && !current.music && !current.standby : current[name]));
 			}
+			const publication = this.root.querySelector('[data-player-publication]');
+			if (publication) {
+				const published = Number(current?.published_at);
+				const date = new Date(published * 1000);
+				const visible = !!current && !current.live && !current.premiere && !current.music && !current.standby && published > 0 && published <= this.data.server_time && Number.isFinite(date.getTime());
+				publication.hidden = !visible;
+				publication.textContent = '';
+				publication.removeAttribute('datetime');
+				if (visible) {
+					const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
+					let label;
+					try { label = new Intl.DateTimeFormat(document.documentElement.lang || 'fr', { ...options, timeZone: this.data.timezone || 'UTC' }).format(date); }
+					catch { label = new Intl.DateTimeFormat('fr', { ...options, timeZone: 'UTC' }).format(date); }
+					publication.textContent = `Parue le ${label}`;
+					publication.setAttribute('datetime', date.toISOString());
+				}
+			}
 			const source = this.root.querySelector('[data-player-source]');
 			const sourceURL = current ? safeURL(current.url) : '';
 			source.hidden = !sourceURL;

@@ -3,7 +3,7 @@
 	--bsc-day-ink: #fff; --bsc-day-muted: #b6b3c0; --bsc-day-accent: #00d1b4;
 	--bsc-day-line: #ffffff24; --bsc-day-live: #ff535d;
 	--bsc-day-music: #ed80d6;
-	--bsc-day-gap: 10px; --bsc-day-row-gap: 16px; --bsc-day-image-width: 96px;
+	--bsc-day-gap: 4px; --bsc-day-row-gap: 16px; --bsc-day-image-width: 96px;
 	--bsc-day-time-width: 76px; --bsc-day-radius: 8px;
 	box-sizing: border-box; max-inline-size: 100%; min-inline-size: 0; padding: 20px;
 	border-radius: 12px; background: var(--bsc-day-surface); color: var(--bsc-day-ink);
@@ -18,7 +18,7 @@
 .bsc-day__date time { text-transform: capitalize; }
 .bsc-day__date span { margin-inline-start: auto; }
 .bsc-day .bsc-day__list { display: grid; gap: var(--bsc-day-gap); margin: 0; padding: 0; list-style: none; }
-.bsc-day .bsc-day__item { display: grid; grid-template-columns: var(--bsc-day-time-width) minmax(0, 1fr); align-items: start; gap: var(--bsc-day-row-gap); margin: 0; padding: 14px; border: 1px solid var(--bsc-day-line); border-radius: var(--bsc-day-radius); background: var(--bsc-day-row); }
+.bsc-day .bsc-day__item { display: grid; grid-template-columns: var(--bsc-day-time-width) minmax(0, 1fr); align-items: start; gap: var(--bsc-day-row-gap); margin: 0; padding: 10px; border: 1px solid var(--bsc-day-line); border-radius: var(--bsc-day-radius); background: var(--bsc-day-row); }
 .bsc-day .bsc-day__item--current { background: var(--bsc-day-current); border-color: var(--bsc-day-accent); }
 .bsc-day__list--no-times .bsc-day__item { grid-template-columns: minmax(0, 1fr); }
 .bsc-day__times { display: flex; flex-direction: column; gap: 5px; padding-block-start: 2px; color: var(--bsc-day-muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
@@ -49,6 +49,6 @@
 .bsc-day .bsc-day__more:disabled { background: var(--bsc-day-button-disabled-background, var(--bsc-day-button-background, transparent)); color: var(--bsc-day-button-disabled-color, var(--bsc-day-button-color, var(--bsc-day-accent))); opacity: .6; cursor: wait; }
 @media (max-width: 600px) {
 	.bsc-day { --bsc-day-time-width: 54px; --bsc-day-image-width: 72px; --bsc-day-row-gap: 10px; padding: 12px; }
-	.bsc-day .bsc-day__item { padding: 10px; }
+	.bsc-day .bsc-day__item { padding: 8px; }
 	.bsc-day__times { font-size: .75rem; }
 }
