@@ -114,6 +114,8 @@ Dans l’onglet **Style**, les sections **Boutons · style commun**, **Bouton Le
 
 ## Widget Programme du jour en liste
 
+Depuis **1.22.2**, la liste est plus compacte par défaut : **4 px entre les émissions**, avec des marges intérieures de **10 px par ligne**, réduites à **8 px sur mobile**. Dans Elementor → **Style → Liste et couleurs**, les réglages **Espacement des lignes** et **Marges des lignes** restent disponibles ; les valeurs personnalisées enregistrées sont prioritaires sur ces défauts.
+
 Lorsque la chaîne et le créateur portent le même nom, la liste conserve uniquement le nom cliquable vers BSC BDD. Sans lien de fiche activé ou disponible, le nom reste visible une seule fois. Les chaînes et créateurs dont les noms diffèrent conservent leurs lignes respectives. Cette règle s’applique aussi aux programmes chargés par **Afficher plus**.
 
 Dans Elementor, ajouter **BSC TV — Programme du jour (liste)** à la page souhaitée. Ce widget affiche par défaut le programme en cours et les **cinq prochaines diffusions de la journée** de l’antenne 24/7 gérée dans **BSC TV → Le live**. Le bouton **Afficher plus** charge les cinq suivantes en AJAX. Il disparaît lorsqu’aucun autre programme n’est disponible aujourd’hui. Le nombre de programmes par chargement est personnalisable de 1 à 50 ; le programme courant reste visible en plus de cette limite. Les programmes déjà diffusés peuvent être réactivés dans les réglages et participent alors aux lots affichés dans l’ordre chronologique.
