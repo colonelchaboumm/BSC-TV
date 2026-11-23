@@ -16,6 +16,8 @@ Dans **Music Interludes → Clips → Importer une playlist YouTube**, coller le
 
 ## Installation
 
+Depuis **1.23.0**, **Le live → Import quotidien · Infomaniak** propose un pilotage complet sans événements BSC TV dans WP-Cron. Configurez le lien quotidien pour les annonces, replays, métadonnées musicales et grille, puis le lien de contrôle léger des directs. Activez ensuite **Piloter BSC TV avec Infomaniak**. La première migration reprend une file d’annonces inachevée et ne réimporte pas les replays déjà traités le même jour. Les tâches des autres extensions WordPress restent inchangées. [Procédure et fréquences](LIVE_PLAYER.md#pilotage-complet-par-infomaniak).
+
 Depuis **1.22.0**, les directs prioritaires utilisent la grille comme une horloge fixe : animations BSC en boucle **deux minutes avant** l’heure annoncée, puis direct jusqu’à sa **fin confirmée**, même s’il dépasse son horaire estimé. À la fin, le lecteur rejoint le programme prévu à l’heure courante, éventuellement au milieu d’une vidéo ou d’un clip. Les horaires suivants ne sont pas décalés. L’avance et l’attente maximale sans démarrage sont réglables dans **Le live**. [Fonctionnement et limites](LIVE_PLAYER.md#priorité-des-directs-et-attente).
 
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.
