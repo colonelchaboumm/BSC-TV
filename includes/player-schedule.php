@@ -75,7 +75,7 @@ final class BSC_TV_Player_Schedule {
 
 	/** Refresh new catalogue choices before a transition, never after a saved slot has already begun. */
 	public static function before_advance( $state, $pool, $settings, $now ) {
-		$safe = ! empty( $state['live'] ) || ( ! empty( $state['vod'] ) && $state['vod']['end'] >= $now ) || ( empty( $state['vod'] ) && ! empty( $state['plan'] ) && $state['plan'][0]['start'] >= $now );
+		$safe = ! empty( $state['live'] ) || ! empty( $state['standby'] ) || ( ! empty( $state['vod'] ) && $state['vod']['end'] >= $now ) || ( empty( $state['vod'] ) && ! empty( $state['plan'] ) && $state['plan'][0]['start'] >= $now );
 		if ( $safe && ! empty( $settings['enabled'] ) && ( $state['plan_source'] ?? '' ) !== self::signature( $pool, $settings ) ) {
 			return self::replenish( $state, $pool, $settings, $now );
 		}
@@ -86,7 +86,7 @@ final class BSC_TV_Player_Schedule {
 	public static function replenish( $state, $pool, $settings, $now, $force = false ) {
 		if ( ! $force && ! self::needs_refresh( $state, $pool, $settings, $now ) ) { return $state; }
 		$source = self::signature( $pool, $settings );
-		if ( ( $state['plan_source'] ?? '' ) !== $source ) {
+		if ( ( $state['plan_source'] ?? '' ) !== $source && ! self::protected_clock( $state, $settings, $now ) ) {
 			$keep = 0;
 			foreach ( $state['plan'] ?? array() as $index => $row ) {
 				// Entries saved by older versions have no marker: preserve them conservatively.
@@ -104,17 +104,25 @@ final class BSC_TV_Player_Schedule {
 		return hash( 'sha256', json_encode( $state['plan'] ?? array() ) );
 	}
 
+	private static function protected_clock( $state, $settings, $now ) {
+		return ! empty( $settings['live_clock'] ) && ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) || ( $state['live_grid_until'] ?? 0 ) > $now );
+	}
+
 	/** Three calendar days, including actual earlier broadcasts and programmes spanning midnight. */
 	public static function days( $state, $now, $timezone ) {
 		$bounds = BSC_TV_Player::day_bounds( $now, $timezone, 3 );
 		$date = ( new DateTimeImmutable( '@' . $bounds[0] ) )->setTimezone( new DateTimeZone( $timezone ?: 'UTC' ) );
 		$groups = array();
 		$rows = $state['aired'] ?? array();
-		$current = $state['live'] ?? $state['vod'] ?? null;
+		$current = $state['live'] ?? $state['standby'] ?? $state['vod'] ?? null;
 		$found = false;
 		foreach ( $rows as $row ) { if ( $current && $row['key'] === $current['key'] && ( ! $row['end'] || $row['end'] > $now ) ) { $found = true; } }
 		if ( $current && ! $found ) { $rows[] = $current + array( 'live' => ! empty( $state['live'] ) ); }
-		foreach ( $state['plan'] ?? array() as $row ) { $rows[] = $row + array( 'scheduled' => true ); }
+		foreach ( $state['plan'] ?? array() as $row ) {
+			// Past background slots hidden by a live were not broadcast. Keep future hours fixed.
+			if ( ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) ) && empty( $state['paused_at'] ) && $row['start'] <= $now ) { continue; }
+			$rows[] = $row + array( 'scheduled' => true );
+		}
 		for ( $day = 0; $day < 3; ++$day ) {
 			$start = $date->getTimestamp();
 			$date = $date->modify( '+1 day' );
@@ -142,6 +150,24 @@ final class BSC_TV_Player_Schedule {
 
 	/** Pure projection: use the same selection and transition rules as the real player. */
 	public static function build( $state, $pool, $settings, $now ) {
+		if ( self::protected_clock( $state, $settings, $now ) ) {
+			$rows = array_values( array_filter( $state['plan'] ?? array(), static function ( $row ) use ( $pool ) { return ! empty( $row['id'] ) && isset( $pool[ $row['key'] ] ); } ) );
+			$forecast = $state;
+			$forecast['live'] = null; $forecast['standby'] = null; $forecast['live_grid_until'] = 0;
+			$forecast['plan'] = array();
+			foreach ( $rows as $row ) {
+				$forecast['vod'] = $row;
+				$forecast['history'][ $row['key'] ] = array( 'end' => $row['end'] );
+				$forecast['aired'][] = $row;
+				if ( ! empty( $row['music'] ) ) { BSC_TV_Music::begun( $forecast, $row ); }
+			}
+			$cursor = max( $now, $forecast['vod']['end'] ?? $now );
+			if ( count( $rows ) < self::MAX_SLOTS && $cursor < $now + self::HOURS * HOUR_IN_SECONDS ) {
+				$extra = self::build( $forecast, $pool, $settings, $cursor );
+				foreach ( $extra as $row ) { if ( count( $rows ) >= self::MAX_SLOTS || $row['start'] >= $now + self::HOURS * HOUR_IN_SECONDS ) { break; } $rows[] = $row; }
+			}
+			return $rows;
+		}
 		if ( class_exists( 'BSC_TV_Music' ) ) { $state = BSC_TV_Music::reconcile( $state, $pool, $settings, $now ); }
 		$forecast = $state;
 		$forecast['plan'] = array_values( array_filter( $forecast['plan'] ?? array(), static function ( $row ) use ( $pool ) { return ! empty( $row['id'] ) && isset( $pool[ $row['key'] ] ); } ) );
@@ -166,7 +192,7 @@ final class BSC_TV_Player_Schedule {
 			throw new InvalidArgumentException( 'La grille a changé depuis son affichage. Rechargez-la avant de modifier ce programme.' );
 		}
 		$index = array_search( $slot_id, array_column( $state['plan'] ?? array(), 'id' ), true );
-		if ( false === $index || ( empty( $state['live'] ) && $state['plan'][ $index ]['start'] < $now ) ) {
+		if ( false === $index || ( ( empty( $state['live'] ) || ! empty( $settings['live_clock'] ) ) && $state['plan'][ $index ]['start'] < $now ) ) {
 			throw new InvalidArgumentException( 'Ce programme n’est plus modifiable : il a commencé ou a quitté la grille.' );
 		}
 		$row = $state['plan'][ $index ];
@@ -194,7 +220,8 @@ final class BSC_TV_Player_Schedule {
 			$state['plan'][ $next ]['start'] += $delta;
 			$state['plan'][ $next ]['end'] += $delta;
 		}
-		$state['plan'] = self::build( $state, $pool, $settings, $now );
+		$editing = $settings; $editing['live_clock'] = false;
+		$state['plan'] = self::build( $state, $pool, $editing, $now );
 		if ( 'move' === $operation && $state['plan'][ $index ]['start'] !== $value ) {
 			throw new InvalidArgumentException( 'Cet horaire ne respecte pas la disponibilité ou le délai entre rediffusions. Choisissez une heure plus tardive.' );
 		}
@@ -240,6 +267,11 @@ final class BSC_TV_Player_Schedule {
 			$now = $now ?? time();
 			// Consume overdue slots before changing priorities, even if the admin page was left open.
 			$state = BSC_TV_Player::advance_clock( self::clock(), $now );
+			if ( 'next' === $operation && ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) ) ) {
+				update_option( BSC_TV_Player::STATE, $state, false );
+				return new WP_Error( 'schedule_live_priority', 'Le direct garde la priorité. Pour modifier la grille pendant l’attente ou le direct, remplacez un programme à venir à son horaire prévu.' );
+			}
+			$state['live_grid_until'] = 0;
 			if ( 'next' === $operation ) {
 				$manual = array_values( array_diff( $state['manual'] ?? array(), array( $id ) ) );
 				array_unshift( $manual, $id );
@@ -247,9 +279,10 @@ final class BSC_TV_Player_Schedule {
 			} elseif ( 'clear' === $operation ) {
 				$state['manual'] = array();
 				$state['plan'] = array();
+				$state['live_grid_until'] = 0;
 				$state['rotation_seed'] = bin2hex( random_bytes( 16 ) );
 			} else {
-				if ( ! empty( $state['live'] ) || empty( $state['vod'] ) || ! hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], $current_key ) ) {
+				if ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) || empty( $state['vod'] ) || ! hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], $current_key ) ) {
 					update_option( BSC_TV_Player::STATE, $state, false );
 					return new WP_Error( 'schedule_stale', 'Le programme en cours a changé. Rechargez la page avant de passer au suivant.' );
 				}

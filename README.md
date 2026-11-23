@@ -16,6 +16,8 @@ Dans **Music Interludes → Clips → Importer une playlist YouTube**, coller le
 
 ## Installation
 
+Depuis **1.22.0**, les directs prioritaires utilisent la grille comme une horloge fixe : animations BSC en boucle **deux minutes avant** l’heure annoncée, puis direct jusqu’à sa **fin confirmée**, même s’il dépasse son horaire estimé. À la fin, le lecteur rejoint le programme prévu à l’heure courante, éventuellement au milieu d’une vidéo ou d’un clip. Les horaires suivants ne sont pas décalés. L’avance et l’attente maximale sans démarrage sont réglables dans **Le live**. [Fonctionnement et limites](LIVE_PLAYER.md#priorité-des-directs-et-attente).
+
 1. Dans **Extensions → Ajouter une extension → Téléverser une extension**, installez le ZIP `bsc-tv.zip`, puis activez BSC TV. Le plugin requiert WordPress 6.2 et PHP 7.4 ou supérieur.
 2. Dans **BSC TV → Réglages et imports**, choisissez **Catalogue inclus · chaînes aux directs vérifiés**. Pour démarrer le suivi des nouveaux comptes dès l’import, cochez **Publier les nouvelles entrées**. Le catalogue complet comprend aussi les pistes dont le format direct reste à documenter. Les chaînes déjà enregistrées gardent leur statut.
 3. Importez **Catalogue inclus · émissions annoncées** pour récupérer les dates sourcées. Les dates et les liens peuvent évoluer. Les événements en brouillon sont modifiables avant publication. Ajoutez une image WordPress ou une URL de visuel si nécessaire.

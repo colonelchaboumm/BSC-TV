@@ -33,7 +33,7 @@ class YouTube {
   destroy() { this.destroyed = true; }
 }
 const window = { YT: { Player: YouTube, PlayerState: { PLAYING: 1, ENDED: 0 } }, matchMedia: () => ({ matches: reduced }), setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer; }, clearTimeout: id => timers.delete(id), setInterval: fn => { pulses.push(fn); return pulses.length; }, clearInterval() {} };
-vm.runInNewContext(await fs.readFile(new URL('../assets/player.js', import.meta.url), 'utf8'), { document, window, URL, Intl, Date, Error, AbortController, performance: { now: () => clock }, location: { origin: 'https://bsc.example', hostname: 'bsc.example' }, IntersectionObserver: class { observe() {} disconnect() {} }, fetch: async () => { requests++; return { ok: true, json: async () => ({ enabled: true, server_time: 1000 + clock / 1000, timezone: 'Europe/Paris', next: [], current: structuredClone(current) }) }; } });
+vm.runInNewContext(await fs.readFile(new URL('../assets/player.js', import.meta.url), 'utf8'), { document, window, URL, Intl, Date, Error, AbortController, performance: { now: () => clock }, location: { origin: 'https://bsc.example', hostname: 'bsc.example' }, IntersectionObserver: class { observe() {} disconnect() {} }, fetch: async () => { requests++; return { ok: true, json: async () => ({ enabled: true, server_time: 1000 + clock / 1000, timezone: 'Europe/Paris', poll_after: current.live || current.standby ? 5 : 60, next: [], current: structuredClone(current) }) }; } });
 const flush = async () => { for (let n = 0; n < 30; n++) await Promise.resolve(); };
 const refresh = async () => { document.fire('visibilitychange'); await flush(); };
 let checks = 0; const check = (condition, message) => { assert.ok(condition, message); checks++; };
@@ -74,6 +74,21 @@ check(!node('[data-music-screen]').hidden, 'A stale YouTube PLAYING event cannot
 clock = 245000; current = programme({ key: 'youtube:M7lc1UVf-VE', resource: { platform: 'youtube', id: 'M7lc1UVf-VE' }, title: 'Next beer programme', creator: 'Beer creator', start: 1245, end: 4845, music: false, music_phase: undefined, url: 'https://www.youtube.com/watch?v=M7lc1UVf-VE' }); await refresh();
 check(players.length === 2 && node('[data-music-screen]').hidden && node('[data-player-title]').textContent === 'Next beer programme', 'The existing player automatically returns to the next scheduled beer show');
 check(root.badges.find(badge => badge.dataset.playerBadge === 'music').hidden, 'The music badge disappears on a normal programme');
+const background = structuredClone(current);
+current = programme({ key: 'waiting:brew:1245', music: false, standby: true, expected_start: 1300, start: 1245, end: 1256, identity: { ...identity, entry_video: 'https://bsc.example/circus.mp4' } }); await refresh();
+check(players.at(-1).destroyed && !node('[data-music-screen]').hidden && video.loop, 'A pre-live reservation destroys the replay and loops BSC video while waiting');
+check(root.badges.find(badge => badge.dataset.playerBadge === 'live').hidden && root.badges.find(badge => badge.dataset.playerBadge === 'replay').hidden, 'Waiting is neither a confirmed live nor a replay badge');
+check(node('[data-player-source]').hidden && node('[data-player-progress]').hidden, 'Waiting has no fake source link or programme seek progress');
+check([...timers.values()].some(timer => timer.delay === 5000), 'Waiting checks the local programme every five seconds');
+clock = 256000; current = programme({ key: 'waiting:brew:1256', music: false, standby: true, expected_start: 1300, start: 1256, end: 1267, identity: { ...identity, entry_video: 'https://bsc.example/moon.mp4' } }); await refresh();
+check(video.src.endsWith('moon.mp4') && video.loop && players.length === 2, 'The following standby identity changes without creating a platform player');
+clock = 300000; current = programme({ key: 'live:youtube:aaaaaaaaaaa', resource: { platform: 'youtube', id: 'aaaaaaaaaaa' }, start: 1300, end: 0, live: true, music: false, music_phase: undefined, identity: null }); await refresh();
+check(players.length === 3 && node('[data-music-screen]').hidden, 'Confirmed live replaces waiting with the official player');
+const actualLive = players.at(-1); clock = 1200000; await refresh();
+check(players.at(-1) === actualLive && !actualLive.destroyed, 'A live without an end deadline is never restarted or cut at an estimated boundary');
+current = background; await refresh();
+check(actualLive.destroyed && players.length === 4 && players.at(-1).position === 955, 'After actual live ends, the replay joins the wall-clock offset instead of the paused offset');
+check(!video.loop && node('[data-music-screen]').hidden, 'Standby loop does not remain visible over the resumed official video');
 root.isConnected = false; pulses[0]();
 check(video.paused && node('[data-music-screen]').hidden && document.events.size === 0, 'Widget teardown cleans up identity media and listeners');
 console.log(`OK ${checks} music phase browser SDK checks (simulated YouTube).`);

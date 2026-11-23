@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/player-live.php';
 
 /** A shared clock and references to existing shows. No video collection or storage. */
 final class BSC_TV_Player {
@@ -31,6 +32,9 @@ final class BSC_TV_Player {
 			'enabled' => ! empty( $input['enabled'] ),
 			'recent' => in_array( $input['recent'] ?? '', array( 'strong', 'balanced', 'rotation' ), true ) ? $input['recent'] : 'strong',
 			'live_priority' => ! empty( $input['live_priority'] ),
+			'live_clock' => true,
+			'live_lead' => max( 0, min( 30, (int) ( $input['live_lead'] ?? 2 ) ) ),
+			'live_wait' => max( 0, min( 1440, (int) ( $input['live_wait'] ?? 120 ) ) ),
 			'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ),
 			'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ),
 			'max_channel_streak' => max( 0, min( 10, (int) ( $input['max_channel_streak'] ?? 3 ) ) ),
@@ -136,6 +140,7 @@ final class BSC_TV_Player {
 		$pool = array();
 		$blocked = array();
 		$manual_live = array();
+		$manual_upcoming = array();
 		// Only the existing catalogue is queried. Drafts, private and trash never participate.
 		$shows = get_posts( array( 'post_type' => BSC_TV_Content::SHOW, 'post_status' => array( 'publish', BSC_TV_Content::ARCHIVED ), 'has_password' => false, 'posts_per_page' => 1000, 'orderby' => 'modified', 'order' => 'DESC', 'update_post_term_cache' => false ) );
 		foreach ( $shows as $post ) {
@@ -171,6 +176,9 @@ final class BSC_TV_Player {
 				continue;
 			}
 			$base = array( 'show_id' => $post->ID, 'channel_id' => $channel_id, 'title' => get_the_title( $post ), 'creator' => $data['creator'] ?? '', 'bdd_id' => $data['bdd_id'] ?? 0 );
+			if ( 'publish' === $post->post_status && $channel && 'upcoming' === ( $video['status'] ?? '' ) && 'cancelled' !== ( $data['status'] ?? '' ) ) {
+				$manual_upcoming[] = $base + array( 'event' => $video );
+			}
 			if ( 'publish' === $post->post_status && $channel && 'live' === ( $video['status'] ?? '' ) && ! empty( $state['live_at'] ) && $video_id ) {
 				$manual_live[] = $base + array( 'event' => $video, 'confirmed_at' => $state['live_at'] );
 			}
@@ -199,7 +207,7 @@ final class BSC_TV_Player {
 			$pool[ $key ] = $base + array( 'key' => $key, 'resource' => $resource, 'duration' => $duration, 'published_at' => $published, 'premiere' => ! empty( $media['premiere'] ), 'creator_key' => (string) ( $base['bdd_id'] ?: ( $channel['data']['bdd_id'] ?? 0 ) ?: ( $channel_id ?: sanitize_title( $base['creator'] ) ?: $key ) ) );
 		}
 		$pool = array_diff_key( $pool, $blocked );
-		$result = array( 'pool' => $pool, 'channels' => $channels, 'manual_live' => $manual_live, 'blocked' => $blocked );
+		$result = array( 'pool' => $pool, 'channels' => $channels, 'manual_live' => $manual_live, 'manual_upcoming' => $manual_upcoming, 'blocked' => $blocked );
 		set_transient( self::CACHE, $result, MINUTE_IN_SECONDS );
 		return $result;
 	}
@@ -231,7 +239,7 @@ final class BSC_TV_Player {
 		return array_map( static function ( $entry ) { return $entry['id']; }, array_slice( $pending, 0, 50, true ) );
 	}
 
-	private static function lives( $catalogue, $settings, $now ) {
+	private static function lives( $catalogue, $settings, $now, $active = null ) {
 		$music_active = ! empty( $settings['music']['enabled'] ) || ! empty( $catalogue['music_active'] );
 		if ( ( ! $settings['live_priority'] && ! $music_active ) || empty( BSC_TV_Sync::settings()['live_enabled'] ) ) {
 			return array();
@@ -247,7 +255,7 @@ final class BSC_TV_Player {
 			$channel = $catalogue['channels'][ $entry['channel_id'] ] ?? null;
 			$event = $entry['event'];
 			if ( ! empty( $event['age_restricted'] ) || false === ( $event['embeddable'] ?? null ) ) { continue; }
-			if ( ! $channel || ( isset( $channel['config']['live'] ) && ! $channel['config']['live'] ) || $now - $entry['confirmed_at'] >= BSC_TV_Sync::MAX_LIVE_AGE || $entry['confirmed_at'] > $now + 30 || empty( $event['start'] ) || $event['start'] > $now || ( ! empty( $event['end'] ) && $event['end'] <= $now ) ) {
+			if ( ! $channel || ( isset( $channel['config']['live'] ) && ! $channel['config']['live'] ) || empty( $entry['confirmed_at'] ) || $entry['confirmed_at'] > $now + 30 || empty( $event['start'] ) || $event['start'] > $now || in_array( $event['status'] ?? '', array( 'ended', 'cancelled', 'upcoming' ), true ) ) {
 				continue;
 			}
 			$resource = self::resource( $event['url'] ?? '', true );
@@ -255,7 +263,11 @@ final class BSC_TV_Player {
 				continue;
 			}
 			$key = 'live:' . self::resource_key( $resource ) . ':' . ( $event['id'] ?? $event['start'] );
-			$lives[ $key ] = array( 'key' => $key, 'resource' => $resource, 'channel_id' => $channel['id'], 'show_id' => $entry['show_id'] ?? 0, 'title' => $event['title'], 'image' => BSC_TV_Content::url( $event['image'] ?? '' ), 'start' => (int) $event['start'], 'end' => 0, 'priority' => (int) ( $channel['config']['priority'] ?? 50 ) );
+			// A newer successful channel check supersedes an older manually tracked show.
+			if ( ! empty( $entry['show_id'] ) && ( $channel['state']['live_at'] ?? 0 ) > $entry['confirmed_at'] && empty( $channel['state']['live_error'] ) && ! in_array( self::resource_key( $resource ), array_map( static function ( $row ) { $r = self::resource( $row['url'] ?? '', true ); return $r ? self::resource_key( $r ) : ''; }, $channel['state']['live'] ?? array() ), true ) ) { continue; }
+			$ongoing = ! empty( $settings['live_clock'] ) && $key === ( $active['key'] ?? '' ) && $entry['confirmed_at'] >= ( $active['confirmed_at'] ?? 0 );
+			if ( ! $ongoing && $now - $entry['confirmed_at'] >= BSC_TV_Sync::MAX_LIVE_AGE ) { continue; }
+			$lives[ $key ] = array( 'key' => $key, 'resource' => $resource, 'channel_id' => $channel['id'], 'show_id' => $entry['show_id'] ?? 0, 'title' => $event['title'], 'image' => BSC_TV_Content::url( $event['image'] ?? '' ), 'start' => (int) $event['start'], 'end' => 0, 'confirmed_at' => $entry['confirmed_at'], 'priority' => (int) ( $channel['config']['priority'] ?? 50 ) );
 		}
 		return $lives;
 	}
@@ -339,7 +351,7 @@ final class BSC_TV_Player {
 		return array( $date->getTimestamp(), $date->modify( '+' . (int) $days . ' days' )->getTimestamp() );
 	}
 
-	private static function log_slot( &$state, $slot, $start = null, $end = null, $live = false ) {
+	public static function log_slot( &$state, $slot, $start = null, $end = null, $live = false ) {
 		$row = $slot;
 		$row['start'] = $start ?? $slot['start'];
 		$row['end'] = $end ?? $slot['end'];
@@ -428,6 +440,7 @@ final class BSC_TV_Player {
 
 	/** Only this state, stored under a database lock, determines the common antenna. */
 	public static function advance( $state, $pool, $lives, $settings, $now ) {
+		if ( ! empty( $settings['live_clock'] ) ) { return BSC_TV_Player_Live::advance( $state, $pool, $lives, $settings, $now ); }
 		if ( class_exists( 'BSC_TV_Music' ) ) { $state = BSC_TV_Music::reconcile( $state, $pool, $settings, $now ); }
 		$selection_settings = $settings;
 		if ( $lives ) {
@@ -506,6 +519,15 @@ final class BSC_TV_Player {
 		if ( ! $item ) {
 			return null;
 		}
+		if ( ! empty( $item['standby'] ) ) {
+			$waiting = BSC_TV_Player_Live::decorate( $item, self::settings(), $now );
+			$channel = $catalogue['channels'][ $item['channel_id'] ?? 0 ] ?? array();
+			$profile = BSC_TV_Content::profile( $channel['data']['bdd_id'] ?? 0 );
+			$waiting['creator'] = $profile['name'] ?? $channel['name'] ?? '';
+			$waiting['profile_url'] = BSC_TV_Content::url( $profile['permalink'] ?? '' );
+			$waiting['avatar'] = BSC_TV_Content::url( $profile['avatar']['thumbnail'] ?? '' );
+			return $waiting;
+		}
 		$media = $catalogue['pool'][ $item['key'] ] ?? array();
 		if ( ! empty( $item['music'] ) || ! empty( $media['music'] ) ) { return BSC_TV_Music::decorate( $item, $media, $now ); }
 		$channel = $catalogue['channels'][ $item['channel_id'] ?? 0 ] ?? array();
@@ -533,8 +555,9 @@ final class BSC_TV_Player {
 		$settings = self::settings();
 		if ( ! $settings['enabled'] ) { return $state; }
 		$catalogue = self::catalogue();
+		$settings['_announcements'] = BSC_TV_Player_Live::announcements( $catalogue, $settings );
 		$state = BSC_TV_Player_Schedule::before_advance( $state, $catalogue['pool'], $settings, $now );
-		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now ), $settings, $now );
+		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now, $state['live'] ?? null ), $settings, $now );
 	}
 
 	public static function snapshot( $now = null ) {
@@ -545,8 +568,9 @@ final class BSC_TV_Player {
 			return $result;
 		}
 		$catalogue = self::catalogue();
-		$lives = self::lives( $catalogue, $settings, $now );
 		$state = (array) get_option( self::STATE, array() );
+		$settings['_announcements'] = BSC_TV_Player_Live::announcements( $catalogue, $settings );
+		$lives = self::lives( $catalogue, $settings, $now, $state['live'] ?? null );
 		$updated = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
 		if ( $updated !== $state || BSC_TV_Player_Schedule::needs_refresh( $updated, $catalogue['pool'], $settings, $now ) ) {
 			$lock = BSC_TV_Content::lock( self::LOCK );
@@ -556,6 +580,7 @@ final class BSC_TV_Player {
 					wp_cache_delete( self::STATE, 'options' );
 					wp_cache_delete( 'notoptions', 'options' );
 					$state = BSC_TV_Player_Schedule::before_advance( (array) get_option( self::STATE, array() ), $catalogue['pool'], $settings, $now );
+					$lives = self::lives( $catalogue, $settings, $now, $state['live'] ?? null );
 					$state = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
 					$state = BSC_TV_Player_Schedule::replenish( $state, $catalogue['pool'], $settings, $now );
 					update_option( self::STATE, $state, false );
@@ -566,17 +591,31 @@ final class BSC_TV_Player {
 		}
 		$live = $state['live'] ?? null;
 		$vod = $state['vod'] ?? null;
+		$due = BSC_TV_Player_Live::upcoming( $state, $settings, $now, true );
 		if ( $live && isset( $lives[ $live['key'] ] ) ) {
 			$live['image'] = $lives[ $live['key'] ]['image'] ?? '';
 			$result['current'] = self::decorate( $live, $catalogue, $now, true );
+		} elseif ( ! empty( $state['standby'] ) && $due && $due['key'] === $state['standby']['key'] ) {
+			$result['current'] = self::decorate( $state['standby'], $catalogue, $now );
 		} elseif ( $vod && isset( $catalogue['pool'][ $vod['key'] ] ) && $vod['start'] <= $now && $vod['end'] > $now ) {
 			$result['current'] = self::decorate( $vod, $catalogue, $now );
 		}
+		if ( $live || ! empty( $state['standby'] ) ) { $result['poll_after'] = 5; }
+		$waiting = BSC_TV_Player_Live::upcoming( $state, $settings, $now );
+		if ( ! $live && empty( $state['standby'] ) && $waiting && $waiting['start'] > $now && $result['current'] ) {
+			// Only the public playback boundary is shortened; the saved replay keeps its times.
+			$result['current']['end'] = min( $result['current']['end'], $waiting['start'] );
+		}
 		$forecast = $state;
+		if ( $live || ! empty( $state['standby'] ) ) {
+			$forecast['live'] = null; $forecast['standby'] = null;
+			$forecast = BSC_TV_Player_Live::seek( $forecast, $catalogue['pool'], $settings, $now );
+			$vod = $forecast['vod'];
+		}
 		$cursor = max( $now, $vod['end'] ?? $now );
-		if ( $vod && ( $live || $vod['start'] > $now ) && isset( $catalogue['pool'][ $vod['key'] ] ) ) {
+		if ( $vod && $vod['start'] > $now && isset( $catalogue['pool'][ $vod['key'] ] ) ) {
 			$next = self::decorate( $vod, $catalogue, $now );
-			$next['after_live'] = (bool) $live;
+			$next['after_live'] = false;
 			$result['next'][] = $next;
 		}
 		for ( $count = count( $result['next'] ); $count < 5; ++$count ) {
@@ -586,7 +625,7 @@ final class BSC_TV_Player {
 			}
 			$slot = self::begin( $media, $forecast );
 			$next = self::decorate( $slot, $catalogue, $now );
-			$next['after_live'] = (bool) $live;
+			$next['after_live'] = false;
 			$result['next'][] = $next;
 			$cursor = $slot['end'];
 		}
@@ -617,8 +656,8 @@ final class BSC_TV_Player {
 			$live = ! empty( $row['live'] );
 			if ( ! $live && isset( $catalogue['pool'][ $row['key'] ] ) ) { $row['channel_id'] = $catalogue['pool'][ $row['key'] ]['channel_id']; }
 			$channel = $catalogue['channels'][ $row['channel_id'] ?? 0 ] ?? array();
-			if ( ! $live && ! isset( $catalogue['pool'][ $row['key'] ] ) ) { continue; }
-			if ( $live ) {
+			if ( ! $live && empty( $row['standby'] ) && ! isset( $catalogue['pool'][ $row['key'] ] ) ) { continue; }
+			if ( $live || ! empty( $row['standby'] ) ) {
 				if ( ! $channel || ( isset( $channel['config']['live'] ) && ! $channel['config']['live'] ) ) { continue; }
 				if ( ! empty( $row['show_id'] ) ) {
 					$post = get_post( $row['show_id'] );
@@ -627,14 +666,18 @@ final class BSC_TV_Player {
 				}
 			}
 			$item = self::decorate( $row, $catalogue, $now, $live );
+			if ( ! empty( $row['standby'] ) ) {
+				$item['key'] = $row['key']; $item['start'] = $row['start']; $item['end'] = $row['end'];
+				$item['title'] = 'Animations BSC · en attendant ' . $item['title'];
+			}
 			if ( ! empty( $row['music'] ) ) { $item = BSC_TV_Music::programme( $row, $now ); }
 			$item['phase'] = $row['phase'];
-			$item['on_air'] = 'current' === $row['phase'] && ( $snapshot['current']['key'] ?? '' ) === $row['key'];
+			$item['on_air'] = 'current' === $row['phase'] && ( ! empty( $row['standby'] ) ? ! empty( $snapshot['current']['standby'] ) : ( $snapshot['current']['key'] ?? '' ) === $row['key'] );
 			if ( $live && 'current' === $row['phase'] && ! $item['on_air'] ) { continue; }
 			$item['display_start'] = $row['display_start'];
 			$item['display_end'] = $row['display_end'];
 			$item['continued'] = $row['continued'];
-			$item['provisional'] = 'future' === $row['phase'] && ! empty( $snapshot['current']['live'] );
+			$item['provisional'] = false;
 			$item['channel'] = html_entity_decode( wp_strip_all_tags( $channel['name'] ?? '' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 			$show = ! empty( $row['show_id'] ) ? BSC_TV_Content::data( $row['show_id'] ) : array();
 			$image = ! empty( $row['show_id'] ) ? get_the_post_thumbnail_url( $row['show_id'], 'medium' ) : '';
@@ -646,7 +689,7 @@ final class BSC_TV_Player {
 			$result['items'][] = $item;
 			foreach ( array( $row['start'], $row['end'] ) as $transition ) { if ( $transition > $now ) { $boundary = min( $boundary, $transition ); } }
 		}
-		$result['poll_after'] = max( 5, min( 60, $boundary - $now + 1 ) );
+		$result['poll_after'] = max( 5, min( $snapshot['poll_after'], $boundary - $now + 1 ) );
 		return $result;
 	}
 
