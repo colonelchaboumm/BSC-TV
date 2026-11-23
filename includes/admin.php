@@ -448,6 +448,7 @@ final class BSC_TV_Admin {
 
 	public static function sync_now() {
 		self::authorize( 'bsc_tv_sync_now' );
+		if ( BSC_TV_Server::enabled() ) { self::message( 'BSC TV est piloté par les tâches Infomaniak. Le passage quotidien recherche les annonces et les replays ; la tâche séparée vérifie les directs. Aucun import supplémentaire n’a été lancé.' ); self::redirect(); }
 		$live = 'live' === ( $_POST['sync_mode'] ?? '' );
 		if ( $live && ! BSC_TV_Sync::can_check_live( BSC_TV_Sync::settings() ) ) {
 			self::message( 'Activez la vérification des directs et renseignez un accès API YouTube, Twitch ou Kick.', 'error' );
@@ -672,8 +673,9 @@ final class BSC_TV_Admin {
 			<p>Toutes les 24 heures, BSC TV recherche les émissions des chaînes publiées pour les 45 prochains jours. Les émissions confirmées par une source autorisée alimentent la grille. Les annonces à vérifier restent en brouillon.</p>
 			<p><?php echo esc_html( sprintf( '%d chaîne(s) sur %d avec un agenda ou un accès API configuré.', $ready, count( $channels ) ) ); ?>
 			<?php if ( $ready < count( $channels ) ) : ?> Ajoutez les accès API ci-dessous ou renseignez un agenda public dans la fiche de la chaîne.<?php endif; ?></p>
-			<?php if ( $next ) : ?><p><?php echo $next <= time() ? 'Prochaine collecte en attente d’exécution par WP-Cron.' : esc_html( 'Prochaine collecte à partir du ' . wp_date( 'j F Y à H:i', $next ) . '.' ); ?></p><?php endif; ?>
-			<?php if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) : ?><p class="description">Le lancement de WP-Cron lors des visites est désactivé. La collecte dépend du cron configuré chez votre hébergeur.</p><?php endif; ?>
+			<?php if ( BSC_TV_Server::enabled() ) : ?><p><strong>Pilotage Infomaniak actif.</strong> Recherche des annonces et replays une fois par jour. Les événements BSC TV de WP-Cron sont désactivés. Consultez les deux bilans dans <a href="<?php echo esc_url( admin_url( 'admin.php?page=bsc-tv-live#bsc-player-import' ) ); ?>">Le live → Import Infomaniak</a>.</p>
+			<?php elseif ( $next ) : ?><p><?php echo $next <= time() ? 'Prochaine collecte en attente d’exécution par WP-Cron.' : esc_html( 'Prochaine collecte à partir du ' . wp_date( 'j F Y à H:i', $next ) . '.' ); ?></p><?php endif; ?>
+			<?php if ( ! BSC_TV_Server::enabled() && defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) : ?><p class="description">Le lancement de WP-Cron lors des visites est désactivé. La collecte dépend du cron configuré chez votre hébergeur.</p><?php endif; ?>
 			<p><?php echo $last ? esc_html( 'Dernière collecte terminée ' . wp_date( 'j F Y · H:i', $last ) . '.' ) : 'Première collecte en attente.'; ?>
 			<?php if ( $remaining ) : echo esc_html( sprintf( ' Chaînes restant à traiter : %d.', $remaining ) ); endif; ?></p>
 			<?php if ( $last_live ) : ?><p><?php echo esc_html( 'Dernier contrôle des directs ' . wp_date( 'j F Y · H:i', $last_live ) . '.' ); ?></p><?php endif; ?>
@@ -691,7 +693,7 @@ final class BSC_TV_Admin {
 					<?php endif; ?>
 				<?php endforeach; ?>
 				<?php self::field( 'youtube_search_limit', 'Budget quotidien de requêtes search.list YouTube', $settings['youtube_search_limit'] ?? 90, 'number' ); ?>
-				<p><label><input type="checkbox" name="bsc_tv[live_enabled]" value="1" <?php checked( ! empty( $settings['live_enabled'] ) ); ?>> Vérifier le statut des directs toutes les cinq minutes</label></p>
+				<p><label><input type="checkbox" name="bsc_tv[live_enabled]" value="1" <?php checked( ! empty( $settings['live_enabled'] ) ); ?>> Activer le contrôle des directs <?php echo BSC_TV_Server::enabled() ? 'par Infomaniak' : 'toutes les cinq minutes'; ?></label></p>
 				<?php submit_button( 'Enregistrer les réglages' ); ?>
 			</form>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">

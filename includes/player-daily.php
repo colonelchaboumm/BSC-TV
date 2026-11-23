@@ -12,7 +12,7 @@ final class BSC_TV_Player_Daily {
 		add_action( 'rest_api_init', array( __CLASS__, 'rest' ) );
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			WP_CLI::add_command( 'bsc-tv import', static function () {
-				$result = self::execute( 10000, 480 );
+				$result = BSC_TV_Server::enabled() ? BSC_TV_Server::daily( 10000, 480 ) : self::execute( 10000, 480 );
 				if ( is_wp_error( $result ) ) { WP_CLI::error( $result->get_error_message() ); }
 				WP_CLI::line( wp_json_encode( $result ) );
 				if ( in_array( $result['status'], array( 'partial', 'completed_with_errors' ), true ) ) { WP_CLI::warning( 'Consultez le bilan dans BSC TV → Le live.' ); }
@@ -44,7 +44,7 @@ final class BSC_TV_Player_Daily {
 		register_rest_route( 'bsc-tv/v1', '/import-daily', array( 'methods' => 'GET', 'permission_callback' => array( __CLASS__, 'authorize' ), 'callback' => static function () {
 			ignore_user_abort( true );
 			if ( function_exists( 'set_time_limit' ) ) { @set_time_limit( 270 ); }
-			$result = self::execute();
+			$result = BSC_TV_Server::enabled() ? BSC_TV_Server::daily() : self::execute();
 			$response = is_wp_error( $result ) ? rest_convert_error_to_response( $result ) : new WP_REST_Response( $result );
 			$response->header( 'Cache-Control', 'no-store, private, max-age=0' );
 			$response->header( 'Referrer-Policy', 'no-referrer' );
@@ -53,7 +53,7 @@ final class BSC_TV_Player_Daily {
 	}
 
 	/** The calendar-day claim is saved before API work, so repeat calls and crashes cannot start another scan today. */
-	public static function execute( $max_pages = 10000, $budget = 240 ) {
+	public static function execute( $max_pages = 10000, $budget = 240, $held_lock = null ) {
 		if ( ! BSC_TV_Player::settings()['enabled'] ) { return array( 'status' => 'disabled', 'message' => 'Le lecteur est désactivé.' ); }
 		$lock = BSC_TV_Content::lock( self::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'import_busy', 'Un import quotidien est déjà en cours.', array( 'status' => 409 ) ); }
@@ -64,7 +64,7 @@ final class BSC_TV_Player_Daily {
 			$previous = (array) get_option( self::REPORT, array() );
 			$day = wp_date( 'Y-m-d' );
 			if ( ( $previous['day'] ?? '' ) === $day ) { return array( 'status' => 'already_run', 'day' => $day, 'message' => 'L’import du jour a déjà été lancé. Prochain passage demain.' ); }
-			$sync_lock = BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
+			$sync_lock = $held_lock ?: BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
 			if ( ! $sync_lock ) { return new WP_Error( 'import_sync_busy', 'Une autre synchronisation est en cours. Aucun import quotidien n’a été lancé.', array( 'status' => 409 ) ); }
 			$report = array( 'day' => $day, 'started_at' => time(), 'finished_at' => 0, 'status' => 'running', 'pages' => 0 );
 			if ( ! update_option( self::REPORT, $report, false ) ) { return new WP_Error( 'import_claim', 'Impossible d’enregistrer le passage quotidien. Aucun import n’a été lancé.', array( 'status' => 503 ) ); }
@@ -91,7 +91,7 @@ final class BSC_TV_Player_Daily {
 			}
 			return $report;
 		} finally {
-			if ( $sync_lock ) { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $sync_lock ); }
+			if ( $sync_lock && ! $held_lock ) { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $sync_lock ); }
 			BSC_TV_Content::unlock( self::LOCK, $lock );
 		}
 	}

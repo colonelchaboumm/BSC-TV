@@ -113,7 +113,7 @@ grid_check( strpos( $simple['html'], 'MUSIC BREAK' ) !== false && strpos( $simpl
 $custom = BSC_TV_Day::programme( BSC_TV_Day::config( array( 'music_label' => '<script>bad</script>Music & Chill', 'page_size' => 50 ) ), $now );
 grid_check( strpos( $custom['html'], '<script>' ) === false && strpos( $custom['html'], 'Music &amp; Chill' ) !== false, 'Custom music labels are escaped like the existing widget labels' );
 $paged = BSC_TV_Day::programme( BSC_TV_Day::config( array() ), $now, 1 ); $more = BSC_TV_Day::programme( BSC_TV_Day::config( array() ), $now, 2 );
-grid_check( $paged['count'] <= 6 && $more['count'] > $paged['count'] && strpos( $more['html'], 'MUSIC BREAK' ) !== false, 'Five upcoming entries and AJAX expansion include the persisted tracks' );
+grid_check( $paged['count'] <= 6 && ( $paged['has_more'] ? $more['count'] > $paged['count'] : $more['count'] === $paged['count'] ) && strpos( $more['html'], 'MUSIC BREAK' ) !== false, 'Five-item batches expand when more programmes remain today, including persisted tracks' );
 grid_check( 0 === $requests, 'Day lists, music planning and diagnostics make no external API requests' );
 $snapshot_one = BSC_TV_Player::snapshot( $now ); $snapshot_two = BSC_TV_Player::snapshot( $now );
 grid_check( $snapshot_one === $snapshot_two, 'Repeated public reads keep identical future musical choices' );

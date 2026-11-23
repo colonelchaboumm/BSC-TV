@@ -19,6 +19,7 @@ final class BSC_TV_Player_Schedule {
 	}
 
 	public static function schedule() {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { self::deactivate(); return; }
 		if ( ! BSC_TV_Player::settings()['enabled'] ) { self::deactivate(); return; }
 		if ( ! wp_next_scheduled( self::HOURLY ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', self::HOURLY );
@@ -33,6 +34,7 @@ final class BSC_TV_Player_Schedule {
 	}
 
 	public static function request() {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return; }
 		if ( BSC_TV_Player::settings()['enabled'] && ! wp_next_scheduled( self::NOW ) ) {
 			wp_schedule_single_event( time() + 15, self::NOW );
 		}

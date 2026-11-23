@@ -60,6 +60,10 @@ final class BSC_TV_Sync {
 	}
 
 	public static function schedule() {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) {
+			foreach ( array( self::DAILY, self::CONTINUE_DAILY, self::DAILY_NOW, self::LIVE, self::LIVE_NOW ) as $hook ) { if ( wp_next_scheduled( $hook ) ) { wp_clear_scheduled_hook( $hook ); } }
+			return;
+		}
 		if ( ! wp_next_scheduled( self::DAILY ) ) {
 			wp_schedule_event( time() + 30, 'daily', self::DAILY );
 		}
@@ -94,14 +98,17 @@ final class BSC_TV_Sync {
 	}
 
 	public static function queue( $hook, $delay = 15 ) {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return false; }
 		return wp_next_scheduled( $hook ) || wp_schedule_single_event( time() + $delay, $hook ) || wp_next_scheduled( $hook );
 	}
 
 	public static function daily() {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return; }
 		self::discover( true );
 	}
 
 	public static function continue_daily() {
+		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return; }
 		self::discover( false );
 	}
 
@@ -192,24 +199,29 @@ final class BSC_TV_Sync {
 
 	private static function discover_channel( $channel, $settings, $now ) {
 		$data = $channel['data'];
+		$error = false;
 		if ( 'twitch' === $channel['api'] ) {
 			self::discover_twitch( $channel, $settings, $now );
 		}
 		if ( 'youtube' === $channel['api'] ) {
 			self::discover_youtube( $channel, $settings['youtube_key'], $now );
 		}
+		if ( $channel['api'] ) { $fresh = self::state( $channel['id'], $channel['key'] ); $error = ! empty( $fresh['schedule_error'] ); }
 		if ( ! empty( $data['feed_url'] ) ) {
 			$result = BSC_TV_Feeds::fetch( $channel, $now );
 			update_post_meta( $channel['id'], '_bsc_tv_feed_report', is_wp_error( $result ) ? $result->get_error_message() : sprintf( '%d annonce(s) lue(s).', $result ) );
+			$error = $error || is_wp_error( $result );
 		}
+		return $error;
 	}
 
-	public static function live() {
+	public static function live( $held_lock = null ) {
+		if ( ! $held_lock && class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return; }
 		$settings = self::settings();
 		if ( ! self::can_check_live( $settings ) ) {
 			return;
 		}
-		$lock = BSC_TV_Content::lock( self::LOCK );
+		$lock = $held_lock ?: BSC_TV_Content::lock( self::LOCK );
 		if ( ! $lock ) {
 			return;
 		}
@@ -252,8 +264,42 @@ final class BSC_TV_Sync {
 			}
 			update_option( self::LAST_LIVE, $now, false );
 		} finally {
-			BSC_TV_Content::unlock( self::LOCK, $lock );
+			if ( ! $held_lock ) { BSC_TV_Content::unlock( self::LOCK, $lock ); }
 		}
+	}
+
+	/** One bounded daily pass; caller owns the shared sync lock and daily claim. */
+	public static function discover_server( $deadline, $maximum, $progress ) {
+		$now = time(); $settings = self::settings();
+		$channels = array_filter( self::discovery_channels( $settings ), static function ( $channel ) { return $channel['ready']; } );
+		$queue = (array) get_option( self::QUEUE, array() );
+		$report = array( 'status' => 'running', 'started_at' => $now, 'processed' => 0, 'remaining' => count( $queue ), 'errors' => 0, 'total' => count( $channels ) );
+		// Adopt an already completed legacy scan; continue an unfinished queue without restarting it.
+		$last = (int) get_option( self::LAST_DAILY, 0 );
+		if ( ! $queue && $last && wp_date( 'Y-m-d', $last ) === wp_date( 'Y-m-d', $now ) ) { return array_replace( $report, array( 'status' => 'already_run', 'finished_at' => $last ) ); }
+		$starting = ! $queue;
+		if ( $starting ) {
+			foreach ( $channels as $id => $channel ) { $channels[ $id ]['state'] = self::state( $id, $channel['key'] ); }
+			uasort( $channels, static function ( $a, $b ) { return ( $a['state']['schedule_attempt'] ?? 0 ) <=> ( $b['state']['schedule_attempt'] ?? 0 ); } );
+			$queue = array_keys( $channels ); update_option( self::QUEUE, $queue, false );
+		}
+		$report['remaining'] = count( $queue ); $progress( $report );
+		if ( $starting && $settings['youtube_key'] ) { self::manual_youtube( $settings['youtube_key'], $now, false ); }
+		while ( $queue && $report['processed'] < max( 1, $maximum ) && microtime( true ) < $deadline ) {
+			$id = reset( $queue );
+			if ( isset( $channels[ $id ] ) ) {
+				$channel = $channels[ $id ]; $channel['state'] = $channel['state'] ?? self::state( $id, $channel['key'] );
+				if ( self::discover_channel( $channel, $settings, $now ) ) { ++$report['errors']; }
+				$fresh = self::state( $id, $channel['key'] );
+				$report['announcements'] = ( $report['announcements'] ?? 0 ) + count( array_filter( $fresh['schedule'] ?? array(), static function ( $event ) use ( $now ) { return 'upcoming' === ( $event['status'] ?? '' ) && $event['start'] >= $now; } ) );
+			}
+			array_shift( $queue ); ++$report['processed']; $report['remaining'] = count( $queue );
+			update_option( self::QUEUE, $queue, false ); $progress( $report );
+		}
+		$report['status'] = $queue ? 'partial' : ( $report['errors'] ? 'completed_with_errors' : 'completed' );
+		$report['finished_at'] = time();
+		if ( ! $queue ) { BSC_TV_Library::archive_shows( $now ); delete_option( self::QUEUE ); update_option( self::LAST_DAILY, $now, false ); }
+		return $report;
 	}
 
 	public static function state( $id, $key ) {

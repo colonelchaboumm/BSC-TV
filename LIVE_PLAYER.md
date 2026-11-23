@@ -46,6 +46,23 @@ Sources : [planificateur Infomaniak](https://www.infomaniak.com/fr/support/faq/2
 
 Références : [vidéos YouTube d’une chaîne](https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/list), [métadonnées YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos), [vidéos Twitch](https://dev.twitch.tv/docs/api/reference/videos).
 
+## Pilotage complet par Infomaniak
+
+La version **1.23.0** permet de retirer tous les événements BSC TV de WP-Cron. Les requêtes sont authentifiées avec le lien confidentiel existant, via HTTPS ; aucun nouvel identifiant n’est nécessaire.
+
+1. Dans **Le live → Import quotidien · Infomaniak**, copier le lien quotidien vers `/server-daily`. Dans le planificateur Infomaniak, modifier la tâche existante pour appeler ce lien **une fois par jour**. Ce passage recherche d’abord les émissions annoncées, puis importe les replays et actualise la musique et la grille.
+2. Créer une seconde tâche vers le lien `/server-live`. Elle vérifie uniquement les directs connus et fait avancer l’horloge locale ; elle ne recherche pas de nouveaux programmes et n’importe pas de vidéos. Régler cinq minutes si l’offre le permet, ou quinze minutes sur le mutualisé. Le début et la fin des directs sont détectés selon cette fréquence effective.
+3. Activer **Piloter BSC TV avec Infomaniak** dans WordPress. Les anciens événements BSC TV de recherche quotidienne, continuation, contrôle des directs et préparation de grille sont retirés ; les visites, sauvegardes et anciens callbacks ne recréent pas ces tâches. Les événements des autres extensions restent intacts. Désactiver ce mode restaure le fonctionnement précédent.
+4. Tester le passage quotidien dans Infomaniak, puis le contrôle léger. Les deux bilans sont visibles dans **Le live**. Les appels répétés au quotidien ne refont aucun travail API le même jour ; les contrôles légers sont espacés d’au moins cinq minutes.
+
+Le passage quotidien réserve son jour avant les requêtes et partage le verrou des plateformes entre annonces et replays. Une file d’annonces existante reprend où elle s’était arrêtée. Une collecte déjà terminée le même jour et des replays déjà importés sont reconnus sans relancer leur recherche. Une limite de durée conserve les files pour le prochain jour, sans continuation WP-Cron. Un verrou occupé avant le début ou un échec de réservation ne consomme pas le passage. Les erreurs de chaîne sont comptées et n’empêchent pas les autres sources d’être contrôlées.
+
+Les annonces YouTube/Twitch sont conservées dans les agendas des chaînes et affichées par la grille ; leur actualisation n’implique pas la création de nouvelles fiches dans la liste WordPress **Émissions**. Le bilan **Recherche des émissions à venir** indique la date réelle du passage, les chaînes traitées, restantes et en erreur. Le bilan des replays reste distinct.
+
+Sur Serveur Cloud, les commandes `wp --path=/chemin/wordpress bsc-tv daily` et `wp --path=/chemin/wordpress bsc-tv live` utilisent les mêmes verrous et limites. L’ancien lien `/import-daily` et la commande `bsc-tv import` restent compatibles : en pilotage Infomaniak actif, ils appellent le passage complet. Le renouvellement du lien confidentiel révoque les deux URL ; mettre alors les deux tâches à jour.
+
+Le planificateur Infomaniak impose un intervalle minimal de **15 minutes en mutualisé**, et **une minute sur Serveur Cloud**. Il faut tenir compte de cette limite pour la réactivité des directs ; aucune fréquence de cinq minutes n’est garantie sur une offre mutualisée. [Documentation du planificateur Infomaniak](https://www.infomaniak.com/fr/support/faq/2161/programmer-des-taches-sur-hebergement-web).
+
 ## Grille de diffusion dans l’administration
 
 **BSC TV → Le live** présente l’antenne actuelle puis exactement trois dates : **Aujourd’hui**, **Demain**, **Après-demain**. Les bornes vont de minuit aujourd’hui à minuit après la troisième journée dans le fuseau WordPress. Une journée de changement d’heure peut durer 23 ou 25 heures. Les programmes traversant minuit apparaissent comme une suite dans la journée suivante.
@@ -184,6 +201,8 @@ Les plateformes peuvent bloquer ou retarder une intégration selon le compte, la
 L’intégration Twitch nécessite HTTPS en production et les bons domaines `parent`. Les filtres CSS ne suivent pas le plein écran interne des plateformes. Les règles d’intégration des plateformes restent applicables aux calques visuels demandés.
 
 ## Validation
+
+Version **1.23.0** : **956 contrôles locaux** réussis (756 PHP et 200 JavaScript). Les 35 contrôles du pilotage Infomaniak vérifient l’authentification HTTPS, la suppression des seuls événements BSC TV, l’absence de recréation par les visites et sauvegardes, un passage quotidien complet avec plateformes et agenda, la reprise des files inachevées, l’adoption d’un passage déjà terminé, les verrous, l’échec de réservation, les erreurs de chaîne et le retour au planificateur précédent. Le contrôle léger reste séparé des recherches et imports ; ses appels répétés n’ajoutent pas de quota. Les bases WordPress sont jetables et les plateformes simulées. La pagination musicale respecte aussi une fin de journée avec moins de cinq prochains programmes.
 
 Version **1.22.1** : validation ciblée du lecteur WordPress/Elementor, de la liste du jour, de la priorité des directs et des styles, ainsi que des contrats JavaScript YouTube/Twitch, de l’autoplay, des interludes et des widgets. Les nouveaux scénarios vérifient la date de source, le passage de minuit dans le fuseau du site, la suppression d’une ancienne date lorsqu’elle manque sur l’émission suivante et son masquage pendant un direct ou après désactivation. Les API et SDK sont simulés.
 
