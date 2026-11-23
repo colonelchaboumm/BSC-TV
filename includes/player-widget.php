@@ -36,6 +36,7 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		foreach ( array( 'logo' => 'Logo BSC TV', 'avatar' => 'Avatar BSC BDD', 'poster' => 'Image de l’émission avant lecture', 'creator' => 'Nom du créateur', 'profile' => 'Lien vers sa fiche BSC BDD', 'title' => 'Titre de l’émission', 'next' => 'Programme suivant', 'progress' => 'Progression', 'times' => 'Horaires', 'on_air' => 'Badge ON AIR', 'live' => 'Badge LIVE', 'new' => 'Badge NOUVEAUTÉ', 'premiere' => 'Badge PREMIÈRE', 'replay' => 'Badge REDIFFUSION' ) as $key => $label ) {
 			$this->add_control( 'show_' . $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		}
+		$this->add_control( 'show_publication', array( 'label' => 'Date de parution à côté de REDIFFUSION', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'condition' => array( 'show_replay' => 'yes' ) ) );
 		$this->add_control( 'start_mode', array( 'label' => 'Démarrage de la vidéo', 'type' => Controls_Manager::SELECT, 'options' => array( 'auto' => 'Automatique quand le lecteur est visible', 'click' => 'Après un clic sur Lecture' ), 'default' => 'auto', 'description' => 'Le navigateur peut demander un clic pour autoriser la lecture avec le son.' ) );
 		$this->add_control( 'muted', array( 'label' => 'Démarrer sans son', 'description' => 'Désactivé par défaut : le son est actif. Un clic peut être nécessaire pour autoriser la lecture.', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => '' ) );
 		$this->add_control( 'player_help', array( 'type' => Controls_Manager::RAW_HTML, 'raw' => 'La programmation se règle dans BSC TV → Le live et les autorisations dans les fiches des chaînes et émissions. Les logos et métadonnées restent hors du lecteur officiel. L’icône Lecture permet de démarrer si le navigateur bloque la lecture automatique.', 'content_classes' => 'elementor-panel-alert elementor-panel-alert-info' ) );
@@ -132,12 +133,13 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 		$this->end_controls_section();
 
 		$this->start_controls_section( 'player_badges_style', array( 'label' => 'Badges de diffusion', 'tab' => Controls_Manager::TAB_STYLE ) );
-		foreach ( array( 'on_air' => 'ON AIR', 'live' => 'LIVE', 'new' => 'NOUVEAUTÉ', 'premiere' => 'PREMIÈRE', 'replay' => 'REDIFFUSION' ) as $badge => $label ) {
+		foreach ( array( 'on_air' => 'ON AIR', 'live' => 'LIVE', 'new' => 'NOUVEAUTÉ', 'premiere' => 'PREMIÈRE', 'replay' => 'REDIFFUSION', 'publication' => 'Date de parution' ) as $badge => $label ) {
 			foreach ( array( 'color' => 'Texte', 'background' => 'Fond' ) as $property => $property_label ) {
 				$this->add_control( 'badge_' . $badge . '_' . $property, array( 'label' => $label . ' · ' . $property_label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root . ' .bsc-player__badge--' . $badge => $property . ': {{VALUE}};' ) ) );
 			}
 		}
 		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'player_badges_typography', 'label' => 'Typographie des badges', 'selector' => $root . ' .bsc-player__badge' ) );
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'player_publication_typography', 'label' => 'Typographie de la date de parution', 'selector' => $root . ' .bsc-player__badge--publication' ) );
 		$this->bsc_dimensions( 'player_badges_padding', 'Marges intérieures', $root . ' .bsc-player__badge', 'padding' );
 		$this->bsc_dimensions( 'player_badges_radius', 'Arrondis', $root . ' .bsc-player__badge', 'border-radius', array( 'px', '%' ) );
 		$this->add_group_control( Group_Control_Border::get_type(), array( 'name' => 'player_badges_border', 'selector' => $root . ' .bsc-player__badge' ) );

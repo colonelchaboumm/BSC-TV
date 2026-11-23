@@ -545,6 +545,7 @@ final class BSC_TV_Player {
 			'avatar' => BSC_TV_Content::url( $profile['avatar']['thumbnail'] ?? '' ), 'profile_url' => BSC_TV_Content::url( $profile['permalink'] ?? '' ),
 			'image' => BSC_TV_Content::url( $image ?: ( $profile['avatar']['thumbnail'] ?? '' ) ),
 			'start' => $item['start'], 'end' => $item['end'], 'offset' => $live ? 0 : max( 0, $now - $item['start'] ),
+			'published_at' => $live ? 0 : (int) ( $media['published_at'] ?? 0 ),
 			'new' => ! $live && $now >= ( $media['published_at'] ?? PHP_INT_MAX ) && $now - ( $media['published_at'] ?? 0 ) < DAY_IN_SECONDS,
 			'premiere' => ! $live && ! empty( $item['premiere'] ),
 		);
@@ -699,7 +700,7 @@ final class BSC_TV_Player {
 		$settings = (array) $settings;
 		// Empty legacy autoplay settings follow the new automatic default.
 		$settings['start_mode'] = $settings['start_mode'] ?? ( in_array( $settings['autoplay'] ?? null, array( 'no', '0', 0, false ), true ) ? 'click' : 'auto' );
-		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay', 'show_music', 'show_music_meta' ), 'yes' );
+		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay', 'show_publication', 'show_music', 'show_music_meta' ), 'yes' );
 		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'muted' => '', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
 		$settings['autoplay'] = 'click' === $settings['start_mode'] ? '' : 'yes';
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );

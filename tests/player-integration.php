@@ -68,6 +68,7 @@ player_check( 'https://example.com/avatar.png' === $one['current']['avatar'] && 
 player_check( 'https://example.com/emission-cover.jpg' === $one['current']['image'], 'The public player snapshot exposes the current show image separately from the creator avatar' );
 player_check( 1 === count( BSC_TV_Player::media() ), 'Draft never exposed through player' );
 player_check( 'Europe/Paris' === $one['timezone'], 'Site timezone is returned' );
+player_check( $one['current']['published_at'] === $media['published_at'], 'The player returns the source publication date instead of the WordPress import or broadcast date' );
 $state = array( 'key' => 'beerplayerqa', 'live_at' => $now + 1000, 'live' => array( array( 'id' => 'live-qa', 'url' => 'https://www.twitch.tv/beerplayerqa', 'title' => 'Vrai direct confirmé', 'image' => 'https://example.com/direct-cover.jpg', 'start' => $now - 100, 'end' => 0 ) ) );
 update_post_meta( $channel, BSC_TV_Content::STATE, $state );
 $live = BSC_TV_Player::snapshot( $now + 1000 );
@@ -96,6 +97,8 @@ $response = rest_do_request( $request );
 player_check( 200 === $response->get_status() && 'no-store, max-age=0' === $response->get_headers()['Cache-Control'], 'Public light REST endpoint is not cached by the page cache' );
 player_check( 0 === $requests, 'Player, catalogue and REST do not make external API calls' );
 $html = BSC_TV_Player::render( array( 'logo' => array( 'url' => 'https://example.com/bsc-logo.png' ) ) );
+player_check( strpos( $html, 'data-player-badge="replay"' ) < strpos( $html, 'data-player-publication' ), 'Existing widgets display publication immediately after the replay badge by default' );
+player_check( false === strpos( BSC_TV_Player::render( array( 'show_publication' => '' ) ), 'data-player-publication' ) && false === strpos( BSC_TV_Player::render( array( 'show_replay' => '' ) ), 'data-player-publication' ), 'Publication can be hidden independently and follows a hidden replay badge' );
 player_check( false !== strpos( $html, 'bsc-logo.png' ) && false !== strpos( $html, 'data-player-avatar' ) && false === strpos( $html, '<iframe' ), 'View has fixed branding and avatar; official SDK loads lazily' );
 player_check( false !== strpos( $html, 'data-muted="0"' ) && false !== strpos( $html, 'data-player-poster alt="" decoding="async" src="https://example.com/emission-cover.jpg"' ), 'Default rendering has sound active and a server-rendered poster before any JavaScript or SDK' );
 player_check( false !== strpos( $html, 'data-autoplay="1"' ), 'The player now attempts automatic playback by default' );
@@ -117,6 +120,7 @@ $widget = Elementor\Plugin::instance()->widgets_manager->get_widget_types( 'bsc-
 player_check( $widget instanceof BSC_TV_Player_Widget, 'One new Elementor player widget registered' );
 $controls = $widget->get_stack( false );
 $controls = $controls['controls'] + ( $controls['style_controls'] ?? array() );
+player_check( 'yes' === $controls['show_publication']['default'] && isset( $controls['badge_publication_color'], $controls['badge_publication_background'], $controls['player_publication_typography_typography'] ), 'Elementor exposes publication visibility, colors and independent typography' );
 player_check( isset( $controls['logo'], $controls['logo_size'], $controls['avatar_size'], $controls['player_avatar_border_border'], $controls['show_premiere'] ) && ( ! empty( $controls['logo_size']['is_responsive'] ) || isset( $controls['logo_size_mobile'] ) ) && ( ! empty( $controls['avatar_size']['is_responsive'] ) || isset( $controls['avatar_size_tablet'] ) ), 'Responsive, branding, BDD and badges controls registered' );
 player_check( '' === $controls['curve_enabled']['default'] && '' === $controls['crt_enabled']['default'], 'Retro effects are off on existing widgets' );
 player_check( '' === $controls['muted']['default'] && 'yes' === $controls['show_poster']['default'] && isset( $controls['poster_fit'] ), 'Elementor defaults to sound on and image visible while offering image framing controls' );
