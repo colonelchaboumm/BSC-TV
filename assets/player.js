@@ -11,6 +11,12 @@
 			return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
 		} catch { return ''; }
 	};
+	const animationURL = value => {
+		const url = safeURL(value);
+		if (!url) return '';
+		try { return /\/(?:bsc-tv(?:-main)?\/assets\/media\/transition|gemini_generated_video_ec824878(?:-\d+)?)\.mp4$/i.test(decodeURIComponent(new URL(url).pathname)) ? '' : url; }
+		catch { return ''; }
+	};
 	const time = (value, zone) => {
 		const options = { hour: '2-digit', minute: '2-digit' };
 		try { return new Intl.DateTimeFormat(document.documentElement.lang || 'fr', { ...options, timeZone: zone || 'UTC' }).format(new Date(value * 1000)); }
@@ -51,6 +57,7 @@
 			this.message = root.querySelector('[data-player-message]');
 			this.transition = root.querySelector('[data-player-transition]');
 			this.transitionVideo = root.querySelector('[data-player-transition-video]');
+			this.transitionPoster = root.querySelector('[data-player-transition-poster]') || this.transition?.querySelector('img');
 			this.musicScreen = root.querySelector('[data-music-screen]');
 			this.musicVideo = root.querySelector('[data-music-video]');
 			this.data = null;
@@ -131,7 +138,9 @@
 			try { sources = JSON.parse(this.transitionVideo.dataset.sources || '[]'); } catch { sources = []; }
 			if (this.transitionVideo.dataset.fixed !== '1' && Array.isArray(this.data?.loading_animations) && this.data.loading_animations.length) sources = this.data.loading_animations;
 			if (!Array.isArray(sources) || !sources.length) sources = [this.transitionVideo.dataset.src];
-			sources = [...new Set(sources.slice(0, 52).map(safeURL).filter(url => url && !this.failedTransitionSources.has(url)))];
+			const usable = list => [...new Set(list.slice(0, 52).map(animationURL).filter(url => url && !this.failedTransitionSources.has(url)))];
+			sources = usable(sources);
+			if (!sources.length && Array.isArray(this.data?.loading_animations)) sources = usable(this.data.loading_animations);
 			if (!sources.length) return;
 			const alternatives = sources.filter(url => url !== this.lastTransitionSource);
 			const choices = alternatives.length ? alternatives : sources;
@@ -152,7 +161,13 @@
 			const attempt = ++this.transitionAttempt;
 			this.transition.hidden = false;
 			this.transitionTimer = window.setTimeout(() => { if (attempt === this.transitionAttempt) this.stopTransition(); }, remaining);
-			// Reduced motion uses the clip's static poster, without downloading the MP4.
+			const poster = safeURL(this.data?.current?.image || this.data?.next?.[0]?.image);
+			if (this.transitionPoster) {
+				this.transitionPoster.hidden = !poster;
+				if (poster) this.transitionPoster.src = poster; else this.transitionPoster.removeAttribute('src');
+			}
+			if (poster) this.transitionVideo.setAttribute('poster', poster); else this.transitionVideo.removeAttribute('poster');
+			// Reduced motion uses the programme image, without downloading an animation.
 			this.transitionVideo.hidden = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 			if (this.transitionVideo.hidden) return;
 			this.transitionVideo.muted = true;
