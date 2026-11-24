@@ -1,5 +1,5 @@
-L’animation `transition.mp4` est le fichier `gemini_generated_video_ec824878.mp4` fourni pour cette intégration BSC TV, conservé sans réencodage : environ 10 secondes, 1280 × 720, H.264 avec piste AAC.
+Depuis 1.24.1, les animations de chargement sont choisies dans la bibliothèque BSC de la chaîne : `ident-moon.mp4` (Lune), `ident-circus.mp4` (Manège) et les vidéos valides ajoutées depuis la médiathèque dans Musique → Identité visuelle. Le lecteur charge uniquement la vidéo choisie, en boucle sans son jusqu’au démarrage du programme. Les futurs ajouts sont exposés par le programme local, sans appel de plateforme supplémentaire.
 
-`transition-poster.jpg` est une image fixe extraite à quatre secondes. Elle sert d’aperçu et remplace le mouvement si le navigateur demande des animations réduites.
+`transition-poster.jpg` reste l’image fixe BSC utilisée pour l’aperçu et la préférence de réduction des animations.
 
-Le lecteur charge le MP4 à la première transition, le lit en boucle sans son et l’arrête au démarrage confirmé du programme. Le fichier d’origine conserve sa piste audio ; le lecteur de transition reste toujours muet.
+L’ancien `transition.mp4`, fourni comme `gemini_generated_video_ec824878.mp4`, est conservé comme fichier historique pour les pages qui le référencent explicitement. Il n’est plus choisi par défaut par le lecteur.

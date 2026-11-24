@@ -568,6 +568,13 @@ final class BSC_TV_Player {
 		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now, $state['live'] ?? null ), $settings, $now );
 	}
 
+	/** Public video references only; music activation is independent of loading animations. */
+	public static function loading_animations() {
+		$choices = BSC_TV_Music::animations();
+		if ( ! $choices ) { $choices = BSC_TV_Music::animations( array( 'bundled_animation' => true, 'animation_ids' => array() ) ); }
+		return array_values( array_column( $choices, 'url' ) );
+	}
+
 	public static function snapshot( $now = null, $station = null ) {
 		if ( null !== $station ) { return BSC_TV_Stations::run( $station, static function () use ( $now ) { return self::snapshot( $now ); } ); }
 		$now = $now ?? time();
@@ -576,6 +583,7 @@ final class BSC_TV_Player {
 		if ( ! $settings['enabled'] ) {
 			return $result;
 		}
+		$result['loading_animations'] = self::loading_animations();
 		$catalogue = self::catalogue();
 		$state = (array) get_option( BSC_TV_Stations::key( self::STATE ), array() );
 		$settings['_announcements'] = BSC_TV_Player_Live::announcements( $catalogue, $settings );
@@ -716,14 +724,16 @@ final class BSC_TV_Player {
 		// Empty legacy autoplay settings follow the new automatic default.
 		$settings['start_mode'] = $settings['start_mode'] ?? ( in_array( $settings['autoplay'] ?? null, array( 'no', '0', 0, false ), true ) ? 'click' : 'auto' );
 		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay', 'show_publication', 'show_music', 'show_music_meta' ), 'yes' );
-		$settings += $defaults + array( 'title' => BSC_TV_Stations::choices()[ BSC_TV_Stations::current() ], 'muted' => '', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
+		$settings += $defaults + array( 'title' => BSC_TV_Stations::choices()[ BSC_TV_Stations::current() ], 'muted' => '', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_mode' => 'library', 'transition_video' => array(), 'transition_timeout' => 20 );
 		$settings['autoplay'] = 'click' === $settings['start_mode'] ? '' : 'yes';
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );
 		$poster = 'yes' === $settings['show_poster'] ? ( self::snapshot()['current']['image'] ?? '' ) : '';
 		$transition_media = $settings['transition_video'];
 		$transition_value = is_array( $transition_media ) ? ( $transition_media['url'] ?? '' ) : $transition_media;
 		$transition_url = is_scalar( $transition_value ) ? BSC_TV_Content::url( $transition_value ) : '';
-		$transition_url = $transition_url ?: BSC_TV_URL . 'assets/media/transition.mp4';
+		$transition_fixed = 'custom' === $settings['transition_mode'] && (bool) $transition_url;
+		$transition_sources = $transition_fixed ? array( $transition_url ) : self::loading_animations();
+		$transition_url = $transition_sources[0];
 		$transition_timeout = is_numeric( $settings['transition_timeout'] ) ? max( 5, min( 60, (int) $settings['transition_timeout'] ) ) : 20;
 		ob_start();
 		require BSC_TV_DIR . 'includes/player-view.php';
