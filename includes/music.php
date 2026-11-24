@@ -100,6 +100,7 @@ final class BSC_TV_Music {
 	public static function animation_asset( $id, $fallback = 0 ) {
 		if ( ! $id || 'attachment' !== get_post_type( $id ) || 'trash' === get_post_status( $id ) ) { return null; }
 		$url = self::media_url( $id, 'video' );
+		if ( BSC_TV_Player::obsolete_animation( $url ) ) { return null; }
 		$metadata = $id ? (array) wp_get_attachment_metadata( $id ) : array();
 		$length = is_numeric( $metadata['length'] ?? null ) ? (float) $metadata['length'] : 0;
 		// WordPress may round video lengths to whole seconds; reserve the final frame too.

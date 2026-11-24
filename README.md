@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.24.2 · Ancien logo retiré** : l’ancien MP4 du logo seul et son image fixe sont supprimés du plugin. Les anciennes références enregistrées sont écartées. Le chargement conserve Lune, Manège et la bibliothèque BSC ; son aperçu statique reprend l’image du programme.
+
 **1.24.1 · Animations de lancement** : le chargement du lecteur choisit Lune, Manège ou une animation ajoutée dans la bibliothèque BSC de la chaîne. Les ajouts sont repris automatiquement au prochain chargement, même si la musique est désactivée. Le mode aléatoire est sélectionné par défaut dans Elementor.
 
 **1.24.0 · Deux chaînes indépendantes** : **BSC TV Monde** conserve la programmation actuelle ; **BSC TV Français** propose une grille française distincte et une bibliothèque hip-hop / rap FR 1990–1999. Menus numérotés, bandeau de chaîne, playlists et réglages séparés. Les widgets Elementor choisissent leur antenne ; les imports Infomaniak restent communs. [Configurer la deuxième chaîne](STATIONS.md).

@@ -1,5 +1,5 @@
-Depuis 1.24.1, les animations de chargement sont choisies dans la bibliothèque BSC de la chaîne : `ident-moon.mp4` (Lune), `ident-circus.mp4` (Manège) et les vidéos valides ajoutées depuis la médiathèque dans Musique → Identité visuelle. Le lecteur charge uniquement la vidéo choisie, en boucle sans son jusqu’au démarrage du programme. Les futurs ajouts sont exposés par le programme local, sans appel de plateforme supplémentaire.
+Les animations fournies sont `ident-moon.mp4` (Lune) et `ident-circus.mp4` (Manège). Les vidéos valides ajoutées dans Musique → Identité visuelle complètent la bibliothèque de la chaîne.
 
-`transition-poster.jpg` reste l’image fixe BSC utilisée pour l’aperçu et la préférence de réduction des animations.
+Depuis 1.24.2, l’ancien film du logo seul `transition.mp4` et son image `transition-poster.jpg` sont retirés du plugin. Les anciennes références à ce film et aux copies importées sous son nom d’origine sont ignorées, y compris dans une vidéo fixe. Le lecteur utilise la bibliothèque BSC en secours.
 
-L’ancien `transition.mp4`, fourni comme `gemini_generated_video_ec824878.mp4`, est conservé comme fichier historique pour les pages qui le référencent explicitement. Il n’est plus choisi par défaut par le lecteur.
+L’image de l’émission sert d’aperçu statique pendant le chargement et en mode de réduction des animations. Sans image disponible, le fond du lecteur reste visible.

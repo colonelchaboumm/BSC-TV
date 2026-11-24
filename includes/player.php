@@ -568,6 +568,12 @@ final class BSC_TV_Player {
 		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now, $state['live'] ?? null ), $settings, $now );
 	}
 
+	/** Retire the former bundled film, including copies imported into the media library. */
+	public static function obsolete_animation( $url ) {
+		$path = rawurldecode( (string) wp_parse_url( $url, PHP_URL_PATH ) );
+		return (bool) preg_match( '~/(?:bsc-tv(?:-main)?/assets/media/transition|gemini_generated_video_ec824878(?:-[0-9]+)?)\.mp4$~iD', $path );
+	}
+
 	/** Public video references only; music activation is independent of loading animations. */
 	public static function loading_animations() {
 		$choices = BSC_TV_Music::animations();
@@ -731,6 +737,7 @@ final class BSC_TV_Player {
 		$transition_media = $settings['transition_video'];
 		$transition_value = is_array( $transition_media ) ? ( $transition_media['url'] ?? '' ) : $transition_media;
 		$transition_url = is_scalar( $transition_value ) ? BSC_TV_Content::url( $transition_value ) : '';
+		if ( self::obsolete_animation( $transition_url ) ) { $transition_url = ''; }
 		$transition_fixed = 'custom' === $settings['transition_mode'] && (bool) $transition_url;
 		$transition_sources = $transition_fixed ? array( $transition_url ) : self::loading_animations();
 		$transition_url = $transition_sources[0];

@@ -49,6 +49,11 @@ $video = static function ( $name, $length, $mime = 'video/mp4' ) {
 	return $id;
 };
 $first = $video( 'Future animation A', 12.25 ); $second = $video( 'Future animation B', 20 ); $unknown = $video( 'Missing duration', null ); $long = $video( 'Too long', 121 ); $audio = $video( 'Audio file', 12, 'audio/mpeg' );
+$old_logo = wp_insert_attachment( array( 'post_title' => 'Legacy imported logo', 'post_mime_type' => 'video/mp4', 'post_status' => 'inherit', 'guid' => 'https://example.com/uploads/gemini_generated_video_ec824878-1.mp4' ) );
+wp_update_attachment_metadata( $old_logo, array( 'length' => 10 ) );
+animation_check( null === BSC_TV_Music::animation_asset( $old_logo ), 'An imported copy of the old logo is excluded from random and fixed animation phases' );
+$old_config = $config; $old_config['animation_ids'] = array( $old_logo );
+animation_check( 2 === count( BSC_TV_Music::animations( $old_config ) ), 'Only Lune and Manège remain when an old logo attachment is saved in the library' );
 animation_check( 13 === BSC_TV_Music::animation_asset( $first )['duration'] && 21 === BSC_TV_Music::animation_asset( $second )['duration'], 'Custom film lengths round up and protect the final frame when WordPress stores whole seconds' );
 animation_check( null === BSC_TV_Music::animation_asset( $unknown ) && null === BSC_TV_Music::animation_asset( $long ) && null === BSC_TV_Music::animation_asset( $audio ), 'Unknown lengths, overlong files and non-video attachments cannot enter the random library' );
 $custom = BSC_TV_Music::normalize( array( 'enabled' => true, 'bundled_animation' => false, 'animation_ids' => array( $first, $second, $first, 0, $unknown, $long, $audio ) ) );
