@@ -54,7 +54,7 @@ final class BSC_TV_Player_Daily {
 
 	/** The calendar-day claim is saved before API work, so repeat calls and crashes cannot start another scan today. */
 	public static function execute( $max_pages = 10000, $budget = 240, $held_lock = null ) {
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { return array( 'status' => 'disabled', 'message' => 'Le lecteur est désactivé.' ); }
+		if ( ! BSC_TV_Stations::any_enabled() ) { return array( 'status' => 'disabled', 'message' => 'Le lecteur est désactivé.' ); }
 		$lock = BSC_TV_Content::lock( self::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'import_busy', 'Un import quotidien est déjà en cours.', array( 'status' => 409 ) ); }
 		$sync_lock = null;

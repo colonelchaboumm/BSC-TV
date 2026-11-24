@@ -49,7 +49,7 @@ final class BSC_TV_Server {
 
 	/** Claim the whole passage before work. A retry cannot restart either phase today. */
 	public static function daily( $max_channels = 10000, $budget = 240 ) {
-		if ( ! self::enabled() && ! BSC_TV_Player::settings()['enabled'] ) { return array( 'status' => 'disabled' ); }
+		if ( ! self::enabled() && ! BSC_TV_Stations::any_enabled() ) { return array( 'status' => 'disabled' ); }
 		$lock = BSC_TV_Content::lock( self::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'server_busy', 'Le passage quotidien est déjà en cours.', array( 'status' => 409 ) ); }
 		$claimed = false;
@@ -80,7 +80,7 @@ final class BSC_TV_Server {
 			try {
 				if ( $claimed ) {
 					$report['finished_at'] = time(); update_option( self::REPORT, $report, false );
-					BSC_TV_Player::snapshot();
+					BSC_TV_Stations::snapshots();
 				}
 			} finally { if ( $sync ) { BSC_TV_Content::unlock( BSC_TV_Sync::LOCK, $sync ); } BSC_TV_Content::unlock( self::LOCK, $lock ); }
 		}
@@ -101,7 +101,7 @@ final class BSC_TV_Server {
 			$report = array( 'status' => 'running', 'started_at' => $now );
 			if ( ! update_option( self::TICK, $report, false ) ) { return new WP_Error( 'server_tick_claim', 'Impossible de réserver le contrôle.', array( 'status' => 503 ) ); }
 			BSC_TV_Sync::live( $sync );
-			BSC_TV_Player::snapshot();
+			BSC_TV_Stations::snapshots();
 			$report['status'] = BSC_TV_Sync::can_check_live( BSC_TV_Sync::settings() ) ? 'completed' : 'disabled';
 			$report['finished_at'] = time(); update_option( self::TICK, $report, false );
 			return $report;

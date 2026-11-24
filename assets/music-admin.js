@@ -49,7 +49,7 @@
 		const request = async fields => {
 			const url = new URL(form.dataset.endpoint, document.baseURI);
 			if (url.origin !== location.origin) throw new Error('Adresse d’import invalide.');
-			const body = new URLSearchParams({ action: 'bsc_tv_music_playlist', nonce: form.dataset.nonce, ...fields });
+			const body = new URLSearchParams({ action: 'bsc_tv_music_playlist', nonce: form.dataset.nonce, station: form.dataset.station || 'main', ...fields });
 			const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 30000);
 			try {
 				const response = await fetch(url, { method: 'POST', body, credentials: 'same-origin', cache: 'no-store', signal: controller.signal });

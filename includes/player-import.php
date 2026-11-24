@@ -86,7 +86,7 @@ final class BSC_TV_Player_Import {
 	/** One internal page; only the authenticated daily worker may call this from the application. */
 	public static function run( $external = false, $held_lock = null ) {
 		if ( ! $external ) { return new WP_Error( 'import_external', 'Utilisez la tâche quotidienne Infomaniak.' ); }
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { return new WP_Error( 'import_disabled', 'Le lecteur est désactivé.' ); }
+		if ( ! BSC_TV_Stations::any_enabled() ) { return new WP_Error( 'import_disabled', 'Le lecteur est désactivé.' ); }
 		$lock = $held_lock ?: BSC_TV_Content::lock( BSC_TV_Sync::LOCK );
 		if ( ! $lock ) { return new WP_Error( 'import_busy', 'Une synchronisation est déjà en cours.' ); }
 		$changed = false;

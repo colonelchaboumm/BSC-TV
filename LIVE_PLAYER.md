@@ -247,3 +247,8 @@ node tests/badge-browser.mjs
 ```
 
 Les tests WordPress copient une base SQLite jetable avant toute écriture. Les API et SDK sont simulés : ils ne prouvent pas l’accès réel à chaque chaîne ni la configuration d’une tâche Infomaniak. La fixture émet deux avertissements Elementor préexistants sous PHP 8.4. La livraison doit être installée et la tâche quotidienne configurée dans le Manager pour être active sur le site.
+
+
+## Deux antennes indépendantes
+
+Depuis 1.24.0, chaque lecteur et chaque programme du jour peut cibler `main` (Monde, chaîne existante) ou `fr` (Français). Les horloges, réglages, bibliothèques musicales, directs prioritaires et formulaires sont isolés. Les imports quotidiens et états des plateformes sont partagés. [Mise en place et fonctionnement](STATIONS.md).

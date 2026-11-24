@@ -19,15 +19,17 @@ final class BSC_TV_Player_Admin {
 	}
 
 	public static function menu() {
-		add_submenu_page( 'bsc-tv', 'Le live', 'Le live', 'manage_options', 'bsc-tv-live', array( __CLASS__, 'page' ) );
+		add_submenu_page( 'bsc-tv', 'Chaîne 1 · Le live', '1 · Le live Monde', 'manage_options', 'bsc-tv-live', array( __CLASS__, 'page' ) );
+		add_submenu_page( 'bsc-tv', 'Chaîne 2 · Le live français', '2 · Le live Français', 'manage_options', 'bsc-tv-live-fr', static function () { BSC_TV_Stations::run( 'fr', array( __CLASS__, 'page' ) ); } );
 	}
 
 	public static function link() {
-		echo '<p><a class="button" href="' . esc_url( admin_url( 'admin.php?page=bsc-tv-live' ) ) . '">Le live · programmation et import Infomaniak</a></p>';
+		echo '<p><a class="button" href="' . esc_url( BSC_TV_Stations::url( 'live', 'main' ) ) . '">Chaîne 1 · Monde</a> <a class="button" href="' . esc_url( BSC_TV_Stations::url( 'live', 'fr' ) ) . '">Chaîne 2 · Français</a></p><p>Sources, catalogue et import Infomaniak communs ; programmation et musique propres à chaque chaîne.</p>';
 	}
 
 	public static function page() {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) ); }
+		BSC_TV_Stations::banner( 'live' );
 		echo '<div class="wrap"><h1>Le live</h1><p><a href="#bsc-player-grid">Programmation</a> · <a href="#bsc-player-diversity">Diversité et musique</a> · <a href="#bsc-tv-player-settings">Réglages du lecteur</a> · <a href="#bsc-player-import">Import Infomaniak</a></p>';
 		self::section();
 		echo '</div>';
@@ -99,11 +101,11 @@ final class BSC_TV_Player_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( 'Action réservée aux administrateurs.', '', array( 'response' => 403 ) );
 		}
-		check_admin_referer( $action );
+		BSC_TV_Stations::authorize( $action );
 	}
 
 	private static function redirect( $anchor = 'bsc-tv-player-settings' ) {
-		wp_safe_redirect( admin_url( 'admin.php?page=bsc-tv-live#' . $anchor ) );
+		wp_safe_redirect( BSC_TV_Stations::url() . '#' . $anchor );
 		exit;
 	}
 
@@ -116,7 +118,8 @@ final class BSC_TV_Player_Admin {
 		$settings['enrich_archives'] = ! empty( $input['enrich_archives'] );
 		$settings['live_lead'] = max( 0, min( 30, (int) ( $input['live_lead'] ?? 2 ) ) );
 		$settings['live_wait'] = max( 0, min( 1440, (int) ( $input['live_wait'] ?? 120 ) ) );
-		update_option( BSC_TV_Player::SETTINGS, $settings, false );
+		$settings['watch_url'] = is_scalar( $input['watch_url'] ?? null ) ? BSC_TV_Content::url( $input['watch_url'] ) : $previous['watch_url'];
+		update_option( BSC_TV_Stations::key( BSC_TV_Player::SETTINGS ), $settings, false );
 		if ( $settings['enabled'] && ! $previous['enabled'] ) {
 			BSC_TV_Sync::queue( BSC_TV_Sync::DAILY_NOW );
 		}
@@ -126,14 +129,14 @@ final class BSC_TV_Player_Admin {
 	public static function compose_programme() {
 		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'compose_forbidden', 'Action réservée aux administrateurs.' ); }
 		require_once __DIR__ . '/music-admin.php';
-		$ready = count( array_filter( BSC_TV_Music::clips(), array( 'BSC_TV_Music', 'approved' ) ) );
+		$ready = BSC_TV_Music::diagnostic()['counts']['ready'];
 		return BSC_TV_Music_Admin::change( static function () use ( $ready ) {
-			$player = (array) get_option( BSC_TV_Player::SETTINGS, array() );
+			$player = (array) get_option( BSC_TV_Stations::key( BSC_TV_Player::SETTINGS ), array() );
 			$player['recent'] = 'rotation'; $player['max_channel_streak'] = 3; $player['enrich_archives'] = true;
-			update_option( BSC_TV_Player::SETTINGS, $player, false );
+			update_option( BSC_TV_Stations::key( BSC_TV_Player::SETTINGS ), $player, false );
 			$music = BSC_TV_Music::settings();
-			if ( $ready ) { $music['enabled'] = true; $music['flexible'] = true; update_option( BSC_TV_Music::SETTINGS, $music, false ); }
-			delete_transient( BSC_TV_Player::CACHE );
+			if ( $ready ) { $music['enabled'] = true; $music['flexible'] = true; update_option( BSC_TV_Stations::key( BSC_TV_Music::SETTINGS ), $music, false ); }
+			delete_transient( BSC_TV_Stations::key( BSC_TV_Player::CACHE ) );
 		}, true, true, true );
 	}
 	public static function compose() {
@@ -152,10 +155,11 @@ final class BSC_TV_Player_Admin {
 			$id = $pool[ $row['key'] ]['channel_id'] ?? $row['channel_id'] ?? 0; $planned[ $id ] = ( $planned[ $id ] ?? 0 ) + 1;
 		}
 		$channels = get_posts( array( 'post_type' => BSC_TV_Content::CHANNEL, 'post_status' => array( 'publish', 'draft', 'pending', 'private', 'future' ), 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$channels = array_filter( $channels, static function ( $post ) { return BSC_TV_Stations::allows_channel( $post->ID, BSC_TV_Content::data( $post->ID ) ); } );
 		$music = BSC_TV_Music::diagnostic( $state );
 		echo '<section id="bsc-player-diversity"><h2>Diversité du catalogue et musique</h2><p>' . esc_html( count( $channels ) . ' chaîne(s) enregistrée(s), ' . count( array_filter( $counts ) ) . ' source(s) avec des replays utilisables. ' . $music['counts']['ready'] . ' clip(s) musical(aux) prêt(s), ' . $music_slots . ' interlude(s) prévu(s) sur les trois journées affichées.' ) . '</p>';
 		echo '<p>' . esc_html( $settings['music']['flexible'] ? 'Les clips peuvent être insérés dans les programmes automatiques en respectant leurs catégories et horaires.' : 'La musique utilise uniquement les espaces libres : une grille sans pause ne peut donc pas accueillir de clip.' ) . '</p>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="bsc_tv_player_compose">'; wp_nonce_field( 'bsc_tv_player_compose' );
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="bsc_tv_player_compose">'; BSC_TV_Stations::field( 'bsc_tv_player_compose' );
 		echo '<p><button class="button button-primary">Recomposer avec les chaînes et la musique</button></p><p class="description">Utilise toutes les archives disponibles, limite les séries à trois programmes d’une même chaîne quand une autre est disponible, et active l’insertion des clips déjà validés. Les tranches musicales, animations, validations et horaires fixés sont conservés.</p></form>';
 		echo '<details><summary>Comprendre pourquoi certaines chaînes ne passent pas</summary><div class="bsc-player-grid-scroll"><table class="widefat striped"><thead><tr><th scope="col">Chaîne</th><th scope="col">Replays utilisables</th><th scope="col">Passages prévus</th><th scope="col">Diagnostic</th></tr></thead><tbody>';
 		$api = BSC_TV_Sync::settings();
@@ -186,7 +190,7 @@ final class BSC_TV_Player_Admin {
 	}
 
 	public static function assets( $hook ) {
-		if ( in_array( $hook, array( 'toplevel_page_bsc-tv', 'bsc-tv_page_bsc-tv-live' ), true ) ) {
+		if ( in_array( $hook, array( 'toplevel_page_bsc-tv', 'bsc-tv_page_bsc-tv-live', 'bsc-tv_page_bsc-tv-live-fr' ), true ) ) {
 			wp_enqueue_style( 'bsc-tv-player-admin', BSC_TV_URL . 'assets/player-admin.css', array(), BSC_TV_VERSION );
 		}
 	}
@@ -205,6 +209,7 @@ final class BSC_TV_Player_Admin {
 	}
 
 	private static function imports() {
+		if ( 'fr' === BSC_TV_Stations::current() ) { echo '<section id="bsc-player-import"><h2>Import Infomaniak commun aux deux chaînes</h2><p>Les sources sont collectées une seule fois par jour. Les deux grilles sont ensuite actualisées séparément. Aucun second import ni tâche serveur supplémentaire à créer.</p><a href="' . esc_url( BSC_TV_Stations::url( 'live', 'main' ) . '#bsc-player-import' ) . '">Voir les tâches et bilans communs</a></section>'; return; }
 		$state = (array) get_option( BSC_TV_Player_Import::STATE, array() );
 		$daily = (array) get_option( BSC_TV_Player_Daily::REPORT, array() );
 		if ( 'running' === ( $daily['status'] ?? '' ) && time() - $daily['started_at'] > 10 * MINUTE_IN_SECONDS ) { $daily['status'] = 'partial'; }
@@ -254,7 +259,7 @@ final class BSC_TV_Player_Admin {
 	}
 
 	private static function grid_url( $days, $id = '', $mode = '' ) {
-		$args = array( 'page' => 'bsc-tv-live', 'player_days' => $days );
+		$args = array( 'page' => 'bsc-tv-live' . ( 'fr' === BSC_TV_Stations::current() ? '-fr' : '' ), 'player_days' => $days );
 		if ( $id ) { $args += array( 'bsc_player_slot' => $id, 'bsc_player_edit' => $mode ); }
 		return add_query_arg( $args, admin_url( 'admin.php' ) ) . ( $id ? '#bsc-player-edit-slot' : '#bsc-player-grid' );
 	}
@@ -276,7 +281,7 @@ final class BSC_TV_Player_Admin {
 			<h4><?php echo esc_html( ( 'move' === $mode ? 'Décaler · ' : 'Remplacer · ' ) . $media['title'] ); ?></h4>
 			<p><?php echo esc_html( wp_date( 'd/m H:i:s', $row['start'] ) . ' – ' . wp_date( 'H:i:s', $row['end'] ) . ' · ' . wp_timezone_string() ); ?></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="bsc_tv_player_schedule"><input type="hidden" name="operation" value="<?php echo esc_attr( $mode ); ?>"><input type="hidden" name="slot_id" value="<?php echo esc_attr( $id ); ?>"><input type="hidden" name="plan_fingerprint" value="<?php echo esc_attr( BSC_TV_Player_Schedule::fingerprint( $state ) ); ?>"><?php wp_nonce_field( 'bsc_tv_player_schedule' ); ?>
+				<input type="hidden" name="action" value="bsc_tv_player_schedule"><input type="hidden" name="operation" value="<?php echo esc_attr( $mode ); ?>"><input type="hidden" name="slot_id" value="<?php echo esc_attr( $id ); ?>"><input type="hidden" name="plan_fingerprint" value="<?php echo esc_attr( BSC_TV_Player_Schedule::fingerprint( $state ) ); ?>"><?php BSC_TV_Stations::field( 'bsc_tv_player_schedule' ); ?>
 				<?php if ( 'move' === $mode ) : ?>
 					<p><label for="bsc-player-slot-start">Nouvelle heure de début · fuseau du site</label><br><input id="bsc-player-slot-start" type="datetime-local" name="starts_at" step="1" required value="<?php echo esc_attr( wp_date( 'Y-m-d\TH:i:s', $row['start'] ) ); ?>" min="<?php echo esc_attr( wp_date( 'Y-m-d\TH:i:s', $minimum ) ); ?>" max="<?php echo esc_attr( wp_date( 'Y-m-d\TH:i:s', $now + 72 * HOUR_IN_SECONDS - 1 ) ); ?>"></p>
 					<p class="description">Ce programme et les suivants seront décalés. Il peut être avancé dans l’espace libre après le précédent. Un décalage plus tardif peut créer une pause de programmation.</p>
@@ -328,11 +333,12 @@ final class BSC_TV_Player_Admin {
 	}
 
 	private static function message( $text ) {
-		set_transient( 'bsc_tv_player_notice_' . get_current_user_id(), $text, MINUTE_IN_SECONDS );
+		set_transient( BSC_TV_Stations::key( 'bsc_tv_player_notice_' . get_current_user_id() ), $text, MINUTE_IN_SECONDS );
 	}
 
 	public static function notice() {
-		$key = 'bsc_tv_player_notice_' . get_current_user_id();
+		if ( in_array( $_GET['page'] ?? '', array( 'bsc-tv-live-fr', 'bsc-tv-music-fr' ), true ) && 'fr' !== BSC_TV_Stations::current() ) { BSC_TV_Stations::run( 'fr', array( __CLASS__, 'notice' ) ); return; }
+		$key = BSC_TV_Stations::key( 'bsc_tv_player_notice_' . get_current_user_id() );
 		$text = get_transient( $key );
 		if ( $text ) {
 			delete_transient( $key );
@@ -341,31 +347,34 @@ final class BSC_TV_Player_Admin {
 	}
 
 	public static function section() {
+		BSC_TV_Stations::sources_form();
 		$settings = BSC_TV_Player::settings();
 		$snapshot = BSC_TV_Player::snapshot();
 		$pool = BSC_TV_Player::media();
 		$prepared = BSC_TV_Player_Schedule::prepare();
-		$state = (array) get_option( BSC_TV_Player::STATE, array() );
+		$state = (array) get_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), array() );
 		?>
 		<h2>À l’antenne</h2>
 		<p><?php echo esc_html( ! $settings['enabled'] ? 'Lecteur désactivé.' : ( $snapshot['current'] ? ( $snapshot['current']['live'] ? '● LIVE · ' : '' ) . $snapshot['current']['title'] . ' · ' . $snapshot['current']['creator'] : 'Aucun programme disponible maintenant.' ) ); ?></p>
 		<?php if ( $snapshot['current'] && ! $snapshot['current']['live'] ) : ?>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_queue"><input type="hidden" name="operation" value="skip"><input type="hidden" name="current_key" value="<?php echo esc_attr( $snapshot['current']['key'] . ':' . ( $snapshot['current']['interlude_start'] ?? $snapshot['current']['start'] ) ); ?>"><?php wp_nonce_field( 'bsc_tv_player_queue' ); ?><button class="button" type="submit">Passer au programme suivant</button></form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_queue"><input type="hidden" name="operation" value="skip"><input type="hidden" name="current_key" value="<?php echo esc_attr( $snapshot['current']['key'] . ':' . ( $snapshot['current']['interlude_start'] ?? $snapshot['current']['start'] ) ); ?>"><?php BSC_TV_Stations::field( 'bsc_tv_player_queue' ); ?><button class="button" type="submit">Passer au programme suivant</button></form>
 		<?php endif; ?>
 		<?php self::grid( $prepared, $pool, $snapshot ); ?>
 		<?php self::diversity( $pool, $prepared, $settings ); ?>
 		<p><?php echo esc_html( sprintf( '%d replay(s) utilisable(s).', count( array_filter( $pool, static function ( $item ) { return empty( $item['music'] ); } ) ) ) ); ?> <a href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . BSC_TV_Content::SHOW ) ); ?>">Gérer les émissions et les archives</a></p>
 		<?php if ( count( array_unique( array_map( array( 'BSC_TV_Player', 'mix_channel' ), $pool ) ) ) < 2 ) : ?><p class="notice notice-info">L’alternance nécessite au moins deux chaînes avec des replays utilisables. Consultez les résultats d’import par chaîne ci-dessous.</p><?php endif; ?>
 		<?php if ( $pool ) : ?>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_queue"><?php wp_nonce_field( 'bsc_tv_player_queue' ); ?><label for="bsc-player-queue">Priorité à la prochaine transition</label><br><select id="bsc-player-queue" name="show_id"><?php foreach ( $pool as $item ) : if ( ! empty( $item['music'] ) ) { continue; } ?><option value="<?php echo esc_attr( $item['show_id'] ); ?>"><?php echo esc_html( $item['title'] ); ?></option><?php endforeach; ?></select> <button class="button" type="submit" name="operation" value="next">Programmer ensuite</button> <button class="button" type="submit" name="operation" value="clear">Remélanger la programmation automatique</button></form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="bsc_tv_player_queue"><?php BSC_TV_Stations::field( 'bsc_tv_player_queue' ); ?><label for="bsc-player-queue">Priorité à la prochaine transition</label><br><select id="bsc-player-queue" name="show_id"><?php foreach ( $pool as $item ) : if ( ! empty( $item['music'] ) ) { continue; } ?><option value="<?php echo esc_attr( $item['show_id'] ); ?>"><?php echo esc_html( $item['title'] ); ?></option><?php endforeach; ?></select> <button class="button" type="submit" name="operation" value="next">Programmer ensuite</button> <button class="button" type="submit" name="operation" value="clear">Remélanger la programmation automatique</button></form>
 			<p class="description">Remélanger remplace les choix futurs, y compris les modifications manuelles. L’émission en cours reste stable.</p>
 		<?php endif; ?>
 		<section id="bsc-tv-player-settings">
 			<h2>Réglages du lecteur 24/7</h2>
 			<p>La rotation mélange les chaînes et les épisodes disponibles et équilibre leur temps de présence dans la journée. Les choix manuels, les dates de publication et les délais entre rediffusions sont respectés. La grille reste commune à tous les visiteurs.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="bsc_tv_player_settings"><?php wp_nonce_field( 'bsc_tv_player_settings' ); ?>
+				<input type="hidden" name="action" value="bsc_tv_player_settings"><?php BSC_TV_Stations::field( 'bsc_tv_player_settings' ); ?>
 				<p><label><input type="checkbox" name="bsc_player[enabled]" value="1" <?php checked( $settings['enabled'] ); ?>> Activer le lecteur 24/7</label></p>
+				<?php self::field( 'watch_url', 'Page de lecture de cette chaîne sur le site', $settings['watch_url'], 'url' ); ?>
+				<p class="description">Créez la page avec le widget lecteur en choisissant cette chaîne, puis renseignez son lien ici. La pastille et le programme du jour peuvent reprendre ce lien automatiquement.</p>
 				<p><label><input type="checkbox" name="bsc_player[live_priority]" value="1" <?php checked( $settings['live_priority'] ); ?>> Donner la priorité aux véritables directs confirmés</label></p>
 				<p class="description">Le contrôle des directs existant doit être activé dans Réglages et imports. Il reste indépendant de l’import quotidien des replays.</p>
 				<?php self::field( 'live_lead', 'Animations BSC avant un direct annoncé (minutes)', $settings['live_lead'], 'number', 'min="0" max="30"' ); ?>

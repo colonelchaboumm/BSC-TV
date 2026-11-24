@@ -15,7 +15,7 @@ final class BSC_TV_Display {
 			$attributes = (array) $attributes;
 			$format = $attributes['format'] ?? 'programme';
 			$compact = in_array( $format, array( 'menu', 'badge' ), true );
-			return self::render( shortcode_atts( array( 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'pulse' => 'yes', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes' ), $attributes ) );
+			return self::render( shortcode_atts( array( 'station' => 'main', 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'pulse' => 'yes', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes' ), $attributes ) );
 		} );
 	}
 
@@ -24,6 +24,7 @@ final class BSC_TV_Display {
 		$compact = in_array( $format, array( 'menu', 'badge' ), true );
 		$platform = sanitize_key( $values['platform'] ?? '' );
 		$config = array(
+			'station' => BSC_TV_Stations::valid( $values['station'] ?? 'main' ) ? ( $values['station'] ?? 'main' ) : 'main',
 			'format' => in_array( $format, array( 'menu', 'guide', 'badge' ), true ) ? $format : 'programme',
 			'days' => max( 1, min( self::MAX_DAYS, absint( $values['days'] ?? 45 ) ) ),
 			'limit' => 'guide' === $format ? null : max( 1, min( $compact ? 12 : 60, absint( $values['limit'] ?? 12 ) ) ),
@@ -34,7 +35,7 @@ final class BSC_TV_Display {
 			$config['player'] = in_array( $values['player'] ?? $values['show_player_current'] ?? 'yes', array( 'yes', '1', 1, true ), true ) ? 1 : 0;
 			$watch = $values['watch_url'] ?? self::LIVE_PAGE;
 			$watch = is_array( $watch ) ? ( $watch['url'] ?? '' ) : $watch;
-			$config['watch_url'] = ( is_scalar( $watch ) ? BSC_TV_Content::url( $watch ) : '' ) ?: self::LIVE_PAGE;
+			$config['watch_url'] = BSC_TV_Stations::watch_url( $watch, $config['station'] );
 		}
 		return $config;
 	}
@@ -44,6 +45,7 @@ final class BSC_TV_Display {
 			'methods' => WP_REST_Server::READABLE,
 			'permission_callback' => '__return_true',
 			'args' => array(
+				'station' => array( 'type' => 'string', 'enum' => array_keys( BSC_TV_Stations::choices() ) ),
 				'format' => array( 'type' => 'string', 'enum' => array( 'programme', 'menu', 'guide', 'badge' ) ),
 				'days' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => self::MAX_DAYS ),
 				'limit' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 60 ),
@@ -82,6 +84,7 @@ final class BSC_TV_Display {
 		$identities = array();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
+			if ( ! BSC_TV_Stations::allows_channel( $post->ID, $data ) ) { continue; }
 			if ( empty( $data['url'] ) ) {
 				continue;
 			}
@@ -113,6 +116,8 @@ final class BSC_TV_Display {
 	}
 
 	private static function events( $config, $until = null ) {
+		$station = $config['station'] ?? 'main';
+		if ( BSC_TV_Stations::current() !== $station ) { return BSC_TV_Stations::run( $station, static function () use ( $config, $until ) { return self::events( $config, $until ); } ); }
 		$now = time();
 		$until = $until ?? $now + $config['days'] * DAY_IN_SECONDS;
 		$live_enabled = ! empty( BSC_TV_Sync::settings()['live_enabled'] );
@@ -122,15 +127,18 @@ final class BSC_TV_Display {
 		list( $channels, $identities ) = self::channels();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::SHOW ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
+			if ( BSC_TV_Content::CHANNEL === $post->post_type && ! BSC_TV_Stations::allows_channel( $post->ID, $data ) ) { continue; }
+			if ( ! BSC_TV_Stations::allows_show( $data ) ) { continue; }
 			if ( empty( $data['url'] ) || ( ! empty( $data['origin_channel'] ) && ! isset( $channels[ $data['origin_channel'] ] ) ) ) {
 				continue;
 			}
 			$thumbnail = get_the_post_thumbnail_url( $post, 'large' ) ?: '';
 			$data['title'] = get_the_title( $post );
-			$data['image'] = $thumbnail ?: $data['image'];
+			$data['image'] = $thumbnail ?: ( $data['image'] ?? '' );
 			$state = BSC_TV_Sync::state( $post->ID, BSC_TV_Content::youtube_video_id( $data['url'] ) );
 			$channel_id = self::resolve_channel( $data, $state, $identities );
 			$channel = $channels[ $channel_id ] ?? array();
+			if ( 'fr' === BSC_TV_Stations::current() && ! $channel ) { continue; }
 			$data['bdd_id'] = BSC_TV_Content::profile( $data['bdd_id'] ) ? $data['bdd_id'] : ( $channel['bdd_id'] ?? 0 );
 			$data['creator'] = $data['creator'] ?: ( $channel['creator'] ?? '' );
 			$data['channel_id'] = $channel_id;
@@ -169,6 +177,7 @@ final class BSC_TV_Display {
 			}
 			foreach ( array( 'live' => $current, 'upcoming' => $state['schedule'] ?? array() ) as $status => $events ) {
 				foreach ( $events as $event ) {
+					if ( ! BSC_TV_Stations::allows_show( $event ) ) { continue; }
 					if ( 'upcoming' === $status && ( isset( $current_ids[ $event['id'] ] ) || 'live' === ( $event['status'] ?? '' ) ) ) {
 						continue;
 					}
@@ -289,7 +298,7 @@ final class BSC_TV_Display {
 
 	/** The badge follows the local shared antenna; platform announcements remain below. */
 	private static function badge_programme( $config ) {
-		$snapshot = $config['player'] ? BSC_TV_Player::snapshot() : null;
+		$snapshot = $config['player'] ? BSC_TV_Player::snapshot( null, $config['station'] ?? 'main' ) : null;
 		$current = ! empty( $snapshot['enabled'] ) ? $snapshot['current'] : null;
 		$programme = self::programme( $config, $current['resource'] ?? null );
 		$programme['poll_after'] = 60;
@@ -299,7 +308,7 @@ final class BSC_TV_Display {
 		$highlight['date'] = $current['end'] ? wp_date( 'H:i', $current['start'] ) . ' – ' . wp_date( 'H:i', $current['end'] ) : 'Depuis ' . wp_date( 'H:i', $current['start'] );
 		$programme['highlight'] = $highlight;
 		$programme['live']++;
-		$programme['announcement'] = 'À l’antenne sur BSC TV : ' . $highlight['title'];
+		$programme['announcement'] = 'À l’antenne sur ' . BSC_TV_Stations::choices()[ $config['station'] ?? 'main' ] . ' : ' . $highlight['title'];
 		$programme['poll_after'] = $current['end'] ? max( 5, min( 60, $current['end'] - $snapshot['server_time'] + 1 ) ) : 60;
 		ob_start();
 		require BSC_TV_DIR . 'includes/badge-current.php';
@@ -394,7 +403,7 @@ final class BSC_TV_Display {
 				<div class="bsc-tv-badge__panel bsc-tv--menu">
 					<?php if ( $title ) : ?><p class="bsc-tv-heading"><?php echo esc_html( $title ); ?></p><?php endif; ?>
 					<?php self::programme_body( $programme, $agenda ); ?>
-					<?php if ( ! isset( $settings['show_watch_link'] ) || 'yes' === $settings['show_watch_link'] ) : $watch_config = self::config( $settings ); $watch_label = sanitize_text_field( $settings['watch_label'] ?? '' ) ?: 'Regarder Le live'; ?><a class="bsc-tv-agenda bsc-tv-watch bsc-tv-badge__watch" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>"><?php echo esc_html( $watch_label ); ?> <span aria-hidden="true">→</span></a><?php endif; ?>
+					<?php $watch_config = self::config( $settings ); if ( $watch_config['watch_url'] && ( ! isset( $settings['show_watch_link'] ) || 'yes' === $settings['show_watch_link'] ) ) : $watch_label = sanitize_text_field( $settings['watch_label'] ?? '' ) ?: 'Regarder Le live'; ?><a class="bsc-tv-agenda bsc-tv-watch bsc-tv-badge__watch" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>"><?php echo esc_html( $watch_label ); ?> <span aria-hidden="true">→</span></a><?php endif; ?>
 				</div>
 			</details>
 			<span class="bsc-tv-announcement" role="status"></span>

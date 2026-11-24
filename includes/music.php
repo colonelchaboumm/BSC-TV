@@ -12,7 +12,7 @@ final class BSC_TV_Music {
 
 	public static function register() {
 		add_action( 'init', static function () { register_post_type( self::POST, array( 'label' => 'Clips musicaux BSC TV', 'public' => false, 'show_ui' => false, 'supports' => array( 'title' ), 'can_export' => true ) ); } );
-		add_action( 'bsc_tv_player_daily_music', array( __CLASS__, 'daily' ) );
+		add_action( 'bsc_tv_player_daily_music', array( 'BSC_TV_Stations', 'refresh_music' ) );
 	}
 
 	public static function normalize( $input ) {
@@ -21,12 +21,18 @@ final class BSC_TV_Music {
 		foreach ( array_slice( (array) ( $input['animation_ids'] ?? array() ), 0, 50 ) as $id ) { if ( is_scalar( $id ) && absint( $id ) ) { $animation_ids[ absint( $id ) ] = absint( $id ); } }
 		$bands = array();
 		$defaults = array( 'morning' => array( 'BSC Morning Chill', '06:00', '10:00' ), 'day' => array( 'BSC Hip-Hop Classics', '10:00', '18:00' ), 'evening' => array( 'BSC MTV Legends', '18:00', '00:00' ), 'night' => array( 'BSC Night Sessions', '00:00', '06:00' ) );
+		if ( 'fr' === BSC_TV_Stations::current() ) {
+			foreach ( array( 'morning' => 'BSC FR · Hip-hop 90 · Matin', 'day' => 'BSC FR · Rap 90 · Journée', 'evening' => 'BSC FR · Classiques 90 · Soirée', 'night' => 'BSC FR · Underground 90 · Nuit' ) as $id => $name ) { $defaults[ $id ][0] = $name; }
+		}
 		foreach ( $defaults as $id => $values ) {
 			$row = (array) ( $input['bands'][ $id ] ?? array() );
 			$bands[ $id ] = array( 'name' => sanitize_text_field( $row['name'] ?? $values[0] ), 'start' => self::hour( $row['start'] ?? $values[1] ), 'end' => self::hour( $row['end'] ?? $values[2] ), 'category' => isset( $defaults[ $row['category'] ?? '' ] ) ? $row['category'] : $id, 'enabled' => ! isset( $input['bands'] ) || ! empty( $row['enabled'] ) );
 		}
 		return array(
 			'enabled' => ! empty( $input['enabled'] ), 'threshold' => max( 1, min( 600, (int) ( $input['threshold'] ?? 40 ) ) ),
+			'year_min' => empty( $input['year_min'] ?? ( 'fr' === BSC_TV_Stations::current() ? 1990 : 0 ) ) ? 0 : max( 1900, min( 2100, (int) ( $input['year_min'] ?? 1990 ) ) ),
+			'year_max' => empty( $input['year_max'] ?? ( 'fr' === BSC_TV_Stations::current() ? 1999 : 0 ) ) ? 0 : max( 1900, min( 2100, (int) ( $input['year_max'] ?? 1999 ) ) ),
+			'region_filter' => in_array( $input['region_filter'] ?? '', array( 'all', 'fr', 'us', 'other' ), true ) ? $input['region_filter'] : ( 'fr' === BSC_TV_Stations::current() ? 'fr' : 'all' ),
 			'flexible' => ! empty( $input['flexible'] ), 'repeat_hours' => max( 0, min( 720, (float) ( $input['repeat_hours'] ?? 6 ) ) ),
 			'disable_policy' => 'interrupt' === ( $input['disable_policy'] ?? '' ) ? 'interrupt' : 'finish',
 			'live_policy' => 'finish' === ( $input['live_policy'] ?? '' ) ? 'finish' : 'interrupt',
@@ -41,7 +47,7 @@ final class BSC_TV_Music {
 		);
 	}
 	private static function hour( $value ) { return is_string( $value ) && preg_match( '/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $value ) ? $value : '00:00'; }
-	public static function settings() { return self::normalize( get_option( self::SETTINGS, array() ) ) + array( 'revision' => (int) get_option( self::REVISION, 0 ) ); }
+	public static function settings() { return self::normalize( get_option( BSC_TV_Stations::key( self::SETTINGS ), array() ) ) + array( 'revision' => (int) get_option( BSC_TV_Stations::key( self::REVISION ), 0 ) ); }
 	public static function category( $timestamp, $settings ) {
 		$hour = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( new DateTimeZone( 'Europe/Paris' ) )->format( 'H:i' );
 		foreach ( $settings['bands'] as $row ) {
@@ -64,23 +70,29 @@ final class BSC_TV_Music {
 		return true;
 	}
 	public static function invalidate() {
-		delete_transient( self::CACHE );
-		update_option( self::REVISION, (int) get_option( self::REVISION, 0 ) + 1, false );
+		delete_transient( BSC_TV_Stations::key( self::CACHE ) );
+		update_option( BSC_TV_Stations::key( self::REVISION ), (int) get_option( BSC_TV_Stations::key( self::REVISION ), 0 ) + 1, false );
 		BSC_TV_Player_Schedule::request();
 	}
 	public static function clips() {
-		$cached = get_transient( self::CACHE );
+		$cached = get_transient( BSC_TV_Stations::key( self::CACHE ) );
 		if ( is_array( $cached ) ) { return $cached; }
 		$clips = array();
-		foreach ( get_posts( array( 'post_type' => self::POST, 'post_status' => 'publish', 'posts_per_page' => 500, 'orderby' => 'ID', 'order' => 'ASC', 'update_post_term_cache' => false ) ) as $post ) {
+		foreach ( get_posts( array( 'post_type' => self::POST, 'post_status' => 'publish', 'posts_per_page' => 1000, 'orderby' => 'ID', 'order' => 'ASC', 'update_post_term_cache' => false ) ) as $post ) {
 			$clip = (array) get_post_meta( $post->ID, self::META, true );
+			if ( ( $clip['station'] ?? 'main' ) !== BSC_TV_Stations::current() ) { continue; }
 			$clips[ $post->ID ] = $clip + array( 'id' => $post->ID );
 		}
-		set_transient( self::CACHE, $clips, MINUTE_IN_SECONDS );
+		set_transient( BSC_TV_Stations::key( self::CACHE ), $clips, MINUTE_IN_SECONDS );
 		return $clips;
 	}
 	public static function approved( $clip ) {
 		return ! empty( $clip['active'] ) && 'confirmed' === ( $clip['rights'] ?? '' ) && ! empty( $clip['rights_note'] ) && ! empty( $clip['official'] ) && 'available' === ( $clip['availability'] ?? '' ) && ( $clip['duration'] ?? 0 ) > 0 && ( $clip['duration'] ?? 0 ) <= HOUR_IN_SECONDS && ! empty( $clip['artist'] ) && ! empty( $clip['title'] ) && preg_match( '/^[\w-]{11}$/D', $clip['youtube_id'] ?? '' );
+	}
+	public static function in_selection( $clip, $settings = null ) {
+		$settings = $settings ?? self::settings();
+		$year = (int) ( $clip['year'] ?? 0 );
+		return ( ! $settings['year_min'] || $year >= $settings['year_min'] ) && ( ! $settings['year_max'] || ( $year && $year <= $settings['year_max'] ) ) && ( 'all' === $settings['region_filter'] || $settings['region_filter'] === ( $clip['region'] ?? 'other' ) );
 	}
 	private static function media_url( $id, $type ) {
 		return $id && 0 === strpos( (string) get_post_mime_type( $id ), $type . '/' ) ? BSC_TV_Content::url( wp_get_attachment_url( $id ) ) : '';
@@ -124,7 +136,7 @@ final class BSC_TV_Music {
 	public static function pool( $state = null ) {
 		$settings = self::settings();
 		if ( ! $settings['enabled'] ) {
-			$state = $state ?? (array) get_option( BSC_TV_Player::STATE, array() );
+			$state = $state ?? (array) get_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), array() );
 			if ( empty( $state['vod']['music'] ) || 'finish' !== $settings['disable_policy'] ) { return array(); }
 		}
 		$identity = array_intersect_key( $settings, array_flip( array( 'background', 'color', 'animation', 'show_text', 'sound', 'entry_text', 'exit_text' ) ) );
@@ -135,7 +147,7 @@ final class BSC_TV_Music {
 		$entry_duration = $entry['duration'] ?? $minimum ?? $settings['entry']; $exit_duration = $exit['duration'] ?? $minimum ?? $settings['exit'];
 		$pool = array();
 		foreach ( self::clips() as $id => $clip ) {
-			if ( ! self::approved( $clip ) ) { continue; }
+			if ( ! self::approved( $clip ) || ! self::in_selection( $clip, $settings ) ) { continue; }
 			$key = 'music:' . $id . ':' . $clip['youtube_id'];
 			if ( ! $settings['enabled'] && ( $state['vod']['key'] ?? '' ) !== $key ) { continue; }
 			$music = array_intersect_key( $clip, array_flip( array( 'artist', 'title', 'year', 'youtube_id', 'channel', 'image', 'duration', 'categories', 'region' ) ) );
@@ -265,10 +277,11 @@ final class BSC_TV_Music {
 	}
 	public static function diagnostic( $state = null ) {
 		$config = self::settings(); $clips = self::clips();
-		$counts = array_fill_keys( array( 'ready', 'inactive', 'rights', 'official', 'availability', 'duration', 'artist' ), 0 );
+		$counts = array_fill_keys( array( 'ready', 'inactive', 'rights', 'official', 'availability', 'duration', 'artist', 'selection' ), 0 );
 		$categories = array_fill_keys( array_keys( $config['bands'] ), 0 );
 		foreach ( $clips as $clip ) {
-			if ( self::approved( $clip ) ) { ++$counts['ready']; foreach ( $clip['categories'] ?? array() as $category ) { if ( isset( $categories[ $category ] ) ) { ++$categories[ $category ]; } } }
+			if ( self::approved( $clip ) && self::in_selection( $clip, $config ) ) { ++$counts['ready']; foreach ( $clip['categories'] ?? array() as $category ) { if ( isset( $categories[ $category ] ) ) { ++$categories[ $category ]; } } }
+			$counts['selection'] += self::in_selection( $clip, $config ) ? 0 : 1;
 			$counts['inactive'] += empty( $clip['active'] ) ? 1 : 0;
 			$counts['rights'] += 'confirmed' !== ( $clip['rights'] ?? '' ) || empty( $clip['rights_note'] ) ? 1 : 0;
 			$counts['official'] += empty( $clip['official'] ) ? 1 : 0;
@@ -276,7 +289,7 @@ final class BSC_TV_Music {
 			$counts['duration'] += ( $clip['duration'] ?? 0 ) < 1 || ( $clip['duration'] ?? 0 ) > 3600 ? 1 : 0;
 			$counts['artist'] += empty( $clip['artist'] ) || empty( $clip['title'] ) ? 1 : 0;
 		}
-		$state = $state ?? (array) get_option( BSC_TV_Player::STATE, array() );
+		$state = $state ?? (array) get_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), array() );
 		return array( 'total' => count( $clips ), 'counts' => $counts, 'categories' => $categories, 'planned' => count( array_filter( $state['plan'] ?? array(), static function ( $row ) { return ! empty( $row['music'] ); } ) ), 'enabled' => $config['enabled'], 'flexible' => $config['flexible'], 'entry' => $config['entry'], 'exit' => $config['exit'], 'bundled_animation' => $config['bundled_animation'] );
 	}
 	/** At most one existing-credentials batch during the already authenticated daily worker. */
@@ -290,7 +303,7 @@ final class BSC_TV_Music {
 	public static function refresh( $clips ) {
 		if ( ! $clips ) { return; }
 		$result = BSC_TV_Sync::music_metadata( array_column( $clips, 'youtube_id' ) );
-		if ( is_wp_error( $result ) ) { update_option( self::REPORT, array( 'at' => time(), 'error' => $result->get_error_message() ), false ); return; }
+		if ( is_wp_error( $result ) ) { update_option( BSC_TV_Stations::key( self::REPORT ), array( 'at' => time(), 'error' => $result->get_error_message() ), false ); return; }
 		foreach ( $clips as $id => $clip ) {
 			if ( isset( $result['failed'][ $clip['youtube_id'] ] ) ) { continue; }
 			$event = $result['videos'][ $clip['youtube_id'] ] ?? null;
@@ -302,7 +315,7 @@ final class BSC_TV_Music {
 			}
 			update_post_meta( $id, self::META, $clip );
 		}
-		update_option( self::REPORT, array( 'at' => time(), 'error' => $result['failed'] ? 'Certaines métadonnées n’ont pas pu être vérifiées.' : '' ), false );
+		update_option( BSC_TV_Stations::key( self::REPORT ), array( 'at' => time(), 'error' => $result['failed'] ? 'Certaines métadonnées n’ont pas pu être vérifiées.' : '' ), false );
 		self::invalidate();
 	}
 }
