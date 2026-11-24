@@ -1,5 +1,5 @@
 <?php defined( 'ABSPATH' ) || exit; ?>
-<section class="bsc-player" data-bsc-player="<?php echo esc_url( rest_url( 'bsc-tv/v1/player' ) ); ?>" data-autoplay="<?php echo 'yes' === $settings['autoplay'] ? '1' : '0'; ?>" data-muted="<?php echo 'yes' === $settings['muted'] ? '1' : '0'; ?>" data-music-meta="<?php echo 'yes' === $settings['show_music_meta'] ? '1' : '0'; ?>" aria-label="<?php echo esc_attr( $settings['title'] ); ?>">
+<section class="bsc-player" data-bsc-player="<?php echo esc_url( add_query_arg( 'station', BSC_TV_Stations::current(), rest_url( 'bsc-tv/v1/player' ) ) ); ?>" data-autoplay="<?php echo 'yes' === $settings['autoplay'] ? '1' : '0'; ?>" data-muted="<?php echo 'yes' === $settings['muted'] ? '1' : '0'; ?>" data-music-meta="<?php echo 'yes' === $settings['show_music_meta'] ? '1' : '0'; ?>" aria-label="<?php echo esc_attr( $settings['title'] ); ?>">
 	<div class="bsc-player__header">
 		<?php if ( $logo && 'yes' === $settings['show_logo'] ) : ?><img class="bsc-player__logo" src="<?php echo esc_url( $logo ); ?>" alt="Logo BSC TV" decoding="async"><?php endif; ?>
 		<?php if ( $settings['title'] ) : ?><h2 class="bsc-player__heading"><?php echo esc_html( $settings['title'] ); ?></h2><?php endif; ?>

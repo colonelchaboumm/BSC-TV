@@ -20,6 +20,7 @@ final class BSC_TV_Day_Widget extends Elementor\Widget_Base {
 	protected function register_controls() {
 		$root = '{{WRAPPER}} .bsc-day';
 		$this->start_controls_section( 'day_content', array( 'label' => 'Programme de la journée' ) );
+		$this->add_control( 'station', array( 'label' => 'Chaîne TV à diffuser', 'type' => Controls_Manager::SELECT, 'default' => 'main', 'options' => BSC_TV_Stations::choices(), 'description' => 'Chaque chaîne possède sa programmation, sa musique et son horloge indépendantes.' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre du widget', 'type' => Controls_Manager::TEXT, 'default' => 'Au programme aujourd’hui' ) );
 		$this->add_control( 'page_size', array( 'label' => 'Programmes par chargement', 'type' => Controls_Manager::NUMBER, 'default' => 5, 'min' => 1, 'max' => 50, 'description' => 'Le programme en cours reste visible en plus de cette limite.' ) );
 		$this->add_control( 'show_music', array( 'label' => 'Afficher les musiques programmées', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );

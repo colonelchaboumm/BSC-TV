@@ -190,3 +190,8 @@ Adaptations : `bsc-tv.php`, `includes/player.php`, `includes/player-schedule.php
 La version 1.16.0 ajoute `includes/music-playlist.php`, `tests/music-playlist.php` et `tests/music-playlist-browser.mjs`, avec adaptation de l’administration musicale, de son script, de ses styles et de l’accès YouTube existant. Pour revenir de 1.16.0 à 1.15.0, réinstaller le ZIP précédent : les références importées restent des clips ordinaires de la bibliothèque ; l’état de reprise inutilisé expire après 24 heures.
 
 La version 1.17.0 ajoute `tests/music-grid.php` et adapte le moteur musical, son administration, l’horloge/programmation, le widget quotidien et ses styles. Les clips et notes d’autorisation existants restent conservés. Pour revenir à 1.16.0, désactiver les futurs interludes avec la politique d’interruption souhaitée, sauvegarder puis réinstaller le ZIP précédent ; les réglages de présentation supplémentaires et la graine musicale sont ignorés par l’ancienne version.
+
+
+## Bibliothèques par chaîne
+
+Depuis 1.24.0, **1 · Musique** conserve les clips existants ; **2 · Musique FR** accueille les playlists distinctes de la chaîne française. Ses tranches initiales ciblent le hip-hop / rap français de 1990 à 1999. Le filtre utilise l’année du morceau renseignée dans la fiche, pas la date de publication YouTube. Les imports, catégories, validations et réglages restent propres à chaque bibliothèque. [Configuration des deux chaînes](STATIONS.md).

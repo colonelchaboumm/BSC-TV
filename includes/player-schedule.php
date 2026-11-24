@@ -20,7 +20,7 @@ final class BSC_TV_Player_Schedule {
 
 	public static function schedule() {
 		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { self::deactivate(); return; }
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { self::deactivate(); return; }
+		if ( ! BSC_TV_Stations::any_enabled() ) { self::deactivate(); return; }
 		if ( ! wp_next_scheduled( self::HOURLY ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', self::HOURLY );
 			self::request();
@@ -35,19 +35,21 @@ final class BSC_TV_Player_Schedule {
 
 	public static function request() {
 		if ( class_exists( 'BSC_TV_Server' ) && BSC_TV_Server::enabled() ) { return; }
-		if ( BSC_TV_Player::settings()['enabled'] && ! wp_next_scheduled( self::NOW ) ) {
+		if ( BSC_TV_Stations::any_enabled() && ! wp_next_scheduled( self::NOW ) ) {
 			wp_schedule_single_event( time() + 15, self::NOW );
 		}
 	}
 
 	public static function configuration_changed( $option ) {
-		if ( BSC_TV_Player::SETTINGS === $option ) { self::schedule(); self::request(); }
+		if ( in_array( $option, array( BSC_TV_Player::SETTINGS, BSC_TV_Player::SETTINGS . '_station_fr' ), true ) ) { self::schedule(); self::request(); }
 	}
 
 	public static function refresh() {
-		if ( ! BSC_TV_Player::settings()['enabled'] ) { return; }
-		$result = self::prepare();
-		if ( is_wp_error( $result ) ) { self::request(); }
+		foreach ( BSC_TV_Stations::choices() as $id => $label ) { BSC_TV_Stations::run( $id, static function () {
+			if ( ! BSC_TV_Player::settings()['enabled'] ) { return; }
+			$result = self::prepare();
+			if ( is_wp_error( $result ) ) { self::request(); }
+		} ); }
 	}
 
 	/** Only values which affect selection; presentation updates do not reshuffle the queue. */
@@ -231,16 +233,16 @@ final class BSC_TV_Player_Schedule {
 	}
 
 	private static function clock() {
-		wp_cache_delete( BSC_TV_Player::STATE, 'options' );
+		wp_cache_delete( BSC_TV_Stations::key( BSC_TV_Player::STATE ), 'options' );
 		wp_cache_delete( 'notoptions', 'options' );
-		return (array) get_option( BSC_TV_Player::STATE, array() );
+		return (array) get_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), array() );
 	}
 
 	/** Administration and background refresh share the same locked clock and catalogue. */
 	public static function prepare() {
 		$pool = BSC_TV_Player::media();
 		$settings = BSC_TV_Player::settings();
-		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
+		$lock = BSC_TV_Content::lock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ) );
 		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
 		try {
 			$now = time();
@@ -248,11 +250,11 @@ final class BSC_TV_Player_Schedule {
 			$state = BSC_TV_Player::advance_clock( $stored, $now );
 			$state = self::replenish( $state, $pool, $settings, $now, true );
 			if ( $state !== $stored ) {
-				update_option( BSC_TV_Player::STATE, $state, false );
+				update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false );
 			}
 			return $state;
 		} finally {
-			BSC_TV_Content::unlock( BSC_TV_Player::LOCK, $lock );
+			BSC_TV_Content::unlock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ), $lock );
 		}
 	}
 
@@ -263,14 +265,14 @@ final class BSC_TV_Player_Schedule {
 		if ( ! in_array( $operation, array( 'next', 'clear', 'skip' ), true ) || ( 'next' === $operation && ( $id < 1 || ! in_array( $id, array_column( $pool, 'show_id' ), true ) ) ) ) {
 			return new WP_Error( 'schedule_invalid', 'Action ou replay de programmation indisponible.' );
 		}
-		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
+		$lock = BSC_TV_Content::lock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ) );
 		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
 		try {
 			$now = $now ?? time();
 			// Consume overdue slots before changing priorities, even if the admin page was left open.
 			$state = BSC_TV_Player::advance_clock( self::clock(), $now );
 			if ( 'next' === $operation && ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) ) ) {
-				update_option( BSC_TV_Player::STATE, $state, false );
+				update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false );
 				return new WP_Error( 'schedule_live_priority', 'Le direct garde la priorité. Pour modifier la grille pendant l’attente ou le direct, remplacez un programme à venir à son horaire prévu.' );
 			}
 			$state['live_grid_until'] = 0;
@@ -285,7 +287,7 @@ final class BSC_TV_Player_Schedule {
 				$state['rotation_seed'] = bin2hex( random_bytes( 16 ) );
 			} else {
 				if ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) || empty( $state['vod'] ) || ! hash_equals( $state['vod']['key'] . ':' . $state['vod']['start'], $current_key ) ) {
-					update_option( BSC_TV_Player::STATE, $state, false );
+					update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false );
 					return new WP_Error( 'schedule_stale', 'Le programme en cours a changé. Rechargez la page avant de passer au suivant.' );
 				}
 				if ( ! empty( $state['vod']['music'] ) ) { BSC_TV_Music::interrupt( $state, $now ); }
@@ -297,10 +299,10 @@ final class BSC_TV_Player_Schedule {
 				}
 			}
 			$state['plan'] = self::build( $state, $pool, $settings, $now );
-			update_option( BSC_TV_Player::STATE, $state, false );
+			update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false );
 			return true;
 		} finally {
-			BSC_TV_Content::unlock( BSC_TV_Player::LOCK, $lock );
+			BSC_TV_Content::unlock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ), $lock );
 		}
 	}
 
@@ -308,20 +310,20 @@ final class BSC_TV_Player_Schedule {
 		if ( ! current_user_can( 'manage_options' ) ) { return new WP_Error( 'schedule_forbidden', 'Action réservée aux administrateurs.' ); }
 		$pool = BSC_TV_Player::media();
 		$settings = BSC_TV_Player::settings();
-		$lock = BSC_TV_Content::lock( BSC_TV_Player::LOCK );
+		$lock = BSC_TV_Content::lock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ) );
 		if ( ! $lock ) { return new WP_Error( 'schedule_busy', 'La programmation est en cours de mise à jour. Réessayez.' ); }
 		try {
 			$now = time();
 			$stored = self::clock();
 			$state = BSC_TV_Player::advance_clock( $stored, $now );
-			if ( $state !== $stored ) { update_option( BSC_TV_Player::STATE, $state, false ); }
+			if ( $state !== $stored ) { update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false ); }
 			$state = self::change( $state, $pool, $settings, $now, $operation, $slot_id, $value, $fingerprint );
-			update_option( BSC_TV_Player::STATE, $state, false );
+			update_option( BSC_TV_Stations::key( BSC_TV_Player::STATE ), $state, false );
 			return true;
 		} catch ( InvalidArgumentException $exception ) {
 			return new WP_Error( 'schedule_invalid', $exception->getMessage() );
 		} finally {
-			BSC_TV_Content::unlock( BSC_TV_Player::LOCK, $lock );
+			BSC_TV_Content::unlock( BSC_TV_Stations::key( BSC_TV_Player::LOCK ), $lock );
 		}
 	}
 }

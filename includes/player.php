@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/stations.php';
 require_once __DIR__ . '/player-live.php';
 
 /** A shared clock and references to existing shows. No video collection or storage. */
@@ -27,9 +28,11 @@ final class BSC_TV_Player {
 	}
 
 	public static function settings() {
-		$input = (array) get_option( self::SETTINGS, array() );
+		$defaults = 'fr' === BSC_TV_Stations::current() ? array( 'enabled' => false, 'recent' => 'rotation', 'live_priority' => true ) : array();
+		$input = (array) get_option( BSC_TV_Stations::key( self::SETTINGS ), $defaults );
 		return array(
 			'enabled' => ! empty( $input['enabled'] ),
+			'watch_url' => is_scalar( $input['watch_url'] ?? null ) ? BSC_TV_Content::url( $input['watch_url'] ) : ( 'main' === BSC_TV_Stations::current() ? BSC_TV_Display::LIVE_PAGE : '' ),
 			'recent' => in_array( $input['recent'] ?? '', array( 'strong', 'balanced', 'rotation' ), true ) ? $input['recent'] : 'strong',
 			'live_priority' => ! empty( $input['live_priority'] ),
 			'live_clock' => true,
@@ -46,14 +49,14 @@ final class BSC_TV_Player {
 
 	public static function invalidate_post( $id, $post ) {
 		if ( in_array( $post->post_type, array( BSC_TV_Content::SHOW, BSC_TV_Content::CHANNEL ), true ) ) {
-			delete_transient( self::CACHE );
+			BSC_TV_Stations::invalidate_catalogues();
 			do_action( 'bsc_tv_player_catalogue_changed' );
 		}
 	}
 
 	public static function invalidate_meta( $meta_id, $post_id, $key ) {
 		if ( in_array( $key, array( self::MEDIA, self::CHANNEL, self::APPROVED, self::ACCESS, BSC_TV_Content::DATA, BSC_TV_Content::STATE ), true ) ) {
-			delete_transient( self::CACHE );
+			BSC_TV_Stations::invalidate_catalogues();
 			do_action( 'bsc_tv_player_catalogue_changed' );
 		}
 	}
@@ -121,13 +124,14 @@ final class BSC_TV_Player {
 	}
 
 	private static function base_catalogue() {
-		$cached = get_transient( self::CACHE );
+		$cached = get_transient( BSC_TV_Stations::key( self::CACHE ) );
 		if ( is_array( $cached ) ) {
 			return $cached;
 		}
 		$channels = array();
 		foreach ( BSC_TV_Content::posts( BSC_TV_Content::CHANNEL ) as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
+			if ( ! BSC_TV_Stations::allows_channel( $post->ID, $data ) ) { continue; }
 			$key = BSC_TV_Content::channel_key( $data['platform'] ?? '', $data['url'] ?? '' );
 			if ( ! $key || ! in_array( $data['platform'], array( 'youtube', 'twitch' ), true ) ) {
 				continue;
@@ -137,6 +141,7 @@ final class BSC_TV_Player {
 				'config' => (array) get_post_meta( $post->ID, self::CHANNEL, true ), 'state' => BSC_TV_Sync::state( $post->ID, $key ),
 			);
 		}
+		foreach ( $channels as &$channel ) { foreach ( array( 'schedule', 'live' ) as $kind ) { $channel['state'][ $kind ] = array_values( array_filter( $channel['state'][ $kind ] ?? array(), array( 'BSC_TV_Stations', 'allows_show' ) ) ); } } unset( $channel );
 		$pool = array();
 		$blocked = array();
 		$manual_live = array();
@@ -145,6 +150,7 @@ final class BSC_TV_Player {
 		$shows = get_posts( array( 'post_type' => BSC_TV_Content::SHOW, 'post_status' => array( 'publish', BSC_TV_Content::ARCHIVED ), 'has_password' => false, 'posts_per_page' => 1000, 'orderby' => 'modified', 'order' => 'DESC', 'update_post_term_cache' => false ) );
 		foreach ( $shows as $post ) {
 			$data = BSC_TV_Content::data( $post->ID );
+			if ( ! BSC_TV_Stations::allows_show( $data ) ) { continue; }
 			$media = (array) get_post_meta( $post->ID, self::MEDIA, true );
 			$url = $media['url'] ?? '';
 			$url = $url ?: ( $data['url'] ?? '' );
@@ -172,6 +178,7 @@ final class BSC_TV_Player {
 				$channel_id = 1 === count( $matches ) ? key( $matches ) : 0;
 			}
 			$channel = $channels[ $channel_id ] ?? array();
+			if ( 'fr' === BSC_TV_Stations::current() && ( ! $channel || ! BSC_TV_Stations::allows_show( $video ) ) ) { continue; }
 			if ( ! empty( $data['channel_id'] ) && ! $channel ) {
 				continue;
 			}
@@ -208,7 +215,7 @@ final class BSC_TV_Player {
 		}
 		$pool = array_diff_key( $pool, $blocked );
 		$result = array( 'pool' => $pool, 'channels' => $channels, 'manual_live' => $manual_live, 'manual_upcoming' => $manual_upcoming, 'blocked' => $blocked );
-		set_transient( self::CACHE, $result, MINUTE_IN_SECONDS );
+		set_transient( BSC_TV_Stations::key( self::CACHE ), $result, MINUTE_IN_SECONDS );
 		return $result;
 	}
 
@@ -561,32 +568,33 @@ final class BSC_TV_Player {
 		return self::advance( $state, $catalogue['pool'], self::lives( $catalogue, $settings, $now, $state['live'] ?? null ), $settings, $now );
 	}
 
-	public static function snapshot( $now = null ) {
+	public static function snapshot( $now = null, $station = null ) {
+		if ( null !== $station ) { return BSC_TV_Stations::run( $station, static function () use ( $now ) { return self::snapshot( $now ); } ); }
 		$now = $now ?? time();
 		$settings = self::settings();
-		$result = array( 'enabled' => $settings['enabled'], 'server_time' => $now, 'timezone' => wp_timezone_string(), 'tolerance' => $settings['tolerance'], 'poll_after' => 60, 'current' => null, 'next' => array() );
+		$result = array( 'station' => BSC_TV_Stations::current(), 'station_label' => BSC_TV_Stations::choices()[ BSC_TV_Stations::current() ], 'enabled' => $settings['enabled'], 'server_time' => $now, 'timezone' => wp_timezone_string(), 'tolerance' => $settings['tolerance'], 'poll_after' => 60, 'current' => null, 'next' => array() );
 		if ( ! $settings['enabled'] ) {
 			return $result;
 		}
 		$catalogue = self::catalogue();
-		$state = (array) get_option( self::STATE, array() );
+		$state = (array) get_option( BSC_TV_Stations::key( self::STATE ), array() );
 		$settings['_announcements'] = BSC_TV_Player_Live::announcements( $catalogue, $settings );
 		$lives = self::lives( $catalogue, $settings, $now, $state['live'] ?? null );
 		$updated = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
 		if ( $updated !== $state || BSC_TV_Player_Schedule::needs_refresh( $updated, $catalogue['pool'], $settings, $now ) ) {
-			$lock = BSC_TV_Content::lock( self::LOCK );
+			$lock = BSC_TV_Content::lock( BSC_TV_Stations::key( self::LOCK ) );
 			if ( $lock ) {
 				try {
 					// Another request may have filled the clock after our first read.
-					wp_cache_delete( self::STATE, 'options' );
+					wp_cache_delete( BSC_TV_Stations::key( self::STATE ), 'options' );
 					wp_cache_delete( 'notoptions', 'options' );
-					$state = BSC_TV_Player_Schedule::before_advance( (array) get_option( self::STATE, array() ), $catalogue['pool'], $settings, $now );
+					$state = BSC_TV_Player_Schedule::before_advance( (array) get_option( BSC_TV_Stations::key( self::STATE ), array() ), $catalogue['pool'], $settings, $now );
 					$lives = self::lives( $catalogue, $settings, $now, $state['live'] ?? null );
 					$state = self::advance( $state, $catalogue['pool'], $lives, $settings, $now );
 					$state = BSC_TV_Player_Schedule::replenish( $state, $catalogue['pool'], $settings, $now );
-					update_option( self::STATE, $state, false );
+					update_option( BSC_TV_Stations::key( self::STATE ), $state, false );
 				} finally {
-					BSC_TV_Content::unlock( self::LOCK, $lock );
+					BSC_TV_Content::unlock( BSC_TV_Stations::key( self::LOCK ), $lock );
 				}
 			}
 		}
@@ -634,8 +642,8 @@ final class BSC_TV_Player {
 	}
 
 	public static function rest() {
-		register_rest_route( 'bsc-tv/v1', '/player', array( 'methods' => WP_REST_Server::READABLE, 'permission_callback' => '__return_true', 'callback' => static function () {
-			$response = new WP_REST_Response( self::snapshot() );
+		register_rest_route( 'bsc-tv/v1', '/player', array( 'methods' => WP_REST_Server::READABLE, 'permission_callback' => '__return_true', 'args' => array( 'station' => array( 'type' => 'string', 'enum' => array_keys( BSC_TV_Stations::choices() ), 'default' => 'main' ) ), 'callback' => static function ( $request ) {
+			$response = new WP_REST_Response( self::snapshot( null, $request['station'] ) );
 			$response->header( 'Cache-Control', 'no-store, max-age=0' );
 			return $response;
 		} ) );
@@ -649,7 +657,7 @@ final class BSC_TV_Player {
 		$result = array( 'enabled' => $snapshot['enabled'], 'server_time' => $now, 'timezone' => $snapshot['timezone'], 'date' => wp_date( 'Y-m-d', $now ), 'date_label' => wp_date( 'l j F Y', $now ), 'day_start' => $bounds[0], 'day_end' => $bounds[1], 'poll_after' => 60, 'items' => array() );
 		if ( ! $snapshot['enabled'] ) { return $result; }
 		$catalogue = self::catalogue();
-		$state = (array) get_option( self::STATE, array() );
+		$state = (array) get_option( BSC_TV_Stations::key( self::STATE ), array() );
 		$days = BSC_TV_Player_Schedule::days( $state, $now, $snapshot['timezone'] );
 		$today = reset( $days );
 		$boundary = $bounds[1];
@@ -695,13 +703,20 @@ final class BSC_TV_Player {
 	}
 
 	public static function render( $settings = array() ) {
+		$id = $settings['station'] ?? 'main';
+		if ( ! BSC_TV_Stations::valid( $id ) ) { return '<p>Chaîne TV inconnue.</p>'; }
+		return BSC_TV_Stations::run( $id, static function () use ( $settings ) { return self::render_current( $settings ); } );
+	}
+
+	private static function render_current( $settings ) {
 		wp_enqueue_style( 'bsc-tv-player' );
 		wp_enqueue_script( 'bsc-tv-player' );
 		$settings = (array) $settings;
+		if ( 'fr' === BSC_TV_Stations::current() && 'BSC TV · Live 24/7' === ( $settings['title'] ?? '' ) ) { $settings['title'] = BSC_TV_Stations::choices()['fr']; }
 		// Empty legacy autoplay settings follow the new automatic default.
 		$settings['start_mode'] = $settings['start_mode'] ?? ( in_array( $settings['autoplay'] ?? null, array( 'no', '0', 0, false ), true ) ? 'click' : 'auto' );
 		$defaults = array_fill_keys( array( 'show_logo', 'show_avatar', 'show_poster', 'show_creator', 'show_title', 'show_profile', 'show_next', 'show_progress', 'show_times', 'show_on_air', 'show_live', 'show_new', 'show_premiere', 'show_replay', 'show_publication', 'show_music', 'show_music_meta' ), 'yes' );
-		$settings += $defaults + array( 'title' => 'BSC TV · Live 24/7', 'muted' => '', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
+		$settings += $defaults + array( 'title' => BSC_TV_Stations::choices()[ BSC_TV_Stations::current() ], 'muted' => '', 'logo' => array(), 'transition_enabled' => 'yes', 'transition_video' => array(), 'transition_timeout' => 20 );
 		$settings['autoplay'] = 'click' === $settings['start_mode'] ? '' : 'yes';
 		$logo = BSC_TV_Content::url( $settings['logo']['url'] ?? '' );
 		$poster = 'yes' === $settings['show_poster'] ? ( self::snapshot()['current']['image'] ?? '' ) : '';

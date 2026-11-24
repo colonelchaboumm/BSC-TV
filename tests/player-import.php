@@ -296,7 +296,7 @@ import_check( is_wp_error( $claim_error ) && 'import_claim' === $claim_error->ge
 wp_set_current_user( $administrators[0] );
 BSC_TV_Player_Admin::menu();
 global $submenu;
-$live_menu = array_filter( $submenu['bsc-tv'], static function ( $row ) { return 'bsc-tv-live' === $row[2] && 'Le live' === $row[0] && 'manage_options' === $row[1]; } );
+$live_menu = array_filter( $submenu['bsc-tv'], static function ( $row ) { return 'bsc-tv-live' === $row[2] && '1 · Le live Monde' === $row[0] && 'manage_options' === $row[1]; } );
 import_check( 1 === count( $live_menu ), 'BSC TV has a dedicated administrator-only Le live submenu' );
 ob_start(); BSC_TV_Player_Admin::page(); $live_html = ob_get_clean();
 import_check( 3 === substr_count( $live_html, 'class="bsc-player-grid-day"' ) && false !== strpos( $live_html, 'Import quotidien' ) && false !== strpos( $live_html, 'bsc-tv-live' ), 'The Le live page renders the saved three-day schedule and daily Infomaniak settings together' );

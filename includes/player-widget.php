@@ -31,6 +31,7 @@ final class BSC_TV_Player_Widget extends Elementor\Widget_Base {
 	protected function register_controls() {
 		$root = '{{WRAPPER}} .bsc-player';
 		$this->start_controls_section( 'player_content', array( 'label' => 'BSC TV 24/7' ) );
+		$this->add_control( 'station', array( 'label' => 'Chaîne TV à diffuser', 'type' => Controls_Manager::SELECT, 'default' => 'main', 'options' => BSC_TV_Stations::choices(), 'description' => 'Chaque chaîne possède sa programmation, sa musique et son horloge indépendantes.' ) );
 		$this->add_control( 'title', array( 'label' => 'Titre du widget', 'type' => Controls_Manager::TEXT, 'default' => 'BSC TV · Live 24/7' ) );
 		$this->add_control( 'logo', array( 'label' => 'Logo fixe BSC TV', 'type' => Controls_Manager::MEDIA ) );
 		foreach ( array( 'logo' => 'Logo BSC TV', 'avatar' => 'Avatar BSC BDD', 'poster' => 'Image de l’émission avant lecture', 'creator' => 'Nom du créateur', 'profile' => 'Lien vers sa fiche BSC BDD', 'title' => 'Titre de l’émission', 'next' => 'Programme suivant', 'progress' => 'Progression', 'times' => 'Horaires', 'on_air' => 'Badge ON AIR', 'live' => 'Badge LIVE', 'new' => 'Badge NOUVEAUTÉ', 'premiere' => 'Badge PREMIÈRE', 'replay' => 'Badge REDIFFUSION' ) as $key => $label ) {

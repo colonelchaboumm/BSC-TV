@@ -13,7 +13,7 @@ final class BSC_TV_Day {
 
 	public static function config( $input ) {
 		$input = (array) $input;
-		$result = array();
+		$result = array( 'station' => BSC_TV_Stations::valid( $input['station'] ?? 'main' ) ? ( $input['station'] ?? 'main' ) : 'main' );
 		foreach ( array( 'show_past', 'show_date', 'show_times', 'show_images', 'show_channel', 'show_creator', 'show_profile', 'show_badges', 'show_music', 'show_music_timing' ) as $key ) {
 			$result[ $key ] = in_array( $input[ $key ] ?? ( 'show_past' === $key ? 'no' : 'yes' ), array( 'yes', '1', 1, true ), true ) ? 'yes' : 'no';
 		}
@@ -25,12 +25,14 @@ final class BSC_TV_Day {
 		$result['time_precision'] = in_array( $input['time_precision'] ?? '', array( 'auto', 'minutes', 'seconds' ), true ) ? $input['time_precision'] : 'auto';
 		$watch = $input['watch_url'] ?? '';
 		$value = is_array( $watch ) ? ( $watch['url'] ?? '' ) : $watch;
-		$result['watch_url'] = is_scalar( $value ) ? BSC_TV_Content::url( $value ) : '';
+		$result['watch_url'] = BSC_TV_Stations::watch_url( $value, $result['station'] );
 		$result['watch_external'] = ! empty( is_array( $watch ) ? ( $watch['is_external'] ?? false ) : ( $input['watch_external'] ?? false ) ) ? 1 : 0;
 		return $result;
 	}
 
 	public static function programme( $config, $now = null, $page = 1, $date = '' ) {
+		$station = $config['station'] ?? 'main';
+		if ( $station !== BSC_TV_Stations::current() ) { return BSC_TV_Stations::run( $station, static function () use ( $config, $now, $page, $date ) { return self::programme( $config, $now, $page, $date ); } ); }
 		$data = BSC_TV_Player::day_snapshot( $now );
 		$page = $date && $date !== $data['date'] ? 1 : max( 1, min( 500, (int) $page ) );
 		if ( 'yes' !== $config['show_past'] ) { $data['items'] = array_values( array_filter( $data['items'], static function ( $item ) { return 'past' !== $item['phase']; } ) ); }
@@ -49,6 +51,7 @@ final class BSC_TV_Day {
 	public static function rest() {
 		$args = array();
 		foreach ( self::config( array() ) as $name => $value ) { $args[ $name ] = array( 'type' => is_int( $value ) ? 'integer' : 'string' ); }
+		$args['station']['enum'] = array_keys( BSC_TV_Stations::choices() );
 		$args['page'] = array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 500, 'default' => 1 );
 		$args['date'] = array( 'type' => 'string', 'pattern' => '^\d{4}-\d{2}-\d{2}$' );
 		register_rest_route( 'bsc-tv/v1', '/day', array( 'methods' => WP_REST_Server::READABLE, 'permission_callback' => '__return_true', 'args' => $args, 'callback' => static function ( $request ) {
