@@ -110,7 +110,7 @@ final class BSC_TV_Music {
 		$settings = $settings ?? self::settings();
 		$choices = array();
 		if ( $settings['bundled_animation'] ) {
-			$choices[] = array( 'id' => 'circus', 'url' => BSC_TV_URL . 'assets/media/ident-circus.mp4', 'duration' => 11, 'name' => 'BSC · Cirque' );
+			$choices[] = array( 'id' => 'circus', 'url' => BSC_TV_URL . 'assets/media/ident-circus.mp4', 'duration' => 11, 'name' => 'BSC · Manège' );
 			$choices[] = array( 'id' => 'moon', 'url' => BSC_TV_URL . 'assets/media/ident-moon.mp4', 'duration' => 11, 'name' => 'BSC · Lune' );
 		}
 		foreach ( $settings['animation_ids'] ?? array() as $id ) {

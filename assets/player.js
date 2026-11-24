@@ -68,6 +68,7 @@
 			this.volume = 100;
 			this.muted = root.dataset.muted === '1';
 			this.transitionAttempt = 0;
+			this.failedTransitionSources = new Set();
 			root.querySelector('[data-player-pause]')?.addEventListener('click', () => {
 				if (!this.data?.enabled || !this.data.current) return;
 				if (!this.ready || !this.player || this.failedToken === this.token) return this.join();
@@ -94,7 +95,7 @@
 			root.querySelector('[data-player-avatar]')?.addEventListener('error', event => { event.target.hidden = true; });
 			root.querySelector('[data-player-poster]')?.addEventListener('error', event => { event.target.hidden = true; });
 			root.querySelector('[data-music-logo]')?.addEventListener('error', event => { event.target.hidden = true; });
-			this.transitionVideo?.addEventListener('error', () => { this.transitionBroken = true; this.stopTransition(); });
+			this.transitionVideo?.addEventListener('error', () => { this.failedTransitionSources.add(safeURL(this.transitionVideo.dataset.src)); this.stopTransition(); });
 			this.musicVideo?.addEventListener('loadedmetadata', () => this.musicVideoPosition());
 			this.musicVideo?.addEventListener('error', () => { this.musicVideo.hidden = true; });
 			this.visibility = () => {
@@ -123,7 +124,20 @@
 
 		startTransition() {
 			if (this.data?.current?.music) return;
-			if (!this.transition || !this.transitionVideo || !this.joined || this.transitionBroken) return;
+			if (!this.transition || !this.transitionVideo || !this.joined) return;
+			// Pick once per loading sequence, never on polling or visibility changes.
+			if (this.waitingForPlayback) return;
+			let sources;
+			try { sources = JSON.parse(this.transitionVideo.dataset.sources || '[]'); } catch { sources = []; }
+			if (this.transitionVideo.dataset.fixed !== '1' && Array.isArray(this.data?.loading_animations) && this.data.loading_animations.length) sources = this.data.loading_animations;
+			if (!Array.isArray(sources) || !sources.length) sources = [this.transitionVideo.dataset.src];
+			sources = [...new Set(sources.slice(0, 52).map(safeURL).filter(url => url && !this.failedTransitionSources.has(url)))];
+			if (!sources.length) return;
+			const alternatives = sources.filter(url => url !== this.lastTransitionSource);
+			const choices = alternatives.length ? alternatives : sources;
+			const url = choices[Math.floor(Math.random() * choices.length)];
+			this.lastTransitionSource = url;
+			this.transitionVideo.dataset.src = url;
 			this.waitingForPlayback = true;
 			this.transitionDeadline = performance.now() + Math.max(5, Math.min(60, Number(this.transition.dataset.timeout) || 20)) * 1000;
 			try { this.transitionVideo.currentTime = 0; } catch { /* The local clip may not yet be loaded. */ }
