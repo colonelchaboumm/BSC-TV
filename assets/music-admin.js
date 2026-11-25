@@ -121,6 +121,7 @@
 	const screen = document.querySelector('[data-music-preview-screen]');
 	for (const button of document.querySelectorAll('[data-music-preview]')) button.addEventListener('click', () => {
 		clearTimeout(timer);
+		for (const media of screen.querySelectorAll('video, audio')) media.pause();
 		const form = button.closest('form'); const phase = button.dataset.musicPreview;
 		const value = name => form.elements.namedItem(`music[${name}]`)?.value;
 		const identity = form.querySelector(`[name="music[${phase}_video]"]`)?.closest('[data-music-media]');
@@ -131,16 +132,19 @@
 		const choice = choices.length ? choices[Math.floor(Math.random() * choices.length)] : null;
 		const animationURL = identity?.dataset.url || choice?.dataset.url || '';
 		const duration = Number(identity?.dataset.url ? identity.dataset.duration : choice?.dataset.duration) || Math.max(1, Math.min(30, Number(value(phase)) || 3));
+		const soundtrack = form.querySelector('input[type="checkbox"][name="music[animation_audio_enabled]"]')?.checked;
+		const audioURL = soundtrack ? form.querySelector('[name="music[animation_audio_id]"]')?.closest('[data-music-media]')?.dataset.url || form.querySelector('[data-animation-audio-default]')?.dataset.url : '';
 		screen.replaceChildren(); screen.hidden = false; screen.style.backgroundColor = value('background'); screen.style.color = value('color');
 		if (animationURL) {
-			const video = document.createElement('video'); video.src = animationURL; video.muted = !form.elements.namedItem('music[sound]')?.checked; video.playsInline = true; video.controls = true; screen.append(video); video.play().catch(() => {});
+			const video = document.createElement('video'); video.src = animationURL; video.muted = !!audioURL || !form.elements.namedItem('music[sound]')?.checked; video.playsInline = true; video.controls = true; screen.append(video); video.play().catch(() => {});
+			if (audioURL) { const audio = document.createElement('audio'); audio.src = audioURL; audio.loop = true; audio.controls = true; audio.volume = Math.max(0, Math.min(100, Number(value('animation_audio_volume')) || 0)) / 100; screen.append(audio); audio.play().catch(() => {}); }
 		} else {
 			if (logo?.dataset.url) { const image = document.createElement('img'); image.src = logo.dataset.url; image.alt = 'Logo officiel BSC'; screen.append(image); }
 			const checks = form.querySelector('input[type="checkbox"][name="music[show_text]"]');
 			if (checks?.checked) { const text = document.createElement('p'); text.textContent = value(`${phase}_text`); screen.append(text); }
 			screen.dataset.animation = value('animation');
 		}
-		timer = setTimeout(() => { screen.querySelector('video')?.pause(); screen.hidden = true; }, duration * 1000);
+		timer = setTimeout(() => { for (const media of screen.querySelectorAll('video, audio')) media.pause(); screen.hidden = true; }, duration * 1000);
 	});
 	for (const button of document.querySelectorAll('[data-music-delete]')) button.addEventListener('click', event => { if (!window.confirm('Mettre ce clip à la corbeille ?')) event.preventDefault(); });
 })();

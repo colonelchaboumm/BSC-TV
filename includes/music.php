@@ -39,6 +39,9 @@ final class BSC_TV_Music {
 			'entry' => max( 1, min( 30, (int) ( $input['entry'] ?? 3 ) ) ), 'exit' => max( 1, min( 30, (int) ( $input['exit'] ?? 3 ) ) ),
 			'bundled_animation' => ! isset( $input['bundled_animation'] ) || ! empty( $input['bundled_animation'] ),
 			'animation_ids' => array_values( $animation_ids ),
+			'animation_audio_enabled' => ! isset( $input['animation_audio_enabled'] ) || ! empty( $input['animation_audio_enabled'] ),
+			'animation_audio_id' => absint( $input['animation_audio_id'] ?? 0 ),
+			'animation_audio_volume' => max( 0, min( 100, (int) ( $input['animation_audio_volume'] ?? 100 ) ) ),
 			'logo' => absint( $input['logo'] ?? 0 ), 'entry_video' => absint( $input['entry_video'] ?? 0 ), 'exit_video' => absint( $input['exit_video'] ?? 0 ),
 			'background' => sanitize_hex_color( $input['background'] ?? '' ) ?: '#111116', 'color' => sanitize_hex_color( $input['color'] ?? '' ) ?: '#ffffff',
 			'animation' => in_array( $input['animation'] ?? '', array( 'fade', 'slide', 'none' ), true ) ? $input['animation'] : 'fade',
@@ -48,6 +51,18 @@ final class BSC_TV_Music {
 	}
 	private static function hour( $value ) { return is_string( $value ) && preg_match( '/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $value ) ? $value : '00:00'; }
 	public static function settings() { return self::normalize( get_option( BSC_TV_Stations::key( self::SETTINGS ), array() ) ) + array( 'revision' => (int) get_option( BSC_TV_Stations::key( self::REVISION ), 0 ) ); }
+	/** Local BSC identity bed, independent of the curated musical clip library. */
+	public static function soundtrack( $settings = null ) {
+		$settings = self::normalize( $settings ?? self::settings() );
+		$url = '';
+		if ( $settings['animation_audio_enabled'] ) {
+			$id = $settings['animation_audio_id'];
+			$post = $id ? get_post( $id ) : null;
+			if ( $post && 'attachment' === $post->post_type && 'inherit' === $post->post_status && ! $post->post_password && 0 === strpos( (string) get_post_mime_type( $id ), 'audio/' ) ) { $url = BSC_TV_Content::url( wp_get_attachment_url( $id ) ); }
+			if ( ! $url ) { $url = BSC_TV_URL . 'assets/media/animation-soundtrack.mp3'; }
+		}
+		return array( 'url' => $url, 'volume' => $settings['animation_audio_volume'] );
+	}
 	public static function category( $timestamp, $settings ) {
 		$hour = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( new DateTimeZone( 'Europe/Paris' ) )->format( 'H:i' );
 		foreach ( $settings['bands'] as $row ) {
