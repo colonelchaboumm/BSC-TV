@@ -90,7 +90,7 @@ Depuis **1.22.0**, activer **Le live → Donner la priorité aux véritables dir
 - **Dépassement** : l’heure de fin estimée n’arrête jamais le direct. Une erreur temporaire ou un contrôle retardé conserve le direct déjà à l’antenne ; un cache périmé ne peut en revanche pas démarrer un nouveau direct. Une confirmation de fin ou de chaîne hors ligne, un retrait ou une exclusion explicite libère l’antenne.
 - **Après la fin** : reprise du programme correspondant à l’heure courante de la grille enregistrée, avec son décalage dans la vidéo. Exemple : un replay prévu de 21 h à 22 h est rejoint à **21 h 20**, vingt minutes après son début, si le direct se termine à cette heure. Les programmes suivants restent aux horaires initiaux ; les créneaux recouverts ne sont pas inscrits comme diffusés dans l’historique.
 
-L’avance se règle de 0 à 30 minutes. L’attente après l’heure annoncée, **uniquement tant que le direct n’a pas commencé**, est limitée par défaut à 120 minutes ; 0 permet une attente illimitée. Une annulation ou un report connu rend l’antenne immédiatement à la grille jusqu’au nouvel horaire. Cette limite ne coupe jamais un direct confirmé.
+L’avance se règle de 0 à 30 minutes. L’attente après l’heure annoncée, **uniquement tant que le direct n’a pas commencé**, est limitée à 20 minutes depuis la version 1.26.0. Des clips validés prennent ensuite le relais jusqu’au prochain programme. Une annulation ou un report connu rend l’antenne immédiatement à la grille jusqu’au nouvel horaire. Cette limite ne coupe jamais un direct confirmé.
 
 Le contrôle des plateformes reste effectué **toutes les cinq minutes** : démarrage et fin sont donc constatés au contrôle suivant, selon son exécution effective. Pendant l’attente et le direct, le lecteur et la liste du jour relisent seulement la route locale toutes les cinq secondes. Aucun appel API ni nouvel import n’est lancé par les visiteurs. L’import lourd Infomaniak reste quotidien. Références : [état des streams Twitch](https://dev.twitch.tv/docs/api/reference/streams/#get-streams), [horaires réels et prévus YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos#liveStreamingDetails).
 
@@ -262,9 +262,22 @@ Depuis 1.24.0, chaque lecteur et chaque programme du jour peut cibler `main` (Mo
 
 Depuis 1.24.1, le lecteur utilise par défaut la bibliothèque BSC de son antenne pour son lancement et les chargements entre programmes. Lune et Manège remplacent l’ancien fichier unique. Dans **1 · Musique** ou **2 · Musique FR → Identité visuelle → Ajouter des animations**, ajouter les futures vidéos et enregistrer : elles deviennent disponibles au prochain chargement, y compris pour les visiteurs déjà présents, sans modifier Elementor. Les interludes musicaux peuvent rester désactivés.
 
-Le tirage évite de reprendre immédiatement la même vidéo quand plusieurs choix sont disponibles. Un rafraîchissement du programme ou un retour sur l’onglet ne change pas l’animation déjà en cours. Les vidéos invalides ou supprimées sont écartées ; si la bibliothèque est vide, Lune et Manège servent de secours. Le mode **Une vidéo fixe personnalisée** reste sélectionnable dans Elementor. Une ancienne sélection de vidéo fixe doit utiliser explicitement ce mode pour rester prioritaire.
+Le tirage évite de reprendre immédiatement la même vidéo quand plusieurs choix sont disponibles. Un rafraîchissement du programme ou un retour sur l’onglet ne change pas l’animation déjà en cours. Les vidéos invalides ou supprimées sont écartées ; si la bibliothèque est vide, Lune, Manège, Poussin et Chevalier servent de secours. Le mode **Une vidéo fixe personnalisée** reste sélectionnable dans Elementor. Une ancienne sélection de vidéo fixe doit utiliser explicitement ce mode pour rester prioritaire.
 
 L’animation reste muette et s’efface au démarrage confirmé de la vidéo, en cas d’erreur, de refus de lecture automatique ou à la limite d’attente configurée. Ce chargement ne réserve pas un nouveau créneau dans la grille et n’ajoute aucun import ni tâche serveur. Les animations des interludes et d’attente avant un vrai direct continuent de suivre leur horloge commune.
 
 
 Depuis **1.24.2**, le film du logo seul et son ancienne image fixe ne sont plus distribués. Les références enregistrées à cet ancien film sont exclues du lecteur, des vidéos fixes et des phases d’animation. Lune, Manège et les nouvelles animations de la bibliothèque restent disponibles. L’aperçu statique suit l’image de l’émission ; sans image, le lecteur garde son fond.
+
+
+### Direct absent après 20 minutes (1.26.0)
+
+Le délai est calculé depuis l’heure annoncée, et non depuis le début des animations d’attente. Les anciens réglages de 120 minutes ou d’attente illimitée deviennent 20 minutes. Un direct déjà confirmé n’est jamais limité par ce délai.
+
+Après ce délai, le relais sélectionne dans la bibliothèque validée de l’antenne, selon la tranche horaire de Paris, les catégories, les artistes et le délai entre deux passages. Chaque clip conserve sa durée complète ainsi que les animations d’entrée et de sortie. Le relais s’arrête au prochain programme craft beer enregistré, ou à l’attente d’un autre direct si elle arrive avant. La grille d’origine n’est pas déplacée. Les clips apparaissent dans la prévision du lecteur, la liste quotidienne et l’administration ; un visiteur arrivant plus tard rejoint la même position.
+
+Sans bibliothèque musicale activée ou sans clip compatible, le lecteur rejoint la grille à l’heure courante. Un reste de créneau trop court pour un clip entier garde les animations et leur musique locale ; aucun clip n’est tronqué pour remplir. Une révocation retire immédiatement le clip de la sélection. Les directs confirmés, même tardifs, interrompent ce relais et restent diffusés jusqu’à leur fin réelle. La reprise rejoint ensuite l’horaire original.
+
+Ce fonctionnement utilise les annonces et métadonnées déjà enregistrées. La détection effective d’un direct dépend du contrôle léger des plateformes configuré sur le serveur ; aucune requête API ni tâche d’import supplémentaire n’est déclenchée par le relais.
+
+Test dédié : `php tests/player-live-music.php /chemin/vers/wordpress-de-test`.

@@ -28,7 +28,7 @@ $long_wait = BSC_TV_Player::advance( $wait, $pool, array(), $settings, $now + 22
 live_check( $wait === $long_wait, 'A late start keeps looping without consuming or shifting the grid' );
 $ident = BSC_TV_Player_Live::decorate( $wait['standby'], $settings, $now + 1682 );
 $ident2 = BSC_TV_Player_Live::decorate( $wait['standby'], $settings, $now + 1693 );
-$ident3 = BSC_TV_Player_Live::decorate( $wait['standby'], $settings, $now + 1704 );
+$ident3 = BSC_TV_Player_Live::decorate( $wait['standby'], $settings, $now + 1726 );
 live_check( 'identity' === $ident['resource']['platform'] && $ident['standby'] && ! $ident['live'], 'Waiting is a BSC identity, never a fabricated confirmed live' );
 live_check( $ident['identity']['entry_video'] !== $ident2['identity']['entry_video'], 'BSC animations alternate during standby' );
 live_check( $ident['identity']['entry_video'] === $ident3['identity']['entry_video'] && 2 === $ident3['offset'], 'The shared cycle loops at the correct offset' );
@@ -59,7 +59,7 @@ live_check( empty( $cancel['standby'] ) && 1750 === $now + 1750 - $cancel['vod']
 $timeout = BSC_TV_Player::advance( $wait, $pool, array(), $settings, $now + 9000 );
 live_check( empty( $timeout['standby'] ), 'A never-started announcement respects the configured waiting limit' );
 $unlimited = $settings; $unlimited['live_wait'] = 0;
-live_check( ! empty( BSC_TV_Player::advance( $wait, $pool, array(), $unlimited, $now + 9000 )['standby'] ), 'Zero waiting limit means unlimited standby, not a cap on live' );
+live_check( empty( BSC_TV_Player::advance( $wait, $pool, array(), $unlimited, $now + 9000 )['standby'] ), 'A legacy unlimited wait cannot keep an absent live on air forever' );
 $music_settings = $settings; $music_settings['_announcements'] = array();
 $music_settings['music'] = array( 'enabled' => true, 'threshold' => 600, 'flexible' => false, 'repeat_hours' => 0, 'live_policy' => 'finish' );
 $music = live_media( 4, $now ); $music['key'] = 'music:4'; $music['duration'] = 142;

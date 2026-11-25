@@ -128,6 +128,8 @@ final class BSC_TV_Music {
 		if ( $settings['bundled_animation'] ) {
 			$choices[] = array( 'id' => 'circus', 'url' => BSC_TV_URL . 'assets/media/ident-circus.mp4', 'duration' => 11, 'name' => 'BSC · Manège' );
 			$choices[] = array( 'id' => 'moon', 'url' => BSC_TV_URL . 'assets/media/ident-moon.mp4', 'duration' => 11, 'name' => 'BSC · Lune' );
+			$choices[] = array( 'id' => 'chick', 'url' => BSC_TV_URL . 'assets/media/ident-chick.mp4', 'duration' => 11, 'name' => 'BSC · Poussin' );
+			$choices[] = array( 'id' => 'knight', 'url' => BSC_TV_URL . 'assets/media/ident-knight.mp4', 'duration' => 11, 'name' => 'BSC · Chevalier' );
 		}
 		foreach ( $settings['animation_ids'] ?? array() as $id ) {
 			$asset = self::animation_asset( $id );
@@ -171,6 +173,30 @@ final class BSC_TV_Music {
 			$pool[ $key ] = array( 'key' => $key, 'show_id' => 0, 'channel_id' => 0, 'creator_key' => 'music:' . strtolower( $clip['artist'] ), 'creator' => $clip['artist'], 'title' => $clip['title'], 'resource' => array( 'platform' => 'youtube', 'id' => $clip['youtube_id'] ), 'image' => $clip['image'] ?? '', 'duration' => $clip['duration'] + $entry_duration + $exit_duration, 'published_at' => 0, 'premiere' => false, 'music' => $music );
 		}
 		return $pool;
+	}
+	/** A missed live uses complete, approved clips without delaying the saved TV grid. */
+	public static function waiting( $pool, $state, $settings, $cursor, $until ) {
+		$config = $settings['music'] ?? array();
+		if ( empty( $config['enabled'] ) ) { return null; }
+		$category = self::category( $cursor, $config );
+		if ( ! $category ) { return null; }
+		$seed = $state['music_seed'] ?? $state['rotation_seed'] ?? 'bsc-wait-music';
+		$candidates = array();
+		foreach ( $pool as $key => $media ) {
+			$clip = $media['music'] ?? null;
+			if ( ! $clip || ! in_array( $category, $clip['categories'] ?? array(), true ) ) { continue; }
+			$last = $state['music_rotation'][ $key ] ?? 0;
+			if ( strtolower( trim( $clip['artist'] ) ) === ( $state['music_last_artist'] ?? '' ) || ( $last && $last + $config['repeat_hours'] * HOUR_IN_SECONDS > $cursor ) ) { continue; }
+			$media = self::with_animations( $media, $state, $cursor, $seed );
+			if ( $media['duration'] > $until - $cursor ) { continue; }
+			$media['music']['category'] = $category;
+			$media['music']['category_label'] = $config['bands'][ $category ]['name'];
+			$media['available'] = $cursor;
+			$media['waiting_rank'] = hash( 'sha256', $seed . '|' . $cursor . '|' . $key );
+			$candidates[] = $media;
+		}
+		usort( $candidates, static function ( $a, $b ) { return strcmp( $a['waiting_rank'], $b['waiting_rank'] ); } );
+		return $candidates[0] ?? null;
 	}
 	/** Choose inside a gap, or delay an automatic prefix within its fixed-anchor budget. */
 	public static function between( $next, $pool, $state, $settings, $cursor ) {
@@ -274,9 +300,10 @@ final class BSC_TV_Music {
 	}
 	public static function decorate( $slot, $media, $now ) {
 		$music = $slot['music'] ?? $media['music'];
-		$entry_end = $slot['start'] + $music['entry']; $clip_end = $entry_end + $music['duration'];
+		$origin = $slot['music_origin'] ?? $slot['start'];
+		$entry_end = $origin + $music['entry']; $clip_end = $entry_end + $music['duration'];
 		$phase = $now < $entry_end ? 'entry' : ( $now < $clip_end ? 'clip' : 'exit' );
-		$start = 'entry' === $phase ? $slot['start'] : ( 'clip' === $phase ? $entry_end : $clip_end );
+		$start = 'entry' === $phase ? $origin : ( 'clip' === $phase ? $entry_end : $clip_end );
 		$end = 'entry' === $phase ? $entry_end : ( 'clip' === $phase ? $clip_end : $slot['end'] );
 		return array( 'key' => $slot['key'], 'show_id' => 0, 'resource' => array( 'platform' => 'clip' === $phase ? 'youtube' : 'identity', 'id' => $music['youtube_id'] ), 'url' => 'clip' === $phase ? 'https://www.youtube.com/watch?v=' . $music['youtube_id'] : '', 'title' => $music['title'], 'creator' => $music['artist'], 'avatar' => '', 'profile_url' => '', 'image' => $music['image'] ?? '', 'live' => false, 'new' => false, 'premiere' => false, 'music' => true, 'music_phase' => $phase, 'identity' => 'clip' === $phase ? null : $music['identity'], 'start' => $start, 'end' => $end, 'offset' => max( 0, $now - $start ), 'interlude_start' => $slot['start'], 'interlude_end' => $slot['end'] );
 	}
@@ -286,7 +313,7 @@ final class BSC_TV_Music {
 		$item['start'] = $slot['start']; $item['end'] = $slot['end'];
 		$item['url'] = 'https://www.youtube.com/watch?v=' . $music['youtube_id'];
 		$item['resource']['platform'] = 'youtube';
-		$item['clip_start'] = $slot['start'] + $music['entry']; $item['clip_end'] = $item['clip_start'] + $music['duration'];
+		$item['clip_start'] = ( $slot['music_origin'] ?? $slot['start'] ) + $music['entry']; $item['clip_end'] = $item['clip_start'] + $music['duration'];
 		$item['music_entry'] = $music['entry']; $item['music_exit'] = $music['exit'];
 		$item['music_category'] = $music['category_label'] ?? '';
 		return $item;

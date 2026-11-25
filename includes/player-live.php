@@ -26,8 +26,8 @@ final class BSC_TV_Player_Live {
 	public static function upcoming( $state, $settings, $now, $due = false ) {
 		$rows = array_filter( $settings['_announcements'] ?? array(), static function ( $row ) use ( $state, $settings, $now, $due ) {
 			$finished = $state['live_finished'][ BSC_TV_Player::resource_key( $row['resource'] ) ] ?? 0;
-			$timeout = (int) ( ( $settings['live_wait'] ?? 120 ) * MINUTE_IN_SECONDS );
-			return $row['expected_start'] > $finished && ( ! $timeout || $now < $row['expected_start'] + $timeout ) && ( ! $due || $row['start'] <= $now );
+			$timeout = BSC_TV_Player_Live_Music::WAIT_MINUTES * MINUTE_IN_SECONDS;
+			return $row['expected_start'] > $finished && $now < $row['expected_start'] + $timeout && ( ! $due || $row['start'] <= $now );
 		} );
 		usort( $rows, static function ( $a, $b ) { return $a['start'] <=> $b['start'] ?: $b['priority'] <=> $a['priority'] ?: strcmp( $a['key'], $b['key'] ); } );
 		return $rows ? $rows[0] : null;
@@ -83,12 +83,16 @@ final class BSC_TV_Player_Live {
 			$state['live'] = null;
 		}
 		$waiting = self::upcoming( $state, $settings, $now, true );
+		if ( ! $waiting ) { $waiting = BSC_TV_Player_Live_Music::fallback( $state, $pool, $settings, $now ); }
 		$live = null;
 		if ( $lives ) {
 			usort( $lives, static function ( $a, $b ) { return $b['priority'] <=> $a['priority'] ?: $a['start'] <=> $b['start'] ?: strcmp( $a['key'], $b['key'] ); } );
 			$live = $lives[0];
 		}
-		if ( $state['standby'] && ! $live && $waiting && $state['standby']['key'] === $waiting['key'] ) { return $state; }
+		if ( $state['standby'] && ! $live && $waiting && $state['standby']['key'] === $waiting['key'] ) {
+			$state['standby'] = array_replace( $state['standby'], $waiting );
+			return ! empty( $waiting['relay_until'] ) ? BSC_TV_Player_Live_Music::sync( $state, $now ) : $state;
+		}
 		if ( $state['standby'] ) { self::close( $state, $now ); $state['standby'] = null; }
 		$overlay = $live ?: $waiting;
 		if ( $overlay ) {
@@ -104,8 +108,8 @@ final class BSC_TV_Player_Live {
 			$state['paused_at'] = 0;
 			$overlay['start'] = $live ? $overlay['start'] : $at;
 			$state[ $live ? 'live' : 'standby' ] = $overlay;
-			BSC_TV_Player::log_slot( $state, $overlay, $at, 0, (bool) $live );
-			return $state;
+			if ( empty( $overlay['relay_until'] ) ) { BSC_TV_Player::log_slot( $state, $overlay, $at, 0, (bool) $live ); }
+			return ! empty( $overlay['relay_until'] ) ? BSC_TV_Player_Live_Music::sync( $state, $now ) : $state;
 		}
 		if ( $was_overlay || ( $state['live_grid_until'] ?? 0 ) > $now ) {
 			$state['paused_at'] = 0;
@@ -117,6 +121,11 @@ final class BSC_TV_Player_Live {
 
 	/** Finite, shared animation phases let every viewer loop the same BSC identities. */
 	public static function decorate( $item, $settings, $now ) {
+		$clip = BSC_TV_Player_Live_Music::current( $item, $now );
+		if ( $clip ) { return BSC_TV_Music::decorate( $clip, array(), $now ) + array( 'waiting_music' => true, 'expected_start' => $item['expected_start'] ); }
+		if ( ! empty( $item['relay_until'] ) ) {
+			list( $item['start'], $item['relay_until'] ) = BSC_TV_Player_Live_Music::gap( $item, $now );
+		}
 		$music = $settings['music'] ?? array();
 		$animations = BSC_TV_Music::animations( $music + array( 'bundled_animation' => true, 'animation_ids' => array() ) );
 		foreach ( array( 'entry_video', 'exit_video' ) as $phase ) {
@@ -133,10 +142,11 @@ final class BSC_TV_Player_Live {
 		}
 		$identity = array_intersect_key( $music, array_fill_keys( array( 'background', 'color', 'animation', 'show_text', 'sound' ), true ) );
 		$identity['entry_video'] = $animation['url'];
-		$identity['entry_text'] = 'Le direct va commencer';
+		$identity['entry_text'] = ! empty( $item['relay_until'] ) ? 'Pause musicale · reprise au programme suivant' : 'Le direct va commencer';
 		$identity['standby_key'] = $item['key'];
 		$identity['standby_start'] = $item['start'];
 		$identity['logo'] = ! empty( $music['logo'] ) ? wp_get_attachment_image_url( $music['logo'], 'large' ) : '';
-		return array( 'key' => $item['key'] . ':' . $start, 'title' => $item['title'], 'creator' => '', 'avatar' => '', 'profile_url' => '', 'image' => $item['image'] ?? '', 'url' => '', 'resource' => array( 'platform' => 'identity', 'id' => 'waiting' ), 'standby' => true, 'live' => false, 'music' => false, 'music_phase' => 'entry', 'identity' => $identity, 'start' => $start, 'end' => $start + $animation['duration'], 'expected_start' => $item['expected_start'], 'offset' => $now - $start, 'new' => false, 'premiere' => false );
+		$deadline = $item['relay_until'] ?? $item['expected_start'] + BSC_TV_Player_Live_Music::WAIT_MINUTES * MINUTE_IN_SECONDS;
+		return array( 'key' => $item['key'] . ':' . $start, 'title' => ! empty( $item['relay_until'] ) ? 'Pause musicale BSC' : $item['title'], 'creator' => '', 'avatar' => '', 'profile_url' => '', 'image' => $item['image'] ?? '', 'url' => '', 'resource' => array( 'platform' => 'identity', 'id' => 'waiting' ), 'standby' => true, 'waiting_music' => ! empty( $item['relay_until'] ), 'live' => false, 'music' => false, 'music_phase' => 'entry', 'identity' => $identity, 'start' => $start, 'end' => min( $start + $animation['duration'], $deadline ), 'expected_start' => $item['expected_start'], 'offset' => $now - $start, 'new' => false, 'premiere' => false );
 	}
 }
