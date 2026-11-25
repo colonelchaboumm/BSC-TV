@@ -3,6 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/stations.php';
 require_once __DIR__ . '/player-live.php';
+require_once __DIR__ . '/player-live-music.php';
 
 /** A shared clock and references to existing shows. No video collection or storage. */
 final class BSC_TV_Player {
@@ -37,7 +38,7 @@ final class BSC_TV_Player {
 			'live_priority' => ! empty( $input['live_priority'] ),
 			'live_clock' => true,
 			'live_lead' => max( 0, min( 30, (int) ( $input['live_lead'] ?? 2 ) ) ),
-			'live_wait' => max( 0, min( 1440, (int) ( $input['live_wait'] ?? 120 ) ) ),
+			'live_wait' => BSC_TV_Player_Live_Music::WAIT_MINUTES,
 			'repeat_hours' => max( 0, min( 168, (float) ( $input['repeat_hours'] ?? 6 ) ) ),
 			'tolerance' => max( 3, min( 30, (int) ( $input['tolerance'] ?? 8 ) ) ),
 			'max_channel_streak' => max( 0, min( 10, (int) ( $input['max_channel_streak'] ?? 3 ) ) ),
@@ -528,6 +529,7 @@ final class BSC_TV_Player {
 		}
 		if ( ! empty( $item['standby'] ) ) {
 			$waiting = BSC_TV_Player_Live::decorate( $item, self::settings(), $now );
+			if ( ! empty( $waiting['waiting_music'] ) ) { return $waiting; }
 			$channel = $catalogue['channels'][ $item['channel_id'] ?? 0 ] ?? array();
 			$profile = BSC_TV_Content::profile( $channel['data']['bdd_id'] ?? 0 );
 			$waiting['creator'] = $profile['name'] ?? $channel['name'] ?? '';
@@ -619,7 +621,7 @@ final class BSC_TV_Player {
 		if ( $live && isset( $lives[ $live['key'] ] ) ) {
 			$live['image'] = $lives[ $live['key'] ]['image'] ?? '';
 			$result['current'] = self::decorate( $live, $catalogue, $now, true );
-		} elseif ( ! empty( $state['standby'] ) && $due && $due['key'] === $state['standby']['key'] ) {
+		} elseif ( ! empty( $state['standby'] ) && ( ( $due && $due['key'] === $state['standby']['key'] ) || ( $state['standby']['relay_until'] ?? 0 ) > $now ) ) {
 			$result['current'] = self::decorate( $state['standby'], $catalogue, $now );
 		} elseif ( $vod && isset( $catalogue['pool'][ $vod['key'] ] ) && $vod['start'] <= $now && $vod['end'] > $now ) {
 			$result['current'] = self::decorate( $vod, $catalogue, $now );
@@ -631,13 +633,17 @@ final class BSC_TV_Player {
 			$result['current']['end'] = min( $result['current']['end'], $waiting['start'] );
 		}
 		$forecast = $state;
+		$relay = $state['standby']['relay_until'] ?? 0;
+		foreach ( $state['standby']['relay_slots'] ?? array() as $row ) {
+			if ( $row['start'] > $now && count( $result['next'] ) < 5 ) { $result['next'][] = BSC_TV_Music::programme( $row, $now ); }
+		}
 		if ( $live || ! empty( $state['standby'] ) ) {
 			$forecast['live'] = null; $forecast['standby'] = null;
-			$forecast = BSC_TV_Player_Live::seek( $forecast, $catalogue['pool'], $settings, $now );
+			$forecast = BSC_TV_Player_Live::seek( $forecast, $catalogue['pool'], $settings, max( $now, $relay ) );
 			$vod = $forecast['vod'];
 		}
 		$cursor = max( $now, $vod['end'] ?? $now );
-		if ( $vod && $vod['start'] > $now && isset( $catalogue['pool'][ $vod['key'] ] ) ) {
+		if ( count( $result['next'] ) < 5 && $vod && $vod['start'] > $now && isset( $catalogue['pool'][ $vod['key'] ] ) ) {
 			$next = self::decorate( $vod, $catalogue, $now );
 			$next['after_live'] = false;
 			$result['next'][] = $next;

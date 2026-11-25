@@ -119,10 +119,21 @@ final class BSC_TV_Player_Schedule {
 		$groups = array();
 		$rows = $state['aired'] ?? array();
 		$current = $state['live'] ?? $state['standby'] ?? $state['vod'] ?? null;
+		$relay = $state['standby']['relay_until'] ?? 0;
+		if ( $relay ) {
+			$current = BSC_TV_Player_Live_Music::current( $state['standby'], $now );
+			if ( ! $current ) {
+				$current = $state['standby'];
+				list( $current['start'], $current['end'] ) = BSC_TV_Player_Live_Music::gap( $current, $now );
+				unset( $current['relay_slots'] );
+			}
+			foreach ( $state['standby']['relay_slots'] as $row ) { if ( $row['start'] > $now ) { $rows[] = $row + array( 'scheduled' => true ); } }
+		}
 		$found = false;
 		foreach ( $rows as $row ) { if ( $current && $row['key'] === $current['key'] && ( ! $row['end'] || $row['end'] > $now ) ) { $found = true; } }
 		if ( $current && ! $found ) { $rows[] = $current + array( 'live' => ! empty( $state['live'] ) ); }
 		foreach ( $state['plan'] ?? array() as $row ) {
+			if ( $relay && $row['start'] < $relay ) { continue; }
 			// Past background slots hidden by a live were not broadcast. Keep future hours fixed.
 			if ( ( ! empty( $state['live'] ) || ! empty( $state['standby'] ) ) && empty( $state['paused_at'] ) && $row['start'] <= $now ) { continue; }
 			$rows[] = $row + array( 'scheduled' => true );

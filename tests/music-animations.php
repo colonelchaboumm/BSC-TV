@@ -29,12 +29,12 @@ $settings = array( 'music' => $config, 'repeat_hours' => 0 );
 $pool = BSC_TV_Music::pool();
 $pick = static function ( $copy = null, $options = null, $catalogue = null, $following = null ) use ( &$state, &$settings, &$pool, &$next, $t ) { return BSC_TV_Music::between( $following ?? $next, $catalogue ?? $pool, $copy ?? $state, $options ?? $settings, $t ); };
 $one = $pick(); $two = $pick();
-animation_check( 2 === count( BSC_TV_Music::animations() ), 'The two supplied BSC films replace the old single bundled identity' );
+animation_check( 4 === count( BSC_TV_Music::animations() ), 'The four supplied films include Poussin and Chevalier alongside Lune and Manège' );
 animation_check( null !== $one && 262 === $one['duration'] && 11 === $one['music']['entry'] && 11 === $one['music']['exit'], 'Exactly 40 minutes qualifies and the complete films add 22 reserved seconds' );
 animation_check( $one['music']['identity'] === $two['music']['identity'], 'Every viewer gets identical saved animation choices for the same seed and slot' );
 animation_check( $one['music']['identity']['entry_video'] !== $one['music']['identity']['exit_video'], 'The same animation is not immediately used for both phases when alternatives exist' );
 $choices = array(); for ( $n = 0; $n < 30; ++$n ) { $copy = $state; $copy['music_seed'] = 'variant-' . $n; $choice = $pick( $copy ); $choices[ $choice['music']['identity']['entry_video'] ] = true; }
-animation_check( 2 === count( $choices ), 'Different shared seeds can choose either supplied film' );
+animation_check( 4 === count( $choices ), 'Different shared seeds can choose all four supplied films' );
 $copy = $state; $copy['music_last_entry_animation'] = $one['music']['identity']['entry_video'];
 animation_check( $pick( $copy )['music']['identity']['entry_video'] !== $one['music']['identity']['entry_video'], 'Later breaks avoid repeating the previous entry animation' );
 $short = $state; $short['vod']['start'] = $t - 2399; animation_check( null === $pick( $short ), 'An episode shorter than 40 minutes does not trigger a break' );
@@ -53,7 +53,7 @@ $old_logo = wp_insert_attachment( array( 'post_title' => 'Legacy imported logo',
 wp_update_attachment_metadata( $old_logo, array( 'length' => 10 ) );
 animation_check( null === BSC_TV_Music::animation_asset( $old_logo ), 'An imported copy of the old logo is excluded from random and fixed animation phases' );
 $old_config = $config; $old_config['animation_ids'] = array( $old_logo );
-animation_check( 2 === count( BSC_TV_Music::animations( $old_config ) ), 'Only Lune and Manège remain when an old logo attachment is saved in the library' );
+animation_check( 4 === count( BSC_TV_Music::animations( $old_config ) ), 'Only the four current films remain when an old logo attachment is saved in the library' );
 animation_check( 13 === BSC_TV_Music::animation_asset( $first )['duration'] && 21 === BSC_TV_Music::animation_asset( $second )['duration'], 'Custom film lengths round up and protect the final frame when WordPress stores whole seconds' );
 animation_check( null === BSC_TV_Music::animation_asset( $unknown ) && null === BSC_TV_Music::animation_asset( $long ) && null === BSC_TV_Music::animation_asset( $audio ), 'Unknown lengths, overlong files and non-video attachments cannot enter the random library' );
 $custom = BSC_TV_Music::normalize( array( 'enabled' => true, 'bundled_animation' => false, 'animation_ids' => array( $first, $second, $first, 0, $unknown, $long, $audio ) ) );
@@ -72,10 +72,10 @@ $third = $video( 'Future animation C', 16.5 ); $loading_config['animation_ids'][
 update_option( BSC_TV_Music::SETTINGS, $loading_config );
 animation_check( in_array( BSC_TV_Music::animation_asset( $third )['url'], BSC_TV_Player::snapshot()['loading_animations'], true ), 'A saved new BSC film reaches active viewers through normal polling' );
 $fr_urls = BSC_TV_Stations::run( 'fr', array( 'BSC_TV_Player', 'loading_animations' ) );
-animation_check( 2 === count( $fr_urls ) && false !== strpos( $fr_urls[0], 'ident-circus.mp4' ) && ! array_intersect( $loading_urls, $fr_urls ), 'Each antenna uses its own animation library' );
+animation_check( 4 === count( $fr_urls ) && false !== strpos( $fr_urls[0], 'ident-circus.mp4' ) && ! array_intersect( $loading_urls, $fr_urls ), 'Each antenna uses its own animation library' );
 $empty_config = $loading_config; $empty_config['animation_ids'] = array();
 update_option( BSC_TV_Music::SETTINGS, $empty_config );
-animation_check( $fr_urls === BSC_TV_Player::loading_animations(), 'An empty custom library safely falls back to Lune and Manège' );
+animation_check( $fr_urls === BSC_TV_Player::loading_animations(), 'An empty custom library safely falls back to the four supplied films' );
 animation_check( false === strpos( wp_json_encode( BSC_TV_Player::loading_animations() ), 'transition.mp4' ), 'The historic unique logo film is no longer a default candidate' );
 $fixed_loading = BSC_TV_Player::render( array( 'show_poster' => 'no', 'transition_mode' => 'custom', 'transition_video' => array( 'url' => 'https://example.com/fixed.webm' ) ) );
 animation_check( false !== strpos( $fixed_loading, 'data-fixed="1"' ) && false !== strpos( $fixed_loading, 'data-src="https://example.com/fixed.webm"' ), 'An explicitly selected fixed Elementor mode stays available' );
