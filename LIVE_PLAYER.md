@@ -46,6 +46,10 @@ Sources : [planificateur Infomaniak](https://www.infomaniak.com/fr/support/faq/2
 
 Références : [vidéos YouTube d’une chaîne](https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/list), [métadonnées YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos), [vidéos Twitch](https://dev.twitch.tv/docs/api/reference/videos).
 
+## Musique des animations BSC
+
+Depuis **1.25.0**, le fichier local **The Mountain · Soft Inspirational** accompagne les animations BSC. Dans **Musique → Identité visuelle**, la piste peut être désactivée, remplacée par un fichier audio de la médiathèque ou réglée en volume, séparément pour chaque chaîne. Pendant l’attente d’un direct, elle boucle sur une horloge stable, sans repartir de zéro au changement de film. Elle est coupée dès la lecture du programme officiel ou d’un clip musical, lors d’une erreur visuelle et à la suppression du widget. Un onglet masqué suspend la piste ; le retour à l’attente rejoint sa position courante. Les préférences de son du visiteur et la réduction des animations sont respectées. Si le navigateur refuse la lecture sonore automatique, l’icône du son permet de la démarrer d’un clic. Aucun import ni événement WP-Cron supplémentaire n’est utilisé.
+
 ## Pilotage complet par Infomaniak
 
 La version **1.23.0** permet de retirer tous les événements BSC TV de WP-Cron. Les requêtes sont authentifiées avec le lien confidentiel existant, via HTTPS ; aucun nouvel identifiant n’est nécessaire.

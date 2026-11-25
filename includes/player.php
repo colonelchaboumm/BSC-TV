@@ -590,6 +590,7 @@ final class BSC_TV_Player {
 			return $result;
 		}
 		$result['loading_animations'] = self::loading_animations();
+		$result['animation_soundtrack'] = BSC_TV_Music::soundtrack( $settings['music'] );
 		$catalogue = self::catalogue();
 		$state = (array) get_option( BSC_TV_Stations::key( self::STATE ), array() );
 		$settings['_announcements'] = BSC_TV_Player_Live::announcements( $catalogue, $settings );
@@ -742,6 +743,7 @@ final class BSC_TV_Player {
 		$transition_sources = $transition_fixed ? array( $transition_url ) : self::loading_animations();
 		$transition_url = $transition_sources[0];
 		$transition_timeout = is_numeric( $settings['transition_timeout'] ) ? max( 5, min( 60, (int) $settings['transition_timeout'] ) ) : 20;
+		$animation_soundtrack = BSC_TV_Music::soundtrack();
 		ob_start();
 		require BSC_TV_DIR . 'includes/player-view.php';
 		return ob_get_clean();

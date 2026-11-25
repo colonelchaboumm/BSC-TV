@@ -216,6 +216,11 @@ final class BSC_TV_Music_Admin {
 		}
 		echo '</section><section id="music-identity"><h2>Identité visuelle</h2><p>Après une émission ayant atteint le seuil, les animations d’entrée et de sortie sont choisies aléatoirement pour l’interlude musical. Leur durée complète est réservée dans la grille. Le choix est partagé par tous les visiteurs.</p>';
 		self::media( 'logo', 'Logo officiel BSC', $config['logo'], 'image' );
+		echo '<input type="hidden" name="music[animation_audio_enabled]" value="0">';
+		self::checkbox( 'music[animation_audio_enabled]', 'Musique pendant les animations BSC et l’attente d’un direct', $config['animation_audio_enabled'] );
+		self::media( 'animation_audio_id', 'Musique personnalisée des animations (facultative)', $config['animation_audio_id'], 'audio' );
+		self::input( 'music[animation_audio_volume]', 'Volume de la musique des animations (%)', $config['animation_audio_volume'], 'number', 'min="0" max="100"' );
+		echo '<p class="description" data-animation-audio-default data-url="' . esc_url( BSC_TV_URL . 'assets/media/animation-soundtrack.mp3' ) . '">Sans fichier personnalisé, utilise The Mountain · Soft Inspirational. La musique boucle sans repartir au changement d’animation pendant l’attente d’un direct. Elle s’arrête au début des programmes. Le son et le volume du lecteur restent prioritaires.</p>';
 		echo '<input type="hidden" name="music[bundled_animation]" value="0">'; self::checkbox( 'music[bundled_animation]', 'Inclure les animations BSC fournies : Manège et Lune', $config['bundled_animation'] );
 		echo '<div class="bsc-music-animations" data-music-animations><h3>Bibliothèque d’animations aléatoires</h3><p>BSC · Manège et BSC · Lune durent environ 10 secondes (11 secondes réservées chacune). Ajoutez d’autres vidéos depuis la médiathèque pour varier les animations. Maximum : 50 vidéos personnalisées, de 120 secondes chacune.</p><input type="hidden" name="music[animation_ids][]" value="0"><ul data-animation-list>';
 		foreach ( $config['animation_ids'] as $animation_id ) {

@@ -134,6 +134,8 @@ final class BSC_TV_Player_Live {
 		$identity = array_intersect_key( $music, array_fill_keys( array( 'background', 'color', 'animation', 'show_text', 'sound' ), true ) );
 		$identity['entry_video'] = $animation['url'];
 		$identity['entry_text'] = 'Le direct va commencer';
+		$identity['standby_key'] = $item['key'];
+		$identity['standby_start'] = $item['start'];
 		$identity['logo'] = ! empty( $music['logo'] ) ? wp_get_attachment_image_url( $music['logo'], 'large' ) : '';
 		return array( 'key' => $item['key'] . ':' . $start, 'title' => $item['title'], 'creator' => '', 'avatar' => '', 'profile_url' => '', 'image' => $item['image'] ?? '', 'url' => '', 'resource' => array( 'platform' => 'identity', 'id' => 'waiting' ), 'standby' => true, 'live' => false, 'music' => false, 'music_phase' => 'entry', 'identity' => $identity, 'start' => $start, 'end' => $start + $animation['duration'], 'expected_start' => $item['expected_start'], 'offset' => $now - $start, 'new' => false, 'premiere' => false );
 	}

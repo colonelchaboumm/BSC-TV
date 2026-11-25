@@ -1,5 +1,7 @@
 # BSC TV — Music Interludes
 
+Depuis **1.25.0**, la piste fournie **The Mountain · Soft Inspirational** est distribuée comme musique locale des animations BSC. Elle ne constitue pas un clip dans la bibliothèque YouTube, n’ajoute aucune durée aux créneaux et fonctionne aussi pendant le chargement et l’attente d’un direct lorsque les interludes musicaux sont désactivés. Les réglages sont dans **Identité visuelle** : activation, fichier audio personnalisé et volume. La musique boucle sans interruption entre les films d’une même attente, puis s’arrête lorsque le programme commence. Le son original du film est coupé lorsque cette piste est utilisée. Les prévisualisations d’entrée et de sortie utilisent aussi cette sélection.
+
 Version 1.21.0, branche `fix/programme-diversity`. Module facultatif du plugin existant, **désactivé par défaut**, sans bibliothèque musicale préremplie. Les clips peuvent être ajoutés par URL ou importés depuis une playlist, puis validés individuellement ou en masse. La musique et les animations d’identité sont choisies côté serveur, avec grille recalculée et affichage dans le widget quotidien. La recomposition commune dans **Le live** active l’insertion flexible lorsqu’au moins un clip est prêt. Aucune installation ni activation sur le site de production n’a été effectuée pour cette version.
 
 ## Architecture réutilisée

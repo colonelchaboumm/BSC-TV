@@ -60,6 +60,9 @@
 			this.transitionPoster = root.querySelector('[data-player-transition-poster]') || this.transition?.querySelector('img');
 			this.musicScreen = root.querySelector('[data-music-screen]');
 			this.musicVideo = root.querySelector('[data-music-video]');
+			this.animationAudio = root.querySelector('[data-animation-audio]');
+			this.failedAnimationAudioSources = new Set();
+			this.animationAudioAttempt = 0;
 			this.data = null;
 			this.clock = 0;
 			this.joined = false;
@@ -84,7 +87,7 @@
 				else { this.seek(true); this.play(); }
 				this.controls();
 			});
-			root.querySelector('[data-player-mute]')?.addEventListener('click', () => { this.audioCustomized = true; this.muted = !this.muted; this.audio(); });
+			root.querySelector('[data-player-mute]')?.addEventListener('click', () => { this.audioCustomized = true; if (!this.animationAudioBlocked) this.muted = !this.muted; this.audio(); });
 			root.querySelector('[data-player-volume]')?.addEventListener('input', event => {
 				this.audioCustomized = true;
 				this.volume = Math.max(0, Math.min(100, Number(event.target.value) || 0));
@@ -104,9 +107,11 @@
 			root.querySelector('[data-music-logo]')?.addEventListener('error', event => { event.target.hidden = true; });
 			this.transitionVideo?.addEventListener('error', () => { this.failedTransitionSources.add(safeURL(this.transitionVideo.dataset.src)); this.stopTransition(); });
 			this.musicVideo?.addEventListener('loadedmetadata', () => this.musicVideoPosition());
-			this.musicVideo?.addEventListener('error', () => { this.musicVideo.hidden = true; });
+			this.musicVideo?.addEventListener('error', () => { this.musicVideo.hidden = true; this.stopAnimationAudio(); this.controls(); });
+			this.animationAudio?.addEventListener('loadedmetadata', () => this.positionAnimationAudio());
+			this.animationAudio?.addEventListener('error', () => { this.failedAnimationAudioSources.add(safeURL(this.animationAudio.src)); this.stopAnimationAudio(); this.controls(); });
 			this.visibility = () => {
-				if (document.hidden) { this.pauseTransition(); this.musicVideo?.pause(); }
+				if (document.hidden) { this.pauseTransition(true); this.musicVideo?.pause(); this.stopAnimationAudio(false); }
 				else { this.claimAutoplay(); if (this.waitingForPlayback && this.transition?.hidden) this.showTransition(); if (this.data?.current?.resource?.platform === 'identity') this.showMusic(this.data.current); this.request(); }
 			};
 			document.addEventListener('visibilitychange', this.visibility);
@@ -127,6 +132,57 @@
 			automaticPlayerClaimed = true;
 			this.joined = true;
 			return true;
+		}
+		animationAudioContext() {
+			if (!this.animationAudio || !this.joined || !this.data?.enabled || document.hidden || !this.root.isConnected) return null;
+			const config = this.data.animation_soundtrack ?? { url: this.animationAudio.dataset.src, volume: this.animationAudio.dataset.volume };
+			const url = safeURL(config?.url);
+			if (!url || this.failedAnimationAudioSources.has(url)) return null;
+			const current = this.data.current;
+			if (current?.resource?.platform === 'identity' && !this.musicScreen?.hidden && this.musicVideo && !this.musicVideo.hidden) {
+				return { url, volume: config.volume, key: current.standby ? `standby:${current.identity?.standby_key || current.expected_start}` : `identity:${this.token}`, start: current.standby ? Number(current.identity?.standby_start) : null };
+			}
+			if (this.waitingForPlayback && this.transition && !this.transition.hidden && this.transitionVideo && !this.transitionVideo.hidden) return { url, volume: config.volume, key: `loading:${this.token}`, start: null };
+			return null;
+		}
+		positionAnimationAudio() {
+			const audio = this.animationAudio;
+			const context = this.animationAudioContext();
+			if (!audio || !context || context.key !== this.animationAudioKey || !Number.isFinite(context.start) || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+			try { audio.currentTime = Math.max(0, this.now() - context.start) % audio.duration; } catch { /* Metadata may still be loading. */ }
+		}
+		startAnimationAudio() {
+			const context = this.animationAudioContext();
+			if (!context) { this.stopAnimationAudio(); return; }
+			const audio = this.animationAudio;
+			const fresh = this.animationAudioKey !== context.key || audio.getAttribute('src') !== context.url;
+			if (fresh) {
+				this.stopAnimationAudio();
+				this.animationAudioKey = context.key;
+				audio.src = context.url;
+				try { audio.currentTime = 0; } catch { /* The source is loaded on demand. */ }
+			}
+			audio.loop = true;
+			audio.muted = this.muted;
+			const gain = Number(context.volume);
+			audio.volume = this.volume / 100 * (Number.isFinite(gain) ? Math.max(0, Math.min(100, gain)) / 100 : 1);
+			if (!fresh && audio.paused === false) return;
+			if (this.animationAudioBlocked && !this.retryAnimationAudio) { this.controls(); return; }
+			this.retryAnimationAudio = false;
+			this.positionAnimationAudio();
+			const attempt = ++this.animationAudioAttempt;
+			const blocked = () => { if (attempt === this.animationAudioAttempt) { this.animationAudioBlocked = true; this.controls(); } };
+			try { audio.play()?.then(() => { if (attempt === this.animationAudioAttempt) { this.animationAudioBlocked = false; this.controls(); } }).catch(blocked); } catch { blocked(); }
+			this.controls();
+		}
+		stopAnimationAudio(reset = true) {
+			this.animationAudioAttempt++;
+			try { this.animationAudio?.pause(); } catch { /* The optional soundtrack may be absent. */ }
+			if (reset) {
+				this.animationAudioKey = '';
+				this.animationAudioBlocked = false;
+				if (this.animationAudio?.getAttribute('src')) { this.animationAudio.removeAttribute('src'); this.animationAudio.load?.(); }
+			}
 		}
 
 		startTransition() {
@@ -169,19 +225,21 @@
 			if (poster) this.transitionVideo.setAttribute('poster', poster); else this.transitionVideo.removeAttribute('poster');
 			// Reduced motion uses the programme image, without downloading an animation.
 			this.transitionVideo.hidden = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-			if (this.transitionVideo.hidden) return;
+			if (this.transitionVideo.hidden) { this.stopAnimationAudio(); return; }
 			this.transitionVideo.muted = true;
 			this.transitionVideo.defaultMuted = true;
 			if (this.transitionVideo.getAttribute('src') !== url) this.transitionVideo.src = url;
+			this.startAnimationAudio();
 			try { this.transitionVideo.play()?.catch(() => { if (attempt === this.transitionAttempt) this.stopTransition(); }); } catch { this.stopTransition(); }
 		}
-		pauseTransition() {
+		pauseTransition(preserveAudio = false) {
 			this.transitionAttempt++;
 			window.clearTimeout(this.transitionTimer);
 			if (this.transition) this.transition.hidden = true;
 			try { this.transitionVideo?.pause(); } catch { /* A disabled animation has no media element. */ }
+			if (!preserveAudio) this.stopAnimationAudio();
 		}
-		stopTransition() { this.waitingForPlayback = false; this.pauseTransition(); }
+		stopTransition(preserveAudio = false) { this.waitingForPlayback = false; this.pauseTransition(preserveAudio); }
 		musicVideoPosition() {
 			const current = this.data?.current;
 			if (!this.musicVideo || current?.resource?.platform !== 'identity' || this.musicScreen?.hidden || current.end <= this.now()) return;
@@ -192,7 +250,7 @@
 		}
 		showMusic(current) {
 			if (!this.musicScreen || current.end <= this.now()) return;
-			this.stopTransition();
+			this.stopTransition(true);
 			this.mount.hidden = true;
 			this.musicScreen.hidden = false;
 			const identity = current.identity || {};
@@ -211,18 +269,21 @@
 			const videoURL = safeURL(current.music_phase === 'entry' ? identity.entry_video : identity.exit_video);
 			const reduced = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 			this.musicVideo.hidden = !videoURL || reduced;
-			if (!videoURL || reduced || document.hidden || !this.joined) { this.musicVideo.pause(); return; }
-			this.musicVideo.muted = !identity.sound || this.muted;
+			if (!videoURL || reduced || document.hidden || !this.joined) { this.musicVideo.pause(); this.stopAnimationAudio(); return; }
+			this.musicVideo.muted = !!this.animationAudioContext() || !identity.sound || this.muted;
+			this.musicVideo.volume = this.volume / 100;
 			this.musicVideo.loop = !!current.standby;
 			if (this.musicVideo.getAttribute('src') !== videoURL) this.musicVideo.src = videoURL;
 			this.musicVideoPosition();
+			this.startAnimationAudio();
 			const generation = this.generation;
-			try { this.musicVideo.play()?.catch(() => { if (generation === this.generation) this.musicVideo.hidden = true; }); } catch { this.musicVideo.hidden = true; }
+			try { this.musicVideo.play()?.catch(() => { if (generation === this.generation) { this.musicVideo.hidden = true; this.stopAnimationAudio(); this.controls(); } }); } catch { this.musicVideo.hidden = true; this.stopAnimationAudio(); this.controls(); }
 		}
-		stopMusic() {
+		stopMusic(preserveAudio = false) {
 			if (this.musicScreen) this.musicScreen.hidden = true;
 			if (this.musicVideo) { this.musicVideo.pause(); this.musicVideo.loop = false; this.musicVideo.removeAttribute('src'); this.musicVideo.load?.(); }
 			this.mount.hidden = false;
+			if (!preserveAudio) this.stopAnimationAudio();
 		}
 		playing() { this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
 		ended(message) {
@@ -238,7 +299,14 @@
 		}
 
 		audio() {
-			if (!this.ready || this.data?.current?.resource.platform !== 'youtube') return;
+			if (!this.muted && this.volume === 0) this.volume = 100;
+			this.retryAnimationAudio = true;
+			this.startAnimationAudio();
+			if (this.data?.current?.resource?.platform === 'identity' && this.musicVideo) {
+				this.musicVideo.muted = !!this.animationAudioContext() || !this.data.current.identity?.sound || this.muted;
+				this.musicVideo.volume = this.volume / 100;
+			}
+			if (!this.ready || this.data?.current?.resource.platform !== 'youtube') { this.controls(); return; }
 			try {
 				if (!this.muted && this.volume === 0) this.volume = 100;
 				this.player.setVolume?.(this.volume);
@@ -259,25 +327,34 @@
 			const current = this.data?.enabled ? this.data.current : null;
 			const platform = current?.resource?.platform;
 			const available = this.ready && !!this.player && this.failedToken !== this.token && ['youtube', 'twitch'].includes(platform);
+			const localAudio = !!this.animationAudioContext();
 			const canStart = !!current && ['youtube', 'twitch', 'identity'].includes(platform);
 			const showStart = canStart && !(platform === 'identity' && this.joined);
 			const toolbar = this.root.querySelector('[data-player-toolbar]');
-			if (toolbar) toolbar.hidden = !this.root.isConnected || !(available || showStart || safeURL(current?.url));
+			if (toolbar) toolbar.hidden = !this.root.isConnected || !(available || showStart || localAudio || safeURL(current?.url));
 			const fullscreen = this.root.querySelector('[data-player-fullscreen]');
 			if (fullscreen) {
-				fullscreen.hidden = !available || !document.fullscreenEnabled || !this.root.requestFullscreen;
+				fullscreen.hidden = !(available || localAudio) || !document.fullscreenEnabled || !this.root.requestFullscreen;
 				const expanded = document.fullscreenElement === this.root;
 				this.control('[data-player-fullscreen]', expanded ? 'Quitter le plein écran' : 'Plein écran', expanded ? 'collapse' : 'expand');
 			}
 			const controls = this.root.querySelector('[data-player-controls]');
 			const mute = this.root.querySelector('[data-player-mute]');
-			if (mute) mute.hidden = !available || platform !== 'youtube';
+			if (mute) {
+				mute.hidden = !localAudio && (!available || platform !== 'youtube');
+				const silent = this.muted || (localAudio && this.animationAudioBlocked);
+				this.control('[data-player-mute]', silent ? 'Activer le son' : 'Couper le son', silent ? 'muted' : 'sound');
+				mute.setAttribute('aria-pressed', String(silent));
+			}
 			const volumeControl = this.root.querySelector('[data-player-volume-control]');
-			if (volumeControl) volumeControl.hidden = !available || platform !== 'youtube';
+			if (volumeControl) volumeControl.hidden = !localAudio && (!available || platform !== 'youtube');
+			const volume = this.root.querySelector('[data-player-volume]');
+			if (volume) volume.value = this.volume;
 			if (!controls) return;
-			controls.hidden = !this.root.isConnected || !showStart || (platform === 'twitch' && available);
+			controls.hidden = !this.root.isConnected || !(showStart || localAudio) || (platform === 'twitch' && available && !localAudio);
 			if (controls.hidden) return;
 			const pause = this.root.querySelector('[data-player-pause]');
+			if (pause) pause.hidden = localAudio && platform !== 'youtube' && this.joined;
 			if (pause) pause.disabled = !available && this.failedToken !== this.token && (this.starting || !!this.player);
 			if (!available) { this.control('[data-player-pause]', 'Lire le direct', 'play'); return; }
 			try {
@@ -393,7 +470,8 @@
 			}
 			const token = `${current.key}/${current.start}/${current.end}`;
 			if (token !== this.token) {
-				this.destroy();
+				// Standby changes film every few seconds, but keeps one continuous audio bed.
+				this.destroy(!!current.standby && this.animationAudioKey === `standby:${current.identity?.standby_key || current.expected_start}`);
 				this.token = token;
 				this.failedToken = '';
 				this.status('');
@@ -566,9 +644,9 @@
 		}
 
 		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.controls(); this.status(message); }
-		destroy() {
-			this.stopTransition();
-			this.stopMusic();
+		destroy(preserveAudio = false) {
+			this.stopTransition(preserveAudio);
+			this.stopMusic(preserveAudio);
 			window.clearTimeout(this.readyTimer);
 			this.generation += 1;
 			try {
