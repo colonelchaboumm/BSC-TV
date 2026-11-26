@@ -114,7 +114,7 @@ $player_html = BSC_TV_Player::render( array( 'station' => 'fr', 'show_poster' =>
 $day_html = BSC_TV_Day::render( array( 'station' => 'fr' ) );
 station_check( false !== strpos( $player_html, 'station=fr' ) && false !== strpos( $day_html, 'station=fr' ), 'Player and paginated day widget keep French polling endpoints' );
 station_check( false !== strpos( do_shortcode( '[bsc_tv_player station="fr" show_poster="no"]' ), 'station=fr' ), 'The French player works through its shortcode' );
-station_check( '' === BSC_TV_Stations::watch_url( BSC_TV_Display::LIVE_PAGE, 'fr' ), 'French badge never redirects by default to the first channel page' );
+station_check( BSC_TV_Display::FR_PAGE === BSC_TV_Stations::watch_url( BSC_TV_Display::LIVE_PAGE, 'fr' ), 'French badge never redirects by default to the first channel page' );
 in_fr( static function () { $settings = BSC_TV_Player::settings(); $settings['watch_url'] = 'https://example.com/tv-fr/'; update_option( BSC_TV_Stations::key( BSC_TV_Player::SETTINGS ), $settings, false ); } );
 station_check( 'https://example.com/tv-fr/' === BSC_TV_Stations::watch_url( BSC_TV_Display::LIVE_PAGE, 'fr' ), 'French badge can use the separate viewing page configured in administration' );
 do_action( 'rest_api_init' );

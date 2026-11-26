@@ -7,6 +7,10 @@ final class BSC_TV_Stations {
 	public static function choices() { return array( 'main' => 'Chaîne 1 · BSC TV Monde', 'fr' => 'Chaîne 2 · BSC TV Français' ); }
 	public static function valid( $id ) { return is_string( $id ) && isset( self::choices()[ $id ] ); }
 	public static function current() { return self::$current; }
+	public static function brand( $id ) {
+		$french = 'fr' === $id;
+		return array( 'name' => 'Brewers Television ' . ( $french ? 'France' : 'World' ), 'logo' => BSC_TV_URL . 'assets/media/station-' . ( $french ? 'fr' : 'world' ) . '.png', 'url' => $french ? BSC_TV_Display::FR_PAGE : BSC_TV_Display::LIVE_PAGE );
+	}
 	public static function key( $key ) { return 'main' === self::$current ? $key : $key . '_station_' . self::$current; }
 	public static function run( $id, $callback ) {
 		if ( ! self::valid( $id ) ) { return new WP_Error( 'station_unknown', 'Chaîne TV inconnue.', array( 'status' => 400 ) ); }
@@ -51,7 +55,7 @@ final class BSC_TV_Stations {
 	public static function watch_url( $value, $station ) {
 		$url = is_scalar( $value ) ? BSC_TV_Content::url( $value ) : '';
 		if ( $url && ( 'main' === $station || BSC_TV_Display::LIVE_PAGE !== $url ) ) { return $url; }
-		return self::run( $station, static function () { return BSC_TV_Player::settings()['watch_url']; } );
+		return self::run( $station, static function () { return BSC_TV_Player::settings()['watch_url']; } ) ?: self::brand( $station )['url'];
 	}
 	public static function field( $action ) {
 		echo '<input type="hidden" name="station" value="' . esc_attr( self::$current ) . '">';

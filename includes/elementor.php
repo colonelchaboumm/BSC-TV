@@ -20,7 +20,10 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 		$menu = $this->compact();
 		$badge = $this->badge();
 		$this->start_controls_section( 'content', array( 'label' => 'Programme' ) );
-		$this->add_control( 'station', array( 'label' => 'Chaîne TV', 'type' => Controls_Manager::SELECT, 'options' => BSC_TV_Stations::choices(), 'default' => 'main', 'description' => 'La pastille suit l’antenne sélectionnée. Renseignez le lien de sa page de lecture.' ) );
+		if ( $badge ) { $this->add_control( 'badge_stations', array( 'label' => 'Chaînes affichées', 'type' => Controls_Manager::SELECT, 'options' => array( 'both' => 'World et France', 'single' => 'Une seule chaîne' ), 'default' => 'both' ) ); }
+		$station_control = array( 'label' => 'Chaîne TV', 'type' => Controls_Manager::SELECT, 'options' => BSC_TV_Stations::choices(), 'default' => 'main' );
+		if ( $badge ) { $station_control['condition'] = array( 'badge_stations' => 'single' ); }
+		$this->add_control( 'station', $station_control );
 		$this->add_control( 'title', array( 'label' => $badge ? 'Titre du panneau' : 'Titre', 'type' => Controls_Manager::TEXT, 'default' => $menu && ! $badge ? 'BSC TV' : 'Programme TV' ) );
 		$this->add_control( 'days', array( 'label' => 'Période (jours)', 'type' => Controls_Manager::NUMBER, 'min' => 1, 'max' => BSC_TV_Display::MAX_DAYS, 'default' => $menu && ! $badge ? 7 : 45 ) );
 		$this->add_control( 'limit', array( 'label' => 'Nombre d’émissions par section', 'type' => Controls_Manager::NUMBER, 'min' => 1, 'max' => $menu ? 12 : 60, 'default' => $menu ? 3 : 12 ) );
@@ -69,6 +72,15 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 	}
 
 	private function badge_content_controls() {
+		$this->start_controls_section( 'badge_stations_identity', array( 'label' => 'Logos et pages des chaînes' ) );
+		$this->add_control( 'show_station_logo', array( 'label' => 'Afficher les logos', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->add_control( 'show_station_name', array( 'label' => 'Afficher le nom de la chaîne', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		foreach ( array( 'world' => 'main', 'fr' => 'fr' ) as $prefix => $id ) {
+			$brand = BSC_TV_Stations::brand( $id );
+			$this->add_control( $prefix . '_logo', array( 'label' => 'Logo ' . $brand['name'], 'type' => Controls_Manager::MEDIA, 'default' => array( 'url' => $brand['logo'] ), 'condition' => array( 'show_station_logo' => 'yes' ) ) );
+			$this->add_control( $prefix . '_watch_url', array( 'label' => 'Page ' . $brand['name'], 'type' => Controls_Manager::URL, 'options' => array( 'url' ), 'default' => array( 'url' => $brand['url'] ), 'condition' => array( 'badge_stations' => 'both' ) ) );
+		}
+		$this->end_controls_section();
 		$this->start_controls_section( 'badge_content', array( 'label' => 'Bouton et ouverture' ) );
 		foreach ( array( 'live' => array( 'Libellé en direct', 'LIVE' ), 'upcoming' => array( 'Libellé de la prochaine émission', 'À venir' ), 'empty' => array( 'Libellé sans émission', 'BSC TV' ) ) as $key => $label ) {
 			$this->add_control( $key . '_label', array( 'label' => $label[0], 'type' => Controls_Manager::TEXT, 'default' => $label[1] ) );
@@ -79,13 +91,20 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
 		$this->add_control( 'show_player_current', array( 'label' => 'Afficher l’émission BSC TV en cours', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'description' => 'Priorité à l’émission diffusée dans Le live, y compris un replay. Sans programme en cours, reprend les directs et annonces des plateformes.' ) );
 		$this->add_control( 'show_watch_link', array( 'label' => 'Bouton pour regarder Le live', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
-		$this->add_control( 'watch_url', array( 'label' => 'Lien vers la page Le live', 'type' => Controls_Manager::URL, 'options' => array( 'url' ), 'default' => array( 'url' => BSC_TV_Display::LIVE_PAGE ) ) );
+		$this->add_control( 'watch_url', array( 'label' => 'Lien vers la page Le live', 'type' => Controls_Manager::URL, 'options' => array( 'url' ), 'default' => array( 'url' => BSC_TV_Display::LIVE_PAGE ), 'condition' => array( 'badge_stations' => 'single' ) ) );
 		$this->add_control( 'watch_label', array( 'label' => 'Texte du bouton Le live', 'type' => Controls_Manager::TEXT, 'default' => 'Regarder Le live' ) );
 		$this->end_controls_section();
 	}
 
 	private function badge_style_controls() {
 		$root = '{{WRAPPER}} .bsc-tv--badge';
+		$this->start_controls_section( 'badge_station_style', array( 'label' => 'Logos et disposition des chaînes', 'tab' => Controls_Manager::TAB_STYLE ) );
+		$this->add_responsive_control( 'badge_stations_direction', array( 'label' => 'Disposition', 'type' => Controls_Manager::SELECT, 'options' => array( '320px' => 'Côte à côte si la place le permet', '100%' => 'L’une sous l’autre' ), 'selectors' => array( '{{WRAPPER}} .bsc-tv-stations' => '--bsc-tv-station-min: {{VALUE}};' ) ) );
+		$this->add_responsive_control( 'badge_stations_gap', array( 'label' => 'Espace entre les chaînes', 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => 0, 'max' => 80 ) ), 'selectors' => array( '{{WRAPPER}} .bsc-tv-stations' => '--bsc-tv-stations-gap: {{SIZE}}{{UNIT}};' ) ) );
+		foreach ( array( 'logo-size' => array( 'Taille du logo', 24, 180 ), 'logo-gap' => array( 'Espace logo / programme', 0, 48 ), 'logo-radius' => array( 'Arrondi du logo', 0, 90 ), 'logo-padding' => array( 'Marge intérieure du logo', 0, 24 ), 'logo-border-width' => array( 'Épaisseur du contour du logo', 0, 10 ) ) as $key => $control ) { $this->badge_slider( $root, $key, $control[0], $control[1], $control[2] ); }
+		foreach ( array( 'logo-background' => 'Fond du logo', 'logo-border' => 'Contour du logo', 'station-name' => 'Nom de la chaîne' ) as $key => $label ) { $this->add_control( 'badge_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-tv-badge-' . $key . ': {{VALUE}};' ) ) ); }
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'badge_station_name_typography', 'label' => 'Nom de la chaîne', 'selector' => $root . ' .bsc-tv-badge__station-name' ) );
+		$this->end_controls_section();
 		$this->start_controls_section( 'badge_style', array( 'label' => 'Bouton et pastille', 'tab' => Controls_Manager::TAB_STYLE ) );
 		$this->add_responsive_control( 'badge_alignment', array(
 			'label' => 'Alignement du bouton', 'type' => Controls_Manager::SELECT,
