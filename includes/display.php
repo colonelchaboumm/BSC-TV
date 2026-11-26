@@ -395,25 +395,15 @@ final class BSC_TV_Display {
 		$logo = $settings[ 'fr' === $station ? 'fr_logo' : 'world_logo' ] ?? $brand['logo'];
 		$logo = is_array( $logo ) ? ( $logo['url'] ?? '' ) : $logo;
 		$logo = ( is_scalar( $logo ) ? BSC_TV_Content::url( $logo ) : '' ) ?: $brand['logo'];
-		$labels = array(
-			'live' => sanitize_text_field( $settings['live_label'] ?? '' ) ?: 'LIVE',
-			'upcoming' => sanitize_text_field( $settings['upcoming_label'] ?? '' ) ?: 'À venir',
-			'empty' => sanitize_text_field( $settings['empty_label'] ?? '' ) ?: 'BSC TV',
-		);
 		$show_title = ! isset( $settings['show_highlight_title'] ) || 'yes' === $settings['show_highlight_title'];
 		$show_date = ! isset( $settings['show_highlight_date'] ) || 'yes' === $settings['show_highlight_date'];
 		$inline = 'inline' === ( $settings['panel_mode'] ?? '' );
-		$animate = 'yes' === ( $settings['pulse'] ?? 'yes' );
 		ob_start();
 		?>
 		<div class="bsc-tv bsc-tv--badge<?php echo $show_logo ? ' bsc-tv--station-badge' : ''; ?>" data-bsc-tv-station="<?php echo esc_attr( $station ); ?>" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
 			<?php if ( $show_logo ) : ?><a class="bsc-tv-badge__station-link" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>" aria-label="<?php echo esc_attr( 'Regarder ' . $brand['name'] ); ?>"><img class="bsc-tv-badge__station-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $brand['name'] ); ?>" width="80" height="80" decoding="async"></a><?php endif; ?>
-			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?><?php echo $animate ? ' bsc-tv-badge--pulse' : ''; ?>">
+			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?>">
 				<summary class="bsc-tv-badge__trigger<?php echo $show_name ? ' bsc-tv-badge__trigger--named' : ''; ?>">
-					<span class="bsc-tv-badge__status" data-bsc-tv-live-label="<?php echo esc_attr( $labels['live'] ); ?>" data-bsc-tv-upcoming-label="<?php echo esc_attr( $labels['upcoming'] ); ?>" data-bsc-tv-empty-label="<?php echo esc_attr( $labels['empty'] ); ?>">
-						<span class="bsc-tv-badge__dot" aria-hidden="true"></span>
-						<span class="bsc-tv-badge__label"><?php echo esc_html( $labels[ $highlight['state'] ] ); ?></span>
-					</span>
 					<?php if ( $show_name ) : ?><span class="bsc-tv-badge__station-name"><?php echo esc_html( $brand['name'] ); ?></span><?php endif; ?>
 					<?php if ( $show_title || $show_date ) : ?>
 						<span class="bsc-tv-badge__details" <?php echo ( $show_title && $highlight['title'] ) || ( $show_date && $highlight['date'] ) ? '' : 'hidden'; ?>>

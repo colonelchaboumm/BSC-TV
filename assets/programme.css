@@ -126,11 +126,10 @@
 .bsc-tv .bsc-tv-badge__station-logo { display: block; inline-size: 100%; block-size: auto; aspect-ratio: 1; object-fit: contain; margin: 0; }
 .bsc-tv-badge__station-link:focus-visible { outline: 3px solid var(--bsc-tv-accent); outline-offset: 3px; }
 .bsc-tv-badge__station-name { font-size: .67rem; font-weight: 750; line-height: 1.2; color: var(--bsc-tv-badge-station-name, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bsc-tv .bsc-tv-badge__trigger.bsc-tv-badge__trigger--named { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 3px; }
-.bsc-tv-badge__trigger--named > .bsc-tv-badge__status { grid-column: 1; grid-row: 1 / 3; }
-.bsc-tv-badge__trigger--named > .bsc-tv-badge__station-name { grid-column: 2; grid-row: 1; }
-.bsc-tv-badge__trigger--named > .bsc-tv-badge__details { grid-column: 2; grid-row: 2; }
-.bsc-tv-badge__trigger--named > .bsc-tv-badge__chevron { grid-column: 3; grid-row: 1 / 3; }
+.bsc-tv .bsc-tv-badge__trigger.bsc-tv-badge__trigger--named { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 3px; }
+.bsc-tv-badge__trigger--named > .bsc-tv-badge__station-name { grid-column: 1; grid-row: 1; }
+.bsc-tv-badge__trigger--named > .bsc-tv-badge__details { grid-column: 1; grid-row: 2; }
+.bsc-tv-badge__trigger--named > .bsc-tv-badge__chevron { grid-column: 2; grid-row: 1 / 3; }
 .bsc-tv .bsc-tv-badge__schedule { list-style: none; margin: 0 0 16px; padding: 0; }
 .bsc-tv-badge__schedule li { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-block-end: 1px solid var(--bsc-tv-badge-button-border, #d9dedb); }
 .bsc-tv-badge__schedule time { font-size: .75rem; opacity: .8; }
@@ -159,30 +158,6 @@
 .bsc-tv-badge__trigger::-webkit-details-marker { display: none; }
 .bsc-tv-badge__trigger:hover, .bsc-tv-badge[open] > .bsc-tv-badge__trigger { border-color: var(--bsc-tv-accent); }
 .bsc-tv-badge__trigger:focus-visible { outline: 3px solid var(--bsc-tv-accent); outline-offset: 3px; }
-.bsc-tv-badge__status {
-	align-items: center;
-	background: var(--bsc-tv-badge-next-background, #def7f1);
-	border-radius: 5px;
-	color: var(--bsc-tv-badge-next-text, #075f52);
-	display: inline-flex;
-	flex: 0 0 auto;
-	gap: 6px;
-	padding: .48em .66em;
-}
-
-.bsc-tv-badge__label { font-size: .72rem; font-weight: 850; letter-spacing: .045em; line-height: 1.1; text-transform: uppercase; }
-.bsc-tv-badge__dot {
-	background: var(--bsc-tv-live);
-	block-size: var(--bsc-tv-badge-dot, 8px);
-	border-radius: 50%;
-	display: none;
-	flex: none;
-	inline-size: var(--bsc-tv-badge-dot, 8px);
-}
-
-[data-bsc-tv-state="live"] .bsc-tv-badge__status { background: var(--bsc-tv-badge-live-background, #ffe7eb); color: var(--bsc-tv-badge-live-text, var(--bsc-tv-live)); }
-[data-bsc-tv-state="live"] .bsc-tv-badge__label { font-weight: 900; }
-[data-bsc-tv-state="live"] .bsc-tv-badge__dot { display: block; }
 .bsc-tv-badge__details { display: grid; gap: 2px; min-inline-size: 0; }
 .bsc-tv-badge__details[hidden] { display: none; }
 .bsc-tv-badge__title { font-size: .86rem; font-weight: 750; line-height: 1.15; max-inline-size: 29ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -221,14 +196,4 @@
 @media (any-hover: hover) and (any-pointer: fine) {
 	.bsc-tv-badge:not(.bsc-tv-badge--inline) > .bsc-tv-badge__panel { inset-block-start: 100%; }
 	.bsc-tv-badge[data-bsc-tv-placement="above"]:not(.bsc-tv-badge--inline) > .bsc-tv-badge__panel { inset-block: auto 100%; }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-	[data-bsc-tv-state="live"] .bsc-tv-badge--pulse .bsc-tv-badge__dot { animation: bsc-tv-badge-pulse 1.4s ease-in-out infinite; }
-}
-
-@keyframes bsc-tv-badge-pulse {
-	0% { opacity: 1; box-shadow: 0 0 0 0 var(--bsc-tv-live); }
-	50% { opacity: .2; }
-	65%, 100% { opacity: 1; box-shadow: 0 0 0 6px transparent; }
 }

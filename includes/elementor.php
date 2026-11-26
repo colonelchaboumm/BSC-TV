@@ -82,10 +82,7 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 		}
 		$this->end_controls_section();
 		$this->start_controls_section( 'badge_content', array( 'label' => 'Bouton et ouverture' ) );
-		foreach ( array( 'live' => array( 'Libellé en direct', 'LIVE' ), 'upcoming' => array( 'Libellé de la prochaine émission', 'À venir' ), 'empty' => array( 'Libellé sans émission', 'BSC TV' ) ) as $key => $label ) {
-			$this->add_control( $key . '_label', array( 'label' => $label[0], 'type' => Controls_Manager::TEXT, 'default' => $label[1] ) );
-		}
-		foreach ( array( 'show_highlight_title' => 'Titre de l’émission dans le bouton', 'show_highlight_date' => 'Date et heure dans le bouton', 'pulse' => 'Animer le point du direct' ) as $key => $label ) {
+		foreach ( array( 'show_highlight_title' => 'Titre de l’émission dans le bouton', 'show_highlight_date' => 'Date et heure dans le bouton' ) as $key => $label ) {
 			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		}
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
@@ -111,17 +108,17 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 			'options' => array( 'start' => 'Début', 'center' => 'Centre', 'end' => 'Fin' ),
 			'selectors' => array( $root => '--bsc-tv-badge-align: {{VALUE}};' ),
 		) );
-		foreach ( array( 'button-background' => 'Fond du bouton', 'button-text' => 'Texte du bouton', 'button-border' => 'Bordure du bouton', 'live-background' => 'Fond de la pastille LIVE', 'live-text' => 'Texte LIVE', 'next-background' => 'Fond de la pastille à venir', 'next-text' => 'Texte à venir' ) as $key => $label ) {
+		foreach ( array( 'button-background' => 'Fond du bouton', 'button-text' => 'Texte du bouton', 'button-border' => 'Bordure du bouton' ) as $key => $label ) {
 			$this->add_control( 'badge_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $root => '--bsc-tv-badge-' . $key . ': {{VALUE}};' ) ) );
 		}
-		foreach ( array( 'dot' => array( 'Taille du point', 4, 20 ), 'button-radius' => array( 'Arrondi du bouton', 0, 60 ), 'button-gap' => array( 'Espacement du bouton', 4, 32 ) ) as $key => $control ) {
+		foreach ( array( 'button-radius' => array( 'Arrondi du bouton', 0, 60 ), 'button-gap' => array( 'Espacement du bouton', 4, 32 ) ) as $key => $control ) {
 			$this->badge_slider( $root, $key, $control[0], $control[1], $control[2] );
 		}
 		$this->add_responsive_control( 'badge_button_padding', array(
 			'label' => 'Marges intérieures du bouton', 'type' => Controls_Manager::DIMENSIONS, 'size_units' => array( 'px', 'em', 'rem' ),
 			'selectors' => array( $root . ' .bsc-tv-badge__trigger' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}};' ),
 		) );
-		foreach ( array( 'label' => 'Typographie des libellés', 'title' => 'Typographie du titre', 'date' => 'Typographie de la date', 'watch' => 'Bouton Regarder Le live' ) as $key => $label ) {
+		foreach ( array( 'title' => 'Typographie du titre', 'date' => 'Typographie de la date', 'watch' => 'Bouton Regarder Le live' ) as $key => $label ) {
 			$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'badge_' . $key . '_typography', 'label' => $label, 'selector' => $root . ' .bsc-tv-badge__' . $key ) );
 		}
 		$this->end_controls_section();
