@@ -1,5 +1,4 @@
 <?php defined( 'ABSPATH' ) || exit; ?>
-<h2 class="bsc-tv-section">À venir sur l’antenne</h2>
 <ol class="bsc-tv-badge__schedule">
 	<?php foreach ( $next as $item ) : ?>
 		<li>
