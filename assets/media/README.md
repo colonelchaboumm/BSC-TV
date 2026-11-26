@@ -7,3 +7,5 @@ Depuis 1.24.2, l’ancien film du logo seul `transition.mp4` et son image `trans
 L’image de l’émission sert d’aperçu statique pendant le chargement et en mode de réduction des animations. Sans image disponible, le fond du lecteur reste visible.
 
 Poussin et Chevalier sont les fichiers fournis par l’utilisateur, intégrés sans modification. Chacun dure 10,027 secondes, en 1 280 × 720 ; la grille réserve 11 secondes par animation.
+
+Les fichiers `station-world.png` et `station-fr.png` sont les logos fournis par l’utilisateur (`logotvworld.png` et `logotvfr.png`). Ils sont intégrés sans modification dans les pastilles des deux antennes. Leur affichage est dimensionné en CSS, avec un réglage responsive dans Elementor.

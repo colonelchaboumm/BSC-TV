@@ -63,3 +63,18 @@ Pour arrêter la chaîne 2, désactiver son lecteur et ses interludes dans ses p
 ## Validation locale
 
 `tests/stations-integration.php` utilise une copie jetable de WordPress/SQLite. Il vérifie le filtrage de langue, les horloges et modifications indépendantes, les directs simultanés, la reprise après direct, les bibliothèques et imports de playlists séparés, les filtres 1990–1999, les formulaires, les routes publiques et le traitement commun par Infomaniak. Les plateformes sont simulées ; aucun identifiant de production n’est utilisé.
+
+
+## Pastilles World et France (1.27.0)
+
+Dans **BSC TV – Pastille Live → Programme → Chaînes affichées**, **World et France** est le choix par défaut. Deux pastilles indépendantes montrent le programme diffusé sur chaque antenne. **Une seule chaîne** permet de conserver une pastille World ou France. Le choix ne modifie ni les bibliothèques ni les horloges enregistrées.
+
+Les logos fournis sont inclus sans modification : **World** ouvre [Le live](https://brewerssocialclub.com/le-live/) et **France** ouvre [Brewers Television France](https://brewerssocialclub.com/brewers-television-club-france/). Chaque lien est séparé du bouton qui ouvre le déroulant, pour conserver une navigation et un usage au clavier distincts. Le clic sur le programme affiche le programme courant, les prochains créneaux de l’antenne et les directs annoncés par ses sources. Le survol à la souris, le clic tactile, la fermeture extérieure et la touche Échap conservent leur fonctionnement.
+
+**Logos et pages des chaînes** permet de remplacer chaque fichier et chaque destination. **Style → Logos et disposition des chaînes** règle la taille par appareil, l’espacement entre les chaînes et entre logo et titre, le contour, l’arrondi, le fond et la typographie du nom. Les réglages de la pastille LIVE, du titre, des horaires et du panneau restent disponibles. Les deux pastilles se placent sur une seule colonne quand la largeur manque.
+
+Sans Elementor : `[bsc_tv format="badge" badge_stations="both"]`. Pour une seule antenne : `[bsc_tv format="badge" station="fr"]`. Un shortcode existant sans `badge_stations` conserve son antenne unique. Les paramètres `show_station_logo=""` et `show_station_name=""` masquent les éléments correspondants.
+
+Chaque pastille utilise sa propre réponse publique WordPress. Les widgets identiques partagent un rafraîchissement ; World et France reçoivent des titres distincts. Aucun SDK vidéo ni nouvel import de plateforme n’est chargé par les logos. Les logos ne changent pas lors d’une actualisation du programme.
+
+Tests : `php tests/badge-stations.php /chemin/vers/wordpress-de-test` et `node tests/badge-browser.mjs`.

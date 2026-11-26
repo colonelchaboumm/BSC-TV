@@ -5,6 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Display {
 	const MAX_DAYS = 180;
 	const LIVE_PAGE = 'https://brewerssocialclub.com/le-live/';
+	const FR_PAGE = 'https://brewerssocialclub.com/brewers-television-club-france/';
 
 	public static function register() {
 		wp_register_style( 'bsc-tv', BSC_TV_URL . 'assets/programme.css', array(), BSC_TV_VERSION );
@@ -15,7 +16,7 @@ final class BSC_TV_Display {
 			$attributes = (array) $attributes;
 			$format = $attributes['format'] ?? 'programme';
 			$compact = in_array( $format, array( 'menu', 'badge' ), true );
-			return self::render( shortcode_atts( array( 'station' => 'main', 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'pulse' => 'yes', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes' ), $attributes ) );
+			return self::render( shortcode_atts( array( 'station' => 'main', 'format' => 'programme', 'days' => 'menu' === $format ? 7 : 45, 'limit' => $compact ? 3 : 12, 'platform' => '', 'image' => 1, 'title' => 'menu' === $format ? 'BSC TV' : 'Programme TV', 'agenda' => '', 'pulse' => 'yes', 'show_player_current' => 'yes', 'watch_url' => self::LIVE_PAGE, 'watch_label' => 'Regarder Le live', 'show_watch_link' => 'yes', 'badge_stations' => 'single', 'show_station_logo' => 'yes', 'show_station_name' => 'yes', 'world_logo' => '', 'fr_logo' => '', 'world_watch_url' => self::LIVE_PAGE, 'fr_watch_url' => self::FR_PAGE ), $attributes ) );
 		} );
 	}
 
@@ -312,6 +313,8 @@ final class BSC_TV_Display {
 		$programme['poll_after'] = $current['end'] ? max( 5, min( 60, $current['end'] - $snapshot['server_time'] + 1 ) ) : 60;
 		ob_start();
 		require BSC_TV_DIR . 'includes/badge-current.php';
+		$next = array_slice( $snapshot['next'] ?? array(), 0, min( 5, $config['limit'] ) );
+		if ( $next ) { require BSC_TV_DIR . 'includes/badge-next.php'; }
 		$programme['html'] = ob_get_clean() . $programme['html'];
 		return $programme;
 	}
@@ -337,6 +340,16 @@ final class BSC_TV_Display {
 	}
 
 	public static function render( $settings ) {
+		if ( 'badge' === ( $settings['format'] ?? '' ) && 'both' === ( $settings['badge_stations'] ?? '' ) ) {
+			$html = '<div class="bsc-tv-stations" role="group" aria-label="Brewers Television World et France">';
+			foreach ( BSC_TV_Stations::choices() as $id => $label ) {
+				$child = $settings;
+				$child['badge_stations'] = 'single'; $child['station'] = $id;
+				$child['watch_url'] = $settings[ 'fr' === $id ? 'fr_watch_url' : 'world_watch_url' ] ?? BSC_TV_Stations::brand( $id )['url'];
+				$html .= self::render( $child );
+			}
+			return $html . '</div>';
+		}
 		if ( 'guide' === ( $settings['format'] ?? '' ) ) {
 			$config = self::config( $settings );
 			wp_enqueue_style( 'bsc-tv-guide' );
@@ -374,6 +387,14 @@ final class BSC_TV_Display {
 
 	private static function badge( $settings, $programme, $title, $agenda, $refresh_url ) {
 		$highlight = $programme['highlight'];
+		$watch_config = self::config( $settings );
+		$station = $watch_config['station'];
+		$brand = BSC_TV_Stations::brand( $station );
+		$show_logo = ! isset( $settings['show_station_logo'] ) || 'yes' === $settings['show_station_logo'];
+		$show_name = ! isset( $settings['show_station_name'] ) || 'yes' === $settings['show_station_name'];
+		$logo = $settings[ 'fr' === $station ? 'fr_logo' : 'world_logo' ] ?? $brand['logo'];
+		$logo = is_array( $logo ) ? ( $logo['url'] ?? '' ) : $logo;
+		$logo = ( is_scalar( $logo ) ? BSC_TV_Content::url( $logo ) : '' ) ?: $brand['logo'];
 		$labels = array(
 			'live' => sanitize_text_field( $settings['live_label'] ?? '' ) ?: 'LIVE',
 			'upcoming' => sanitize_text_field( $settings['upcoming_label'] ?? '' ) ?: 'À venir',
@@ -385,13 +406,15 @@ final class BSC_TV_Display {
 		$animate = 'yes' === ( $settings['pulse'] ?? 'yes' );
 		ob_start();
 		?>
-		<div class="bsc-tv bsc-tv--badge" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
+		<div class="bsc-tv bsc-tv--badge<?php echo $show_logo ? ' bsc-tv--station-badge' : ''; ?>" data-bsc-tv-station="<?php echo esc_attr( $station ); ?>" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
+			<?php if ( $show_logo ) : ?><a class="bsc-tv-badge__station-link" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>" aria-label="<?php echo esc_attr( 'Regarder ' . $brand['name'] ); ?>"><img class="bsc-tv-badge__station-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $brand['name'] ); ?>" width="80" height="80" decoding="async"></a><?php endif; ?>
 			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?><?php echo $animate ? ' bsc-tv-badge--pulse' : ''; ?>">
-				<summary class="bsc-tv-badge__trigger">
+				<summary class="bsc-tv-badge__trigger<?php echo $show_name ? ' bsc-tv-badge__trigger--named' : ''; ?>">
 					<span class="bsc-tv-badge__status" data-bsc-tv-live-label="<?php echo esc_attr( $labels['live'] ); ?>" data-bsc-tv-upcoming-label="<?php echo esc_attr( $labels['upcoming'] ); ?>" data-bsc-tv-empty-label="<?php echo esc_attr( $labels['empty'] ); ?>">
 						<span class="bsc-tv-badge__dot" aria-hidden="true"></span>
 						<span class="bsc-tv-badge__label"><?php echo esc_html( $labels[ $highlight['state'] ] ); ?></span>
 					</span>
+					<?php if ( $show_name ) : ?><span class="bsc-tv-badge__station-name"><?php echo esc_html( $brand['name'] ); ?></span><?php endif; ?>
 					<?php if ( $show_title || $show_date ) : ?>
 						<span class="bsc-tv-badge__details" <?php echo ( $show_title && $highlight['title'] ) || ( $show_date && $highlight['date'] ) ? '' : 'hidden'; ?>>
 							<?php if ( $show_title ) : ?><span class="bsc-tv-badge__title" <?php echo $highlight['title'] ? '' : 'hidden'; ?>><?php echo esc_html( $highlight['title'] ); ?></span><?php endif; ?>
@@ -403,7 +426,7 @@ final class BSC_TV_Display {
 				<div class="bsc-tv-badge__panel bsc-tv--menu">
 					<?php if ( $title ) : ?><p class="bsc-tv-heading"><?php echo esc_html( $title ); ?></p><?php endif; ?>
 					<?php self::programme_body( $programme, $agenda ); ?>
-					<?php $watch_config = self::config( $settings ); if ( $watch_config['watch_url'] && ( ! isset( $settings['show_watch_link'] ) || 'yes' === $settings['show_watch_link'] ) ) : $watch_label = sanitize_text_field( $settings['watch_label'] ?? '' ) ?: 'Regarder Le live'; ?><a class="bsc-tv-agenda bsc-tv-watch bsc-tv-badge__watch" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>"><?php echo esc_html( $watch_label ); ?> <span aria-hidden="true">→</span></a><?php endif; ?>
+					<?php if ( $watch_config['watch_url'] && ( ! isset( $settings['show_watch_link'] ) || 'yes' === $settings['show_watch_link'] ) ) : $watch_label = sanitize_text_field( $settings['watch_label'] ?? '' ) ?: 'Regarder Le live'; ?><a class="bsc-tv-agenda bsc-tv-watch bsc-tv-badge__watch" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>"><?php echo esc_html( $watch_label ); ?> <span aria-hidden="true">→</span></a><?php endif; ?>
 				</div>
 			</details>
 			<span class="bsc-tv-announcement" role="status"></span>

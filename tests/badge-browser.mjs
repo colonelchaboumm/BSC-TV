@@ -48,9 +48,9 @@ const document = {
 const timers = new Map(); let timerId = 0; let clock = 0; const calls = [];
 const window = { addEventListener() {}, setTimeout(callback, delay) { timers.set(++timerId, { callback, at: clock + delay, delay }); return timerId; }, clearTimeout(id) { timers.delete(id); } };
 const result = (title, state = 'live', extra = {}) => ({ html: `<p>${title}</p>`, live: state === 'live' ? 1 : 0, highlight: { title, state, datetime: '2026-11-21T18:00:00+01:00', date: '18:00 – 19:00' }, poll_after: 10, announcement: `À l’antenne sur BSC TV : ${title}`, ...extra });
-let response = result('Programme A'); let offline = false;
+let response = result('Programme A'); let frResponse = result('Émission française'); let offline = false;
 const context = { document, window, HTMLImageElement: class {}, setTimeout: window.setTimeout, clearTimeout: window.clearTimeout,
-  async fetch(url, options) { calls.push({ url, options }); if (offline) throw new Error('Offline'); return { ok: true, async json() { return structuredClone(response); } }; }
+  async fetch(url, options) { calls.push({ url, options }); if (offline) throw new Error('Offline'); return { ok: true, async json() { return structuredClone(url.includes('station=fr') ? frResponse : response); } }; }
 };
 let checks = 0;
 const check = (value, label) => { assert.ok(value, label); checks++; };
@@ -105,4 +105,16 @@ check(calls.length === before + 2 && third.querySelector('.bsc-tv-badge').queryS
 const plain = widget('https://bsc.example/wp-json/bsc-tv/v1/programme?format=menu'); plain.nodes.delete('.bsc-tv-badge'); widgets.push(plain);
 await fire('visibilitychange');
 check(plain.querySelector('.bsc-tv-programme').innerHTML === response.html, 'The existing programme and mega-menu refresh paths remain compatible');
+response = result('Programme World indépendant');
+const french = widget('https://bsc.example/wp-json/bsc-tv/v1/programme?format=badge&station=fr');
+widgets.push(french); await fire('visibilitychange');
+const frBadge = french.querySelector('.bsc-tv-badge'); const frTitle = frBadge.querySelector('.bsc-tv-badge__title');
+check(frTitle.textContent === 'Émission française' && title.textContent === response.highlight.title, 'World and France receive their own station-specific programme responses');
+frBadge.open = true; frResponse = result('Émission française suivante'); await advance(10000);
+check(frTitle.textContent === 'Émission française suivante' && title.textContent === response.highlight.title && frBadge.open, 'A French transition preserves its dropdown and does not overwrite the World title');
+frResponse = result('À venir en France', 'upcoming'); await advance(10000);
+check(french.dataset.bscTvState === 'upcoming' && first.dataset.bscTvState !== 'upcoming', 'Each station keeps an independent LIVE status');
+const logo = new Element('logo'); logo.parent = first; badge.open = true; prevented = false;
+await fire('click', { target: logo, pointerType: 'mouse', detail: 1, preventDefault() { prevented = true; } });
+check(!prevented, 'The logo beside the summary remains a normal navigation link');
 console.log(`OK ${checks} badge browser checks.`);
