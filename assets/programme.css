@@ -118,8 +118,8 @@
 	justify-items: var(--bsc-tv-badge-align, start);
 }
 
-.bsc-tv-stations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); container: bsc-tv-stations / inline-size; align-items: start; gap: var(--bsc-tv-stations-gap, 12px); inline-size: 100%; min-inline-size: 0; }
-.bsc-tv-stations > .bsc-tv--badge { min-inline-size: 0; max-inline-size: 100%; }
+.bsc-tv-stations { display: inline-flex; flex-flow: row nowrap; align-items: center; gap: var(--bsc-tv-stations-gap, 24px); inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; }
+.bsc-tv-stations > .bsc-tv--badge { flex: 0 1 auto; inline-size: auto; min-inline-size: 0; max-inline-size: none; }
 .bsc-tv.bsc-tv--station-badge { display: flex; align-items: center; gap: var(--bsc-tv-badge-logo-gap, 10px); justify-content: var(--bsc-tv-badge-align, start); }
 .bsc-tv--station-badge > .bsc-tv-badge { flex: 1 1 auto; min-inline-size: 0; }
 .bsc-tv .bsc-tv-badge__station-link { flex: 0 0 auto; inline-size: var(--bsc-tv-badge-logo-size, 80px); max-inline-size: 40%; border: var(--bsc-tv-badge-logo-border-width, 0px) solid var(--bsc-tv-badge-logo-border, #d9dedb); border-radius: var(--bsc-tv-badge-logo-radius, 8px); padding: var(--bsc-tv-badge-logo-padding, 0px); background: var(--bsc-tv-badge-logo-background, #000); overflow: hidden; }
@@ -198,12 +198,11 @@
 	.bsc-tv-badge[data-bsc-tv-placement="above"]:not(.bsc-tv-badge--inline) > .bsc-tv-badge__panel { inset-block: auto 100%; }
 }
 
-
-/* Compact both station summaries together; the two columns never stack. */
-@container bsc-tv-stations (max-width: 600px) {
- .bsc-tv-stations > .bsc-tv--badge { --bsc-tv-badge-logo-size: clamp(28px, 8cqi, 44px); --bsc-tv-badge-logo-gap: 6px; --bsc-tv-badge-button-gap: 6px; }
- .bsc-tv-stations .bsc-tv-badge__trigger { padding: 6px 8px; }
- .bsc-tv-stations .bsc-tv-badge__station-name { font-size: .6rem; }
- .bsc-tv-stations .bsc-tv-badge__title { font-size: .76rem; max-inline-size: 100%; }
- .bsc-tv-stations .bsc-tv-badge__date { font-size: .64rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Preserve readable text: narrow headers wrap titles instead of shrinking the font. */
+.bsc-tv-stations .bsc-tv-badge__title { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.bsc-tv-stations .bsc-tv-badge__chevron { align-self: center; }
+@media (max-width: 480px) {
+ .bsc-tv-stations { gap: var(--bsc-tv-stations-gap, 12px); }
+ .bsc-tv-stations > .bsc-tv--badge { --bsc-tv-badge-logo-gap: 6px; --bsc-tv-badge-button-gap: 6px; }
+ .bsc-tv-stations .bsc-tv-badge__trigger { padding: 6px; }
 }
