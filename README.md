@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.27.1 · Programme sans bouton LIVE** : le point et le libellé LIVE sont retirés à côté des logos. Le programme et ses horaires restent cliquables pour afficher les émissions à venir.
+
 **1.27.0 · Pastilles World et France** : le widget Pastille Live affiche par défaut les deux logos fournis, chacun relié à sa page de lecture. Le programme en cours apparaît à côté ; son clic ouvre la programmation de l’antenne et les directs annoncés. Les deux horloges se rafraîchissent indépendamment. Dans Elementor, choisissez les deux chaînes ou une seule, remplacez les logos et liens, puis personnalisez leur taille, leur contour, les espacements et les textes.
 
 **1.26.0 · Animations et direct en retard** : **Poussin** et **Chevalier** rejoignent Lune et Manège sur les deux antennes. Après **20 minutes** sans démarrage à partir de l’heure annoncée du direct, les clips validés de l’antenne prennent le relais selon les horaires musicaux, jusqu’au prochain programme enregistré. Les animations complètes sont comprises dans chaque créneau ; la grille initiale garde ses horaires. Un live confirmé, même tardif, reste prioritaire.

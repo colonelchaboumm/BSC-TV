@@ -107,6 +107,7 @@ await fire('visibilitychange');
 check(plain.querySelector('.bsc-tv-programme').innerHTML === response.html, 'The existing programme and mega-menu refresh paths remain compatible');
 response = result('Programme World indépendant');
 const french = widget('https://bsc.example/wp-json/bsc-tv/v1/programme?format=badge&station=fr');
+french.querySelector('.bsc-tv-badge').nodes.delete('.bsc-tv-badge__status');
 widgets.push(french); await fire('visibilitychange');
 const frBadge = french.querySelector('.bsc-tv-badge'); const frTitle = frBadge.querySelector('.bsc-tv-badge__title');
 check(frTitle.textContent === 'Émission française' && title.textContent === response.highlight.title, 'World and France receive their own station-specific programme responses');

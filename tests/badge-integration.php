@@ -50,7 +50,7 @@ update_option( BSC_TV_Player::STATE, BSC_TV_Player::advance( array(), array( 'yo
 $render_settings = array( 'format' => 'badge', 'image' => 1 );
 $before = BSC_TV_Player::snapshot();
 $html = BSC_TV_Display::render( $render_settings );
-badge_check( false !== strpos( $html, 'data-bsc-tv-state="live"' ) && preg_match( '/bsc-tv-badge__title[^>]*>Programme de l’antenne BSC</', $html ), 'The LIVE trigger prioritizes the programme currently broadcast on the shared antenna' );
+badge_check( false !== strpos( $html, 'data-bsc-tv-state="live"' ) && false === strpos( $html, 'bsc-tv-badge__status' ) && false === strpos( $html, 'bsc-tv-badge__dot' ) && preg_match( '/bsc-tv-badge__title[^>]*>Programme de l’antenne BSC</', $html ), 'The programme trigger has no LIVE label or dot and keeps the current antenna title' );
 badge_check( false !== strpos( $html, 'data-bsc-tv-current="youtube:M7lc1UVf-VE"' ) && false !== strpos( $html, 'REDIFFUSION' ), 'The dropdown identifies a current replay without calling it an original live' );
 badge_check( false !== strpos( $html, 'https://example.com/badge-show.jpg' ) && false !== strpos( $html, get_permalink( $profile ) ), 'The current programme card retains its image and BSC BDD creator link' );
 badge_check( preg_match( '/class="bsc-tv-agenda bsc-tv-watch[^>]+href="https:\/\/brewerssocialclub.com\/le-live\/"[^>]*>Regarder Le live/', $html ), 'The dropdown includes a persistent watch button to the requested live page' );

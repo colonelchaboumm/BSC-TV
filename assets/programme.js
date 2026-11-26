@@ -113,10 +113,13 @@
 		if (!badge || !highlight || !['live', 'upcoming', 'empty'].includes(highlight.state)) return;
 		if (![highlight.title, highlight.datetime, highlight.date].every((value) => typeof value === 'string')) return;
 		const status = badge.querySelector('.bsc-tv-badge__status');
-		const label = status.querySelector('.bsc-tv-badge__label');
-		const labels = { live: status.dataset.bscTvLiveLabel, upcoming: status.dataset.bscTvUpcomingLabel, empty: status.dataset.bscTvEmptyLabel };
 		widget.dataset.bscTvState = highlight.state;
-		if (label.textContent !== labels[highlight.state]) label.textContent = labels[highlight.state];
+		// Older cached markup may still include a status label.
+		if (status) {
+			const label = status.querySelector('.bsc-tv-badge__label');
+			const labels = { live: status.dataset.bscTvLiveLabel, upcoming: status.dataset.bscTvUpcomingLabel, empty: status.dataset.bscTvEmptyLabel };
+			if (label && label.textContent !== labels[highlight.state]) label.textContent = labels[highlight.state];
+		}
 		const title = badge.querySelector('.bsc-tv-badge__title');
 		const date = badge.querySelector('.bsc-tv-badge__date');
 		if (title) {
