@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.27.3 · Ligne logo + programme** : le mode World et France affiche simplement `[logo World + programme] [logo France + programme]`. Les groupes suivent leur largeur naturelle, avec une taille de texte lisible. Les titres longs peuvent occuper plusieurs lignes dans leur groupe ; les horaires restent dans les déroulants.
+
 **1.27.2 · Chaînes côte à côte** : World et France gardent deux colonnes, y compris sur mobile et dans un menu étroit. Les logos et les textes se réduisent pour conserver les deux programmes sur la même ligne.
 
 **1.27.1 · Programme sans bouton LIVE** : le point et le libellé LIVE sont retirés à côté des logos. Le programme et ses horaires restent cliquables pour afficher les émissions à venir.

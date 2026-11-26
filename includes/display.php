@@ -345,6 +345,7 @@ final class BSC_TV_Display {
 			foreach ( BSC_TV_Stations::choices() as $id => $label ) {
 				$child = $settings;
 				$child['badge_stations'] = 'single'; $child['station'] = $id;
+				$child['show_station_name'] = ''; $child['show_highlight_date'] = '';
 				$child['watch_url'] = $settings[ 'fr' === $id ? 'fr_watch_url' : 'world_watch_url' ] ?? BSC_TV_Stations::brand( $id )['url'];
 				$html .= self::render( $child );
 			}

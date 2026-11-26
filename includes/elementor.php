@@ -74,7 +74,7 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 	private function badge_content_controls() {
 		$this->start_controls_section( 'badge_stations_identity', array( 'label' => 'Logos et pages des chaînes' ) );
 		$this->add_control( 'show_station_logo', array( 'label' => 'Afficher les logos', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
-		$this->add_control( 'show_station_name', array( 'label' => 'Afficher le nom de la chaîne', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+		$this->add_control( 'show_station_name', array( 'label' => 'Afficher le nom de la chaîne', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'condition' => array( 'badge_stations' => 'single' ) ) );
 		foreach ( array( 'world' => 'main', 'fr' => 'fr' ) as $prefix => $id ) {
 			$brand = BSC_TV_Stations::brand( $id );
 			$this->add_control( $prefix . '_logo', array( 'label' => 'Logo ' . $brand['name'], 'type' => Controls_Manager::MEDIA, 'default' => array( 'url' => $brand['logo'] ), 'condition' => array( 'show_station_logo' => 'yes' ) ) );
@@ -83,7 +83,9 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 		$this->end_controls_section();
 		$this->start_controls_section( 'badge_content', array( 'label' => 'Bouton et ouverture' ) );
 		foreach ( array( 'show_highlight_title' => 'Titre de l’émission dans le bouton', 'show_highlight_date' => 'Date et heure dans le bouton' ) as $key => $label ) {
-			$this->add_control( $key, array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
+			$control = array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' );
+			if ( 'show_highlight_date' === $key ) { $control['condition'] = array( 'badge_stations' => 'single' ); }
+			$this->add_control( $key, $control );
 		}
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
 		$this->add_control( 'show_player_current', array( 'label' => 'Afficher l’émission BSC TV en cours', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'description' => 'Priorité à l’émission diffusée dans Le live, y compris un replay. Sans programme en cours, reprend les directs et annonces des plateformes.' ) );
