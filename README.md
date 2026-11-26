@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.27.2 · Chaînes côte à côte** : World et France gardent deux colonnes, y compris sur mobile et dans un menu étroit. Les logos et les textes se réduisent pour conserver les deux programmes sur la même ligne.
+
 **1.27.1 · Programme sans bouton LIVE** : le point et le libellé LIVE sont retirés à côté des logos. Le programme et ses horaires restent cliquables pour afficher les émissions à venir.
 
 **1.27.0 · Pastilles World et France** : le widget Pastille Live affiche par défaut les deux logos fournis, chacun relié à sa page de lecture. Le programme en cours apparaît à côté ; son clic ouvre la programmation de l’antenne et les directs annoncés. Les deux horloges se rafraîchissent indépendamment. Dans Elementor, choisissez les deux chaînes ou une seule, remplacez les logos et liens, puis personnalisez leur taille, leur contour, les espacements et les textes.
