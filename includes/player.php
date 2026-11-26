@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/stations.php';
 require_once __DIR__ . '/player-live.php';
 require_once __DIR__ . '/player-live-music.php';
+require_once __DIR__ . '/player-recovery.php';
 
 /** A shared clock and references to existing shows. No video collection or storage. */
 final class BSC_TV_Player {
@@ -274,7 +275,8 @@ final class BSC_TV_Player {
 			// A newer successful channel check supersedes an older manually tracked show.
 			if ( ! empty( $entry['show_id'] ) && ( $channel['state']['live_at'] ?? 0 ) > $entry['confirmed_at'] && empty( $channel['state']['live_error'] ) && ! in_array( self::resource_key( $resource ), array_map( static function ( $row ) { $r = self::resource( $row['url'] ?? '', true ); return $r ? self::resource_key( $r ) : ''; }, $channel['state']['live'] ?? array() ), true ) ) { continue; }
 			$ongoing = ! empty( $settings['live_clock'] ) && $key === ( $active['key'] ?? '' ) && $entry['confirmed_at'] >= ( $active['confirmed_at'] ?? 0 );
-			if ( ! $ongoing && $now - $entry['confirmed_at'] >= BSC_TV_Sync::MAX_LIVE_AGE ) { continue; }
+			$lease = $ongoing ? BSC_TV_Player_Live::STALE_MINUTES * MINUTE_IN_SECONDS : BSC_TV_Sync::MAX_LIVE_AGE;
+			if ( $now - $entry['confirmed_at'] >= $lease ) { continue; }
 			$lives[ $key ] = array( 'key' => $key, 'resource' => $resource, 'channel_id' => $channel['id'], 'show_id' => $entry['show_id'] ?? 0, 'title' => $event['title'], 'image' => BSC_TV_Content::url( $event['image'] ?? '' ), 'start' => (int) $event['start'], 'end' => 0, 'confirmed_at' => $entry['confirmed_at'], 'priority' => (int) ( $channel['config']['priority'] ?? 50 ) );
 		}
 		return $lives;
@@ -415,7 +417,7 @@ final class BSC_TV_Player {
 	}
 
 	public static function begin( $media, &$state ) {
-		$slot = array_intersect_key( $media, array_fill_keys( array( 'show_id', 'key', 'resource', 'channel_id', 'premiere', 'music' ), true ) );
+		$slot = array_intersect_key( $media, array_fill_keys( array( 'show_id', 'key', 'resource', 'channel_id', 'premiere', 'music', 'recovery' ), true ) );
 		$slot['start'] = $media['available'];
 		$slot['end'] = $slot['start'] + $media['duration'];
 		$slot['fixed'] = ! empty( $media['fixed'] );
@@ -549,6 +551,7 @@ final class BSC_TV_Player {
 		$url = 'youtube' === $resource['platform'] ? 'https://www.youtube.com/watch?v=' . $resource['id'] : ( $live ? 'https://www.twitch.tv/' . $resource['id'] : 'https://www.twitch.tv/videos/' . substr( $resource['id'], 1 ) );
 		return array(
 			'key' => $item['key'], 'show_id' => $item['show_id'] ?? 0, 'resource' => $resource, 'url' => $url, 'live' => $live,
+			'confirmed_at' => $live ? (int) ( $item['confirmed_at'] ?? 0 ) : 0, 'recovery' => ! empty( $item['recovery'] ),
 			'title' => html_entity_decode( wp_strip_all_tags( $item['title'] ?? $media['title'] ?? 'BSC TV' ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'creator' => html_entity_decode( wp_strip_all_tags( $profile['name'] ?? ( ( $media['creator'] ?? '' ) ?: ( $channel['name'] ?? '' ) ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'avatar' => BSC_TV_Content::url( $profile['avatar']['thumbnail'] ?? '' ), 'profile_url' => BSC_TV_Content::url( $profile['permalink'] ?? '' ),
@@ -621,7 +624,9 @@ final class BSC_TV_Player {
 		if ( $live && isset( $lives[ $live['key'] ] ) ) {
 			$live['image'] = $lives[ $live['key'] ]['image'] ?? '';
 			$result['current'] = self::decorate( $live, $catalogue, $now, true );
-		} elseif ( ! empty( $state['standby'] ) && ( ( $due && $due['key'] === $state['standby']['key'] ) || ( $state['standby']['relay_until'] ?? 0 ) > $now ) ) {
+			$backup = $state['live_backup'] ?? null;
+			if ( $backup && isset( $catalogue['pool'][ $backup['key'] ] ) && empty( $catalogue['pool'][ $backup['key'] ]['music'] ) && $backup['start'] <= $now && $backup['end'] > $now ) { $result['fallback'] = self::decorate( $backup, $catalogue, $now ); }
+		} elseif ( ! empty( $state['standby'] ) && ( ( $due && $due['key'] === $state['standby']['key'] ) || ( ( $state['standby']['relay_until'] ?? 0 ) > $now && $state['standby']['relay_until'] <= $state['standby']['expected_start'] + ( BSC_TV_Player_Live_Music::WAIT_MINUTES + BSC_TV_Player_Live_Music::MAX_RELAY_MINUTES ) * MINUTE_IN_SECONDS ) ) ) {
 			$result['current'] = self::decorate( $state['standby'], $catalogue, $now );
 		} elseif ( $vod && isset( $catalogue['pool'][ $vod['key'] ] ) && $vod['start'] <= $now && $vod['end'] > $now ) {
 			$result['current'] = self::decorate( $vod, $catalogue, $now );

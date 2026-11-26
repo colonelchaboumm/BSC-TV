@@ -184,7 +184,7 @@ update_post_meta( $channel_id, BSC_TV_Content::STATE, array() ); update_option( 
 $exit = BSC_TV_Player::snapshot( $now + 244 );
 music_check( 'exit' === $exit['current']['music_phase'] && 1 === $exit['current']['offset'], 'Real public snapshot follows the exit screen at its shared time' );
 $after = BSC_TV_Player::snapshot( $now + 247 );
-music_check( null === $after['current'] && $after['next'][0]['start'] === $now + 500, 'Finishing the music does not advance the fixed next beer programme' );
+music_check( ! empty( $after['current']['recovery'] ) && empty( $after['current']['music'] ) && $after['current']['end'] === $now + 500 && $after['next'][0]['start'] === $now + 500, 'A beer filler covers the post-music gap without advancing the fixed next programme' );
 $next_programme = BSC_TV_Player::snapshot( $now + 500 );
 music_check( $show_id === $next_programme['current']['show_id'] && empty( $next_programme['current']['music'] ), 'The next beer show automatically starts at its original fixed time' );
 music_check( $http_calls === $before, 'Public interlude snapshots and daily widget perform zero metadata API calls' );

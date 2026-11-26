@@ -181,7 +181,7 @@ final class BSC_TV_Player_Schedule {
 				$extra = self::build( $forecast, $pool, $settings, $cursor );
 				foreach ( $extra as $row ) { if ( count( $rows ) >= self::MAX_SLOTS || $row['start'] >= $now + self::HOURS * HOUR_IN_SECONDS ) { break; } $rows[] = $row; }
 			}
-			return $rows;
+			return BSC_TV_Player_Recovery::fill_gaps( $rows, $state, $pool, $settings, $now );
 		}
 		if ( class_exists( 'BSC_TV_Music' ) ) { $state = BSC_TV_Music::reconcile( $state, $pool, $settings, $now ); }
 		$forecast = $state;
