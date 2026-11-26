@@ -81,6 +81,7 @@ class TwitchPlayer {
   isPaused() { return !!this.paused; }
   seek(value) { this.seeks.push(value); this.position = value; }
   getCurrentTime() { return this.position; }
+  getEnded() { return !!this.ended; }
 }
 const context = {
   document, location: { origin: 'https://bsc.example', hostname: 'bsc.example' }, performance: { now: () => clockMs },
@@ -250,6 +251,50 @@ loadingAnimations = [];
 response = snapshot(programme('youtube:legacy-film', 'youtube', 'aqz-KE-bpKQ', { start: epoch + 6300, end: epoch + 9900 }));
 await document.fire('visibilitychange'); await settle();
 check(clip.src === 'https://bsc.example/legacy-safe.mp4', 'An older cached markup remains playable when optional library data is absent or malformed');
+// Official live-player failures use the server's station-local beer backup.
+holdYouTube = false; holdTwitch = false; blocked = false;
+const recoveryNow = epoch + clockMs / 1000;
+const rescue = programme('youtube:recovery-beer', 'youtube', 'M7lc1UVf-VE', { title: 'Émission de remplacement', start: recoveryNow - 300, end: recoveryNow + 1800 });
+let liveRecovery = programme('live:twitch:recovery', 'twitch', 'beerstream', { title: 'Vrai direct prolongé', live: true, start: recoveryNow - 7200, end: 0, confirmed_at: recoveryNow });
+response = { ...snapshot(liveRecovery), fallback: rescue }; await document.fire('visibilitychange'); await settle();
+const failingTwitch = twitchPlayers.at(-1); failingTwitch.events.get('offline')(); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title && youtubePlayers.at(-1).seeks[0] === 300, 'Twitch OFFLINE immediately joins the original beer backup at its current offset');
+const rescuedPlayer = youtubePlayers.at(-1); const twitchCount = twitchPlayers.length;
+await document.fire('visibilitychange'); await settle();
+check(youtubePlayers.at(-1) === rescuedPlayer && twitchPlayers.length === twitchCount, 'An unchanged cached live confirmation cannot drag the visitor back into the failed live');
+liveRecovery = { ...liveRecovery, confirmed_at: recoveryNow + 1 }; response = { ...snapshot(liveRecovery), fallback: rescue };
+await document.fire('visibilitychange'); await settle();
+check(twitchPlayers.length === twitchCount + 1 && root.nodes.get('[data-player-title]').textContent === liveRecovery.title, 'A genuinely newer platform confirmation permits retrying the live');
+twitchPlayers.at(-1).events.get('ended')(); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title, 'Twitch ENDED also returns directly to a beer programme');
+liveRecovery = { ...liveRecovery, confirmed_at: recoveryNow + 2 }; response = { ...snapshot(liveRecovery), fallback: rescue };
+await document.fire('visibilitychange'); await settle(); twitchPlayers.at(-1).ended = true; intervals[0](); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title, 'Twitch getEnded recovers even when the offline event was missed');
+response = snapshot(programme('youtube:normal-grid', 'youtube', 'aqz-KE-bpKQ', { title: 'Grille initiale', start: recoveryNow - 900, end: recoveryNow + 1800 }));
+await document.fire('visibilitychange'); await settle();
+check(root.nodes.get('[data-player-title]').textContent === 'Grille initiale' && youtubePlayers.at(-1).seeks[0] === 900, 'When the shared live ends, the client rejoins the original grid offset');
+liveRecovery = programme('live:youtube:recovery', 'youtube', 'aqz-KE-bpKQ', { title: 'Live YouTube prolongé', live: true, start: recoveryNow - 7200, end: 0, confirmed_at: recoveryNow + 2 });
+response = { ...snapshot(liveRecovery), fallback: rescue }; await document.fire('visibilitychange'); await settle();
+youtubePlayers.at(-1).options.events.onError({ data: 150 }); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title, 'A YouTube live embedding error uses the approved beer fallback');
+liveRecovery = { ...liveRecovery, confirmed_at: recoveryNow + 3 }; response = { ...snapshot(liveRecovery), fallback: rescue };
+await document.fire('visibilitychange'); await settle();
+let livePlayer = youtubePlayers.at(-1); livePlayer.pauseVideo(); clockMs += 91000; intervals[0]();
+check(root.nodes.get('[data-player-title]').textContent === liveRecovery.title, 'A visitor pause never triggers live failure recovery');
+livePlayer.options.events.onAutoplayBlocked(); intervals[0]();
+check(root.nodes.get('[data-player-title]').textContent === liveRecovery.title, 'Autoplay refusal is not confused with a broken live');
+livePlayer.state = 3; intervals[0](); clockMs += 89000; intervals[0]();
+check(root.nodes.get('[data-player-title]').textContent === liveRecovery.title, 'A brief buffering interval preserves the live');
+clockMs += 2000; intervals[0](); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title, 'Ninety seconds of stalled YouTube buffering after playback recover to beer');
+liveRecovery = { ...liveRecovery, confirmed_at: epoch + clockMs / 1000 }; response = { ...snapshot(liveRecovery), fallback: rescue };
+await document.fire('visibilitychange'); await settle(); livePlayer = youtubePlayers.at(-1); livePlayer.state = 3; intervals[0]();
+document.hidden = true; await document.fire('visibilitychange'); clockMs += 120000; intervals[0]();
+document.hidden = false; await document.fire('visibilitychange'); await settle(); intervals[0]();
+check(root.nodes.get('[data-player-title]').textContent === liveRecovery.title, 'Time spent in a hidden tab does not count as a stalled-live timeout');
+livePlayer.state = 1; livePlayer.options.events.onStateChange({ data: 1 });
+livePlayer.options.events.onStateChange({ data: 0 }); await settle();
+check(root.nodes.get('[data-player-title]').textContent === rescue.title, 'YouTube ENDED immediately resumes an actual programme');
 response = { ...snapshot(null), enabled: false };
 await document.fire('visibilitychange'); await settle();
 check(publication.hidden && publication.textContent === '' && !publication.getAttribute('datetime'), 'Disabling the antenna clears any publication metadata');

@@ -70,6 +70,9 @@
 			this.generation = 0;
 			this.token = '';
 			this.failedToken = '';
+			this.failedLive = null;
+			this.liveStalledAt = null;
+			this.liveHasPlayed = false;
 			this.player = null;
 			this.loading = false;
 			this.timer = null;
@@ -111,6 +114,7 @@
 			this.animationAudio?.addEventListener('loadedmetadata', () => this.positionAnimationAudio());
 			this.animationAudio?.addEventListener('error', () => { this.failedAnimationAudioSources.add(safeURL(this.animationAudio.src)); this.stopAnimationAudio(); this.controls(); });
 			this.visibility = () => {
+				this.liveStalledAt = null;
 				if (document.hidden) { this.pauseTransition(true); this.musicVideo?.pause(); this.stopAnimationAudio(false); }
 				else { this.claimAutoplay(); if (this.waitingForPlayback && this.transition?.hidden) this.showTransition(); if (this.data?.current?.resource?.platform === 'identity') this.showMusic(this.data.current); this.request(); }
 			};
@@ -285,8 +289,23 @@
 			this.mount.hidden = false;
 			if (!preserveAudio) this.stopAnimationAudio();
 		}
-		playing() { this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
+		playing() { this.liveStalledAt = null; this.liveHasPlayed = !!this.data?.current?.live; this.rejoinAfterSeek = false; this.seek(false, true); this.controls(); this.stopTransition(); this.status(''); }
+		usableFallback(data) {
+			const item = data?.fallback;
+			return item && !item.live && !item.music && !item.standby && Number.isFinite(item.start) && Number.isFinite(item.end) && item.start <= this.now() && item.end > this.now() ? item : null;
+		}
+		recoverLive() {
+			const current = this.data?.current;
+			const fallback = this.usableFallback(this.data);
+			if (!current?.live || !fallback) return false;
+			// A visitor's SDK failure never changes the shared broadcast for other viewers.
+			this.failedLive = { key: current.key, confirmedAt: Number(current.confirmed_at) || 0 };
+			this.data = { ...this.data, current: { ...fallback, local_fallback: true }, next: this.data.next.filter(item => item.start >= fallback.end) };
+			this.render();
+			return true;
+		}
 		ended(message) {
+			if (this.recoverLive()) return;
 			// Seeking to the end of a replay must not skip the shared programme.
 			try {
 				if (!this.data?.current?.live && this.now() < this.data.current.end && this.player.getCurrentTime() > this.position() + 3) {
@@ -382,6 +401,14 @@
 				const data = await response.json();
 				if (!Number.isFinite(data.server_time) || !Array.isArray(data.next)) throw new Error('Programme invalide.');
 				this.clock = data.server_time + (performance.now() - began) / 2000 - performance.now() / 1000;
+				if (this.failedLive) {
+					const current = data.current;
+					if (current?.live && current.key === this.failedLive.key && (Number(current.confirmed_at) || 0) <= this.failedLive.confirmedAt) {
+						const fallback = this.usableFallback(data);
+						data.current = fallback ? { ...fallback, local_fallback: true } : null;
+						if (fallback) data.next = data.next.filter(item => item.start >= fallback.end);
+					} else this.failedLive = null;
+				}
 				this.data = data;
 				this.render();
 			} catch {
@@ -628,6 +655,17 @@
 				if (current && !current.live && !current.standby) progress.value = Math.min(100, Math.max(0, 100 * (this.now() - current.start) / (current.end - current.start)));
 			}
 			if (document.hidden || !current) return;
+			if (current.live && this.ready && current.resource?.platform === 'twitch') {
+				try { if (this.player?.getEnded?.() === true && this.recoverLive()) return; } catch { /* The SDK may be temporarily unavailable. */ }
+			}
+			if (current.live && this.liveHasPlayed && this.ready && current.resource?.platform === 'youtube') {
+				try {
+					if (this.player.getPlayerState() === 3) {
+						this.liveStalledAt ??= this.now();
+						if (this.now() - this.liveStalledAt >= 90 && this.recoverLive()) return;
+					} else this.liveStalledAt = null;
+				} catch { /* Explicit provider errors use the same programme fallback. */ }
+			}
 			this.controls();
 			if (current.end && this.now() >= current.end) {
 				const boundary = `${current.key}/${current.start}/${current.end}`;
@@ -643,8 +681,9 @@
 			else this.seek(false, this.pendingSeek);
 		}
 
-		fail(message) { window.clearTimeout(this.readyTimer); this.stopTransition(); this.failedToken = this.token; this.controls(); this.status(message); }
+		fail(message) { window.clearTimeout(this.readyTimer); if (this.recoverLive()) return; this.stopTransition(); this.failedToken = this.token; this.controls(); this.status(message); }
 		destroy(preserveAudio = false) {
+			this.liveStalledAt = null; this.liveHasPlayed = false;
 			this.stopTransition(preserveAudio);
 			this.stopMusic(preserveAudio);
 			window.clearTimeout(this.readyTimer);

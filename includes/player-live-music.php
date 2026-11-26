@@ -5,43 +5,36 @@ defined( 'ABSPATH' ) || exit;
 final class BSC_TV_Player_Live_Music {
 	const WAIT_MINUTES = 20;
 
+	const MAX_RELAY_MINUTES = 5;
+
 	public static function fallback( $state, $pool, $settings, $now ) {
-		if ( empty( $settings['music']['enabled'] ) || ! array_filter( $pool, static function ( $media ) { return ! empty( $media['music'] ); } ) ) { return null; }
+		if ( empty( $settings['music']['enabled'] ) ) { return null; }
 		$events = array_values( $settings['_announcements'] ?? array() );
 		usort( $events, static function ( $a, $b ) { return $b['expected_start'] <=> $a['expected_start'] ?: $b['priority'] <=> $a['priority']; } );
 		foreach ( $events as $event ) {
 			$cutoff = $event['expected_start'] + self::WAIT_MINUTES * MINUTE_IN_SECONDS;
 			$finished = $state['live_finished'][ BSC_TV_Player::resource_key( $event['resource'] ) ] ?? 0;
-			if ( $cutoff > $now || $event['expected_start'] <= $finished ) { continue; }
-			$until = PHP_INT_MAX;
+			if ( ! empty( $state['live_wait_done'][ $event['key'] ] ) || $cutoff > $now || $event['expected_start'] <= $finished ) { continue; }
+			$until = $cutoff + self::MAX_RELAY_MINUTES * MINUTE_IN_SECONDS;
 			foreach ( array_merge( array_filter( array( $state['vod'] ?? null ) ), $state['plan'] ?? array() ) as $row ) {
 				if ( empty( $row['music'] ) && $row['start'] >= $cutoff ) { $until = min( $until, $row['start'] ); }
 			}
 			foreach ( $events as $next ) { if ( $next['start'] > $cutoff ) { $until = min( $until, $next['start'] ); } }
-			if ( PHP_INT_MAX === $until || $now >= $until ) { continue; }
+			if ( $now >= $until ) { continue; }
 			$saved = $state['standby'] ?? array();
-			$rows = ( $saved['key'] ?? '' ) === $event['key'] && ( $saved['relay_until'] ?? 0 ) === $until ? ( $saved['relay_slots'] ?? array() ) : array();
-			// A revoked clip must disappear immediately, including from an already prepared relay.
-			$rows = array_values( array_filter( $rows, static function ( $row ) use ( $pool, $settings ) {
+			$row = null;
+			if ( ( $saved['key'] ?? '' ) === $event['key'] && ! empty( $saved['relay_slots'] ) ) {
+				$row = $saved['relay_slots'][0];
 				$media = $pool[ $row['key'] ] ?? array();
 				$category = BSC_TV_Music::category( $row['start'], $settings['music'] );
-				return ! empty( $media['music'] ) && $category && in_array( $category, $media['music']['categories'] ?? array(), true );
-			} ) );
-			$cursor = $cutoff;
-			$forecast = $state;
-			foreach ( $rows as $row ) { $cursor = max( $cursor, $row['end'] ); BSC_TV_Music::begun( $forecast, $row ); }
-			if ( ! $rows && ! empty( $saved['relay_until'] ) ) { $cursor = max( $cursor, $now ); }
-			while ( count( $rows ) < 100 && $cursor < $until ) {
-				$media = BSC_TV_Music::waiting( $pool, $forecast, $settings, $cursor, $until );
-				if ( ! $media ) { break; }
+				if ( $row['start'] !== $cutoff || $row['end'] <= $now || $row['end'] > $until || empty( $media['music'] ) || ! $category || ! in_array( $category, $media['music']['categories'] ?? array(), true ) ) { return null; }
+			} else {
+				$media = BSC_TV_Music::waiting( $pool, $state, $settings, $cutoff, $until );
+				if ( ! $media || $cutoff + $media['duration'] <= $now ) { return null; }
 				$row = array_intersect_key( $media, array_flip( array( 'key', 'resource', 'channel_id', 'show_id', 'music' ) ) );
-				$row += array( 'start' => $cursor, 'end' => $cursor + $media['duration'], 'waiting_music' => true );
-				$rows[] = $row;
-				BSC_TV_Music::begun( $forecast, $row );
-				$cursor = $row['end'];
+				$row += array( 'start' => $cutoff, 'end' => $cutoff + $media['duration'], 'waiting_music' => true );
 			}
-			if ( ! $rows ) { return null; }
-			$event['relay_start'] = $cutoff; $event['relay_until'] = $until; $event['relay_slots'] = $rows;
+			$event['relay_start'] = $cutoff; $event['relay_until'] = $row['end']; $event['relay_slots'] = array( $row );
 			$event['start'] = ( $saved['key'] ?? '' ) === $event['key'] ? $saved['start'] : $cutoff;
 			$event['relay_current'] = ( $saved['key'] ?? '' ) === $event['key'] ? ( $saved['relay_current'] ?? '' ) : '';
 			return $event;

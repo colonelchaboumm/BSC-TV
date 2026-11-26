@@ -3,6 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 /** Live is an overlay on the saved wall clock, never a pause of the replay queue. */
 final class BSC_TV_Player_Live {
+	const STALE_MINUTES = 40;
 
 	public static function announcements( $catalogue, $settings ) {
 		if ( empty( $settings['live_priority'] ) || empty( BSC_TV_Sync::settings()['live_enabled'] ) ) { return array(); }
@@ -58,6 +59,7 @@ final class BSC_TV_Player_Live {
 			$media['plan_end'] = $row['end'];
 			$media['fixed'] = $row['fixed'] ?? true;
 			if ( ! empty( $row['music'] ) ) { $media['music'] = $row['music']; }
+			if ( ! empty( $row['recovery'] ) ) { $media['recovery'] = true; }
 			$state['vod'] = BSC_TV_Player::begin( $media, $state );
 			if ( $resume ) { $state['aired'][ count( $state['aired'] ) - 1 ]['start'] = $now; }
 			if ( class_exists( 'BSC_TV_Music' ) ) { BSC_TV_Music::tally( $state, $state['vod'], $now ); }
@@ -70,20 +72,30 @@ final class BSC_TV_Player_Live {
 
 	public static function advance( $state, $pool, $lives, $settings, $now ) {
 		$state += array( 'vod' => null, 'live' => null, 'standby' => null, 'paused_at' => 0, 'history' => array(), 'manual' => array(), 'plan' => array(), 'premiered' => array() );
+		$state = BSC_TV_Player_Recovery::repair( $state, $pool, $now );
+		$state['live_wait_done'] = array_slice( array_filter( $state['live_wait_done'] ?? array(), static function ( $at ) use ( $now ) { return $at >= $now - 8 * DAY_IN_SECONDS; } ), -500, null, true );
 		$state['live_finished'] = array_slice( array_filter( $state['live_finished'] ?? array(), static function ( $at ) use ( $now ) { return $at >= $now - 8 * DAY_IN_SECONDS; } ), -500, null, true );
 		$was_overlay = $state['live'] || $state['standby'];
 		if ( $state['live'] && isset( $lives[ $state['live']['key'] ] ) ) {
 			// Fresh confirmations update metadata, but never restart or cap an ongoing broadcast.
 			$state['live'] = array_replace( $state['live'], $lives[ $state['live']['key'] ] );
-			return $state;
+			return BSC_TV_Player_Recovery::backup( $state, $pool, $settings, $now );
 		}
 		if ( $state['live'] ) {
+			$state['live_return'] = array( 'at' => $now, 'reason' => $now - ( $state['live']['confirmed_at'] ?? $now ) >= self::STALE_MINUTES * MINUTE_IN_SECONDS ? 'stale' : 'ended', 'title' => $state['live']['title'] ?? '' );
 			$state['live_finished'][ BSC_TV_Player::resource_key( $state['live']['resource'] ) ] = $now;
 			self::close( $state, $now );
 			$state['live'] = null;
+			$state['live_backup'] = null;
 		}
 		$waiting = self::upcoming( $state, $settings, $now, true );
 		if ( ! $waiting ) { $waiting = BSC_TV_Player_Live_Music::fallback( $state, $pool, $settings, $now ); }
+		foreach ( $settings['_announcements'] ?? array() as $event ) {
+			if ( empty( $state['live_wait_done'][ $event['key'] ] ) && $event['expected_start'] + BSC_TV_Player_Live_Music::WAIT_MINUTES * MINUTE_IN_SECONDS <= $now && ( $waiting['key'] ?? '' ) !== $event['key'] ) {
+				$state['live_wait_done'][ $event['key'] ] = $now;
+				$state['live_return'] = array( 'at' => $now, 'reason' => 'missed', 'title' => $event['title'] ?? '' );
+			}
+		}
 		$live = null;
 		if ( $lives ) {
 			usort( $lives, static function ( $a, $b ) { return $b['priority'] <=> $a['priority'] ?: $a['start'] <=> $b['start'] ?: strcmp( $a['key'], $b['key'] ); } );
@@ -109,14 +121,15 @@ final class BSC_TV_Player_Live {
 			$overlay['start'] = $live ? $overlay['start'] : $at;
 			$state[ $live ? 'live' : 'standby' ] = $overlay;
 			if ( empty( $overlay['relay_until'] ) ) { BSC_TV_Player::log_slot( $state, $overlay, $at, 0, (bool) $live ); }
+			if ( $live ) { return BSC_TV_Player_Recovery::backup( $state, $pool, $settings, $now ); }
 			return ! empty( $overlay['relay_until'] ) ? BSC_TV_Player_Live_Music::sync( $state, $now ) : $state;
 		}
 		if ( $was_overlay || ( $state['live_grid_until'] ?? 0 ) > $now ) {
 			$state['paused_at'] = 0;
-			return self::seek( $state, $pool, $settings, $now, (bool) $was_overlay );
+			return BSC_TV_Player_Recovery::ensure( self::seek( $state, $pool, $settings, $now, (bool) $was_overlay ), $pool, $settings, $now );
 		}
 		$settings['live_clock'] = false;
-		return BSC_TV_Player::advance( $state, $pool, array(), $settings, $now );
+		return BSC_TV_Player_Recovery::ensure( BSC_TV_Player::advance( $state, $pool, array(), $settings, $now ), $pool, $settings, $now );
 	}
 
 	/** Finite, shared animation phases let every viewer loop the same BSC identities. */

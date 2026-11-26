@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.28.0 · Reprise des émissions après les directs** : un live absent reçoit au plus un clip de transition, dans une limite de cinq minutes après les 20 minutes d’attente, puis une émission reprend. Les trous de grille sont comblés par des programmes éligibles sans décaler les émissions conservées. Un vrai direct toujours confirmé peut dépasser ; sa fin rejoint la grille initiale à l’heure courante. Une confirmation périmée depuis 40 minutes est abandonnée. Le lecteur possède aussi une émission de remplacement en cas d’erreur du lecteur officiel. [Fonctionnement et limites](LIVE_PLAYER.md#reprise-et-réparation-de-grille-1280).
+
 **1.27.3 · Ligne logo + programme** : le mode World et France affiche simplement `[logo World + programme] [logo France + programme]`. Les groupes suivent leur largeur naturelle, avec une taille de texte lisible. Les titres longs peuvent occuper plusieurs lignes dans leur groupe ; les horaires restent dans les déroulants.
 
 **1.27.2 · Chaînes côte à côte** : World et France gardent deux colonnes, y compris sur mobile et dans un menu étroit. Les logos et les textes se réduisent pour conserver les deux programmes sur la même ligne.

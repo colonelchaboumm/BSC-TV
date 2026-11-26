@@ -50,7 +50,7 @@ update_post_meta( $channel, BSC_TV_Content::STATE, $source );
 live_check( BSC_TV_Player::snapshot( $now + 1500 )['current']['live'], 'Estimated schedule end never stops a freshly confirmed live' );
 $source['live_error'] = 'Temporary API outage';
 update_post_meta( $channel, BSC_TV_Content::STATE, $source );
-live_check( BSC_TV_Player::snapshot( $now + 8000 )['current']['live'], 'A temporary API outage does not invent the end of the current live' );
+live_check( BSC_TV_Player::snapshot( $now + 1800 )['current']['live'], 'A temporary API outage does not invent the end of the current live' );
 live_check( $initial['plan'] === array_slice( get_option( BSC_TV_Player::STATE )['plan'], 0, count( $initial['plan'] ) ), 'A live overrun does not shift the original grid' );
 $source['live'] = array(); $source['live_at'] = $now + 8100; $source['live_error'] = '';
 update_post_meta( $channel, BSC_TV_Content::STATE, $source );
