@@ -84,10 +84,11 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 		$this->start_controls_section( 'badge_content', array( 'label' => 'Bouton et ouverture' ) );
 		foreach ( array( 'show_highlight_title' => 'Titre de l’émission dans le bouton', 'show_highlight_date' => 'Date et heure dans le bouton' ) as $key => $label ) {
 			$control = array( 'label' => $label, 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' );
-			if ( 'show_highlight_date' === $key ) { $control['condition'] = array( 'badge_stations' => 'single' ); }
+			$control['condition'] = array( 'badge_stations' => 'single' );
 			$this->add_control( $key, $control );
 		}
 		$this->add_control( 'panel_mode', array( 'label' => 'Ouverture', 'type' => Controls_Manager::SELECT, 'default' => 'dropdown', 'options' => array( 'dropdown' => 'Panneau déroulant', 'inline' => 'Déplier sous le bouton' ) ) );
+		$this->add_control( 'pulse', array( 'label' => 'Animer le point LIVE', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'condition' => array( 'badge_stations' => 'both' ), 'description' => 'LIVE puis les logos World et France. Cliquez sur un logo pour afficher son programme. Le point reste fixe si le visiteur réduit les animations.' ) );
 		$this->add_control( 'show_player_current', array( 'label' => 'Afficher l’émission BSC TV en cours', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes', 'description' => 'Priorité à l’émission diffusée dans Le live, y compris un replay. Sans programme en cours, reprend les directs et annonces des plateformes.' ) );
 		$this->add_control( 'show_watch_link', array( 'label' => 'Bouton pour regarder Le live', 'type' => Controls_Manager::SWITCHER, 'return_value' => 'yes', 'default' => 'yes' ) );
 		$this->add_control( 'watch_url', array( 'label' => 'Lien vers la page Le live', 'type' => Controls_Manager::URL, 'options' => array( 'url' ), 'default' => array( 'url' => BSC_TV_Display::LIVE_PAGE ), 'condition' => array( 'badge_stations' => 'single' ) ) );
@@ -97,6 +98,13 @@ class BSC_TV_Programme_Widget extends Elementor\Widget_Base {
 
 	private function badge_style_controls() {
 		$root = '{{WRAPPER}} .bsc-tv--badge';
+		$stations = '{{WRAPPER}} .bsc-tv-stations';
+		$this->start_controls_section( 'badge_live_style', array( 'label' => 'Indicateur LIVE', 'tab' => Controls_Manager::TAB_STYLE, 'condition' => array( 'badge_stations' => 'both' ) ) );
+		foreach ( array( 'live-text' => 'Couleur du texte LIVE', 'dot-color' => 'Couleur du point' ) as $key => $label ) { $this->add_control( 'badge_' . $key, array( 'label' => $label, 'type' => Controls_Manager::COLOR, 'selectors' => array( $stations => '--bsc-tv-badge-' . $key . ': {{VALUE}};' ) ) ); }
+		$this->badge_slider( $stations, 'dot-size', 'Taille du point', 3, 24 );
+		$this->badge_slider( $stations, 'live-gap', 'Espace entre le point et LIVE', 0, 24 );
+		$this->add_group_control( Group_Control_Typography::get_type(), array( 'name' => 'badge_live_typography', 'label' => 'Texte LIVE', 'selector' => $stations . ' .bsc-tv-stations__live' ) );
+		$this->end_controls_section();
 		$this->start_controls_section( 'badge_station_style', array( 'label' => 'Logos et disposition des chaînes', 'tab' => Controls_Manager::TAB_STYLE ) );
 		$this->add_responsive_control( 'badge_stations_gap', array( 'label' => 'Espace entre les chaînes', 'type' => Controls_Manager::SLIDER, 'range' => array( 'px' => array( 'min' => 0, 'max' => 80 ) ), 'selectors' => array( '{{WRAPPER}} .bsc-tv-stations' => '--bsc-tv-stations-gap: {{SIZE}}{{UNIT}};' ) ) );
 		foreach ( array( 'logo-size' => array( 'Taille du logo', 24, 180 ), 'logo-gap' => array( 'Espace logo / programme', 0, 48 ), 'logo-radius' => array( 'Arrondi du logo', 0, 90 ), 'logo-padding' => array( 'Marge intérieure du logo', 0, 24 ), 'logo-border-width' => array( 'Épaisseur du contour du logo', 0, 10 ) ) as $key => $control ) { $this->badge_slider( $root, $key, $control[0], $control[1], $control[2] ); }

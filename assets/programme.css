@@ -120,6 +120,12 @@
 
 .bsc-tv-stations { display: inline-flex; flex-flow: row nowrap; align-items: center; gap: var(--bsc-tv-stations-gap, 24px); inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; }
 .bsc-tv-stations > .bsc-tv--badge { flex: 0 1 auto; inline-size: auto; min-inline-size: 0; max-inline-size: none; }
+.bsc-tv-stations__live { display: inline-flex; flex: none; align-items: center; gap: var(--bsc-tv-badge-live-gap, 7px); color: var(--bsc-tv-badge-live-text, var(--bsc-tv-live)); font-size: 14px; font-weight: 900; line-height: 1; white-space: nowrap; }
+.bsc-tv-stations__live strong { font-weight: inherit; }
+.bsc-tv-stations__live .bsc-tv-badge__dot { display: block; flex: none; inline-size: var(--bsc-tv-badge-dot-size, 9px); block-size: var(--bsc-tv-badge-dot-size, 9px); border-radius: 50%; background: var(--bsc-tv-badge-dot-color, var(--bsc-tv-live)); }
+.bsc-tv-stations[data-bsc-tv-pulse="yes"] .bsc-tv-badge__dot { animation: bsc-tv-badge-pulse 1.4s ease-in-out infinite; }
+@keyframes bsc-tv-badge-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .bsc-tv-stations[data-bsc-tv-pulse="yes"] .bsc-tv-badge__dot { animation: none; } }
 .bsc-tv.bsc-tv--station-badge { display: flex; align-items: center; gap: var(--bsc-tv-badge-logo-gap, 10px); justify-content: var(--bsc-tv-badge-align, start); }
 .bsc-tv--station-badge > .bsc-tv-badge { flex: 1 1 auto; min-inline-size: 0; }
 .bsc-tv .bsc-tv-badge__station-link { flex: 0 0 auto; inline-size: var(--bsc-tv-badge-logo-size, 80px); max-inline-size: 40%; border: var(--bsc-tv-badge-logo-border-width, 0px) solid var(--bsc-tv-badge-logo-border, #d9dedb); border-radius: var(--bsc-tv-badge-logo-radius, 8px); padding: var(--bsc-tv-badge-logo-padding, 0px); background: var(--bsc-tv-badge-logo-background, #000); overflow: hidden; }
@@ -158,6 +164,10 @@
 .bsc-tv-badge__trigger::-webkit-details-marker { display: none; }
 .bsc-tv-badge__trigger:hover, .bsc-tv-badge[open] > .bsc-tv-badge__trigger { border-color: var(--bsc-tv-accent); }
 .bsc-tv-badge__trigger:focus-visible { outline: 3px solid var(--bsc-tv-accent); outline-offset: 3px; }
+.bsc-tv-stations .bsc-tv-badge__trigger--logo { justify-content: center; inline-size: max(44px, var(--bsc-tv-badge-logo-size, 48px)); padding: var(--bsc-tv-badge-logo-padding, 0px); background: var(--bsc-tv-badge-button-background, var(--bsc-tv-badge-logo-background, #000)); border: var(--bsc-tv-badge-logo-border-width, 1px) solid var(--bsc-tv-badge-logo-border, var(--bsc-tv-badge-button-border, transparent)); border-radius: var(--bsc-tv-badge-logo-radius, var(--bsc-tv-badge-button-radius, 8px)); overflow: hidden; }
+.bsc-tv-stations .bsc-tv-badge__trigger--logo:hover, .bsc-tv-stations .bsc-tv-badge[open] > .bsc-tv-badge__trigger--logo { border-color: var(--bsc-tv-accent); }
+.bsc-tv-badge__logo-fallback { padding: 8px 2px; font-size: .7rem; font-weight: 750; }
+.bsc-tv-badge__logo-fallback[hidden] { display: none; }
 .bsc-tv-badge__details { display: grid; gap: 2px; min-inline-size: 0; }
 .bsc-tv-badge__details[hidden] { display: none; }
 .bsc-tv-badge__title { font-size: .86rem; font-weight: 750; line-height: 1.15; max-inline-size: 29ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -204,5 +214,5 @@
 @media (max-width: 480px) {
  .bsc-tv-stations { gap: var(--bsc-tv-stations-gap, 12px); }
  .bsc-tv-stations > .bsc-tv--badge { --bsc-tv-badge-logo-gap: 6px; --bsc-tv-badge-button-gap: 6px; }
- .bsc-tv-stations .bsc-tv-badge__trigger { padding: 6px; }
+ .bsc-tv-stations .bsc-tv-badge__trigger:not(.bsc-tv-badge__trigger--logo) { padding: 6px; }
 }

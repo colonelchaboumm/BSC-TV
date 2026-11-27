@@ -30,19 +30,22 @@ $settings = array( 'format' => 'badge', 'badge_stations' => 'both', 'image' => 1
 $html = BSC_TV_Display::render( $settings );
 $dom = new DOMDocument(); @$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html ); $xpath = new DOMXPath( $dom );
 badge_check( 2 === $xpath->query( '//div[@data-bsc-tv-station]' )->length, 'A single widget renders both station badges' );
+badge_check( 1 === $xpath->query( '//span[@class="bsc-tv-stations__live"]/strong[text()="LIVE"]' )->length && 1 === $xpath->query( '//span[@class="bsc-tv-badge__dot"]' )->length, 'A single LIVE indicator and dot precede the two channel logos' );
+badge_check( $xpath->query( '//div[contains(@class,"bsc-tv-stations")]/span/following-sibling::div[1]' )->item( 0 )->getAttribute( 'data-bsc-tv-station' ) === 'main' && $xpath->query( '//div[contains(@class,"bsc-tv-stations")]/span/following-sibling::div[2]' )->item( 0 )->getAttribute( 'data-bsc-tv-station' ) === 'fr', 'The visible row is ordered LIVE, World, France' );
 foreach ( array( 'main' => BSC_TV_Display::LIVE_PAGE, 'fr' => BSC_TV_Display::FR_PAGE ) as $id => $url ) {
 	$root = '//div[@data-bsc-tv-station="' . $id . '"]';
-	$logo = $xpath->query( $root . '/a[contains(@class,"station-link")]' )->item( 0 );
-	badge_check( $logo && $logo->getAttribute( 'href' ) === $url, 'The logo links to its exact station viewing page: ' . $id );
-	badge_check( $xpath->query( $root . '//summary//a' )->length === 0, 'Navigation is outside the dropdown summary: ' . $id );
-	badge_check( false !== strpos( $logo->textContent . $logo->getAttribute( 'aria-label' ), BSC_TV_Stations::brand( $id )['name'] ), 'The station logo link has an accessible station name: ' . $id );
+	$logo = $xpath->query( $root . '//summary' )->item( 0 );
+	badge_check( 1 === $xpath->query( $root . '//a[contains(@class,"bsc-tv-watch") and @href="' . $url . '"]' )->length, 'The watch link inside the dropdown leads to the exact station page: ' . $id );
+	badge_check( $xpath->query( $root . '//summary//a' )->length === 0 && $xpath->query( $root . '/a' )->length === 0, 'The logo opens its programme instead of navigating away: ' . $id );
+	badge_check( false !== strpos( $logo->getAttribute( 'aria-label' ), BSC_TV_Stations::brand( $id )['name'] ), 'The logo trigger has an accessible station name: ' . $id );
 	badge_check( BSC_TV_Stations::brand( $id )['logo'] === $logo->getElementsByTagName( 'img' )->item( 0 )->getAttribute( 'src' ), 'The supplied logo is used by default: ' . $id );
 	badge_check( false !== strpos( html_entity_decode( $xpath->query( $root )->item( 0 )->getAttribute( 'data-bsc-tv' ) ), 'station=' . $id ), 'Each station polls its own local endpoint: ' . $id );
+	badge_check( 1 === $xpath->query( $root . '//details[@data-bsc-tv-open="click" and not(@open)]' )->length && $xpath->query( $root . '//summary//*[contains(@class,"bsc-tv-badge__title") or contains(@class,"chevron")]' )->length === 0, 'Only the logo is visible until its programme is opened by click: ' . $id );
 }
-$world_summary = $xpath->query( '//div[@data-bsc-tv-station="main"]//summary' )->item( 0 )->textContent;
-$fr_summary = $xpath->query( '//div[@data-bsc-tv-station="fr"]//summary' )->item( 0 )->textContent;
-badge_check( false !== strpos( $world_summary, 'Programme de l’antenne BSC' ) && false === strpos( $world_summary, 'Dégustation française en cours' ), 'World shows the programme on its own clock' );
-badge_check( false !== strpos( $fr_summary, 'Dégustation française en cours' ) && false === strpos( $fr_summary, 'Programme de l’antenne BSC' ), 'France shows the programme on its own clock' );
+$world_panel = $xpath->query( '//div[@data-bsc-tv-station="main"]//article[@data-bsc-tv-current]' )->item( 0 )->textContent;
+$fr_panel = $xpath->query( '//div[@data-bsc-tv-station="fr"]//article[@data-bsc-tv-current]' )->item( 0 )->textContent;
+badge_check( false !== strpos( $world_panel, 'Programme de l’antenne BSC' ) && false === strpos( $world_panel, 'Dégustation française en cours' ), 'World displays its current programme inside its own dropdown' );
+badge_check( false !== strpos( $fr_panel, 'Dégustation française en cours' ) && false === strpos( $fr_panel, 'Programme de l’antenne BSC' ), 'France displays its current programme inside its own dropdown' );
 $fr = badge_response( array( 'station' => 'fr' ) )->get_data();
 badge_check( 'Dégustation française en cours' === $fr['highlight']['title'] && false !== strpos( $fr['html'], 'Rencontre française à venir' ), 'The French refresh includes its current and next scheduled programmes' );
 badge_check( false === strpos( $fr['html'], 'Programme de l’antenne BSC' ) && false === strpos( $fr['html'], 'Futur direct de la plateforme' ), 'English-only source schedules do not leak into the French dropdown' );
@@ -50,6 +53,7 @@ $single = BSC_TV_Display::render( array( 'format' => 'badge', 'badge_stations' =
 badge_check( 1 === substr_count( $single, 'data-bsc-tv-station=' ) && false !== strpos( $single, BSC_TV_Display::FR_PAGE ), 'Single-station mode remains available and uses the French page' );
 $hidden = BSC_TV_Display::render( $settings + array( 'show_station_logo' => '' ) );
 badge_check( false === strpos( $hidden, 'station-logo' ), 'Logos can be hidden without removing station programmes' );
+badge_check( false !== strpos( BSC_TV_Display::render( $settings + array( 'pulse' => '' ) ), 'data-bsc-tv-pulse=""' ), 'The LIVE dot animation can be disabled' );
 $custom = BSC_TV_Display::render( $settings + array( 'world_logo' => array( 'url' => 'https://example.com/world.png' ), 'fr_logo' => array( 'url' => 'https://example.com/fr.png' ), 'world_watch_url' => array( 'url' => 'https://example.com/world/' ), 'fr_watch_url' => array( 'url' => 'https://example.com/fr/' ) ) );
 badge_check( false !== strpos( $custom, 'src="https://example.com/world.png"' ) && false !== strpos( $custom, 'src="https://example.com/fr.png"' ) && false !== strpos( $custom, 'href="https://example.com/fr/"' ), 'Elementor media and URL values customize the two station identities independently' );
 $hostile = BSC_TV_Display::render( $settings + array( 'fr_logo' => array( 'url' => 'javascript:alert(1)' ), 'fr_watch_url' => array( 'url' => 'javascript:alert(1)' ) ) );
@@ -58,6 +62,7 @@ badge_check( 2 === substr_count( do_shortcode( '[bsc_tv format="badge" badge_sta
 $widget = Elementor\Plugin::instance()->widgets_manager->get_widget_types( 'bsc-tv-badge' ); $stack = $widget->get_stack( false ); $controls = $stack['controls'] + ( $stack['style_controls'] ?? array() );
 badge_check( 'both' === $controls['badge_stations']['default'] && 'yes' === $controls['show_station_logo']['default'], 'Elementor enables both station logos by default' );
 badge_check( isset( $controls['badge_logo-size'], $controls['badge_logo-border'], $controls['badge_stations_gap'], $controls['badge_station_name_typography_font_size'] ), 'Logo size, border, spacing and station typography are customizable' );
+badge_check( isset( $controls['badge_live-text'], $controls['badge_dot-color'], $controls['badge_dot-size'], $controls['badge_live_typography_font_size'] ) && 'yes' === $controls['pulse']['default'], 'Elementor offers LIVE typography, dot colours, size and animation' );
 badge_check( 0 === $requests && ! wp_script_is( 'bsc-tv-player', 'enqueued' ), 'Two station badges make no platform requests and load no player SDK' );
 
 if ( ! empty( $argv[2] ) ) {

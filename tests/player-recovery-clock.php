@@ -55,6 +55,17 @@ live_check( array( $future ) === $saved_future, 'Preparing the repaired grid nev
 $resume = BSC_TV_Player::advance( $prepared, $all, array(), $normal, $future['start'] + 600 );
 live_check( $resume['vod']['start'] === $future['start'] && $resume['vod']['key'] === $future['key'], 'The original programme is rejoined at its original offset after gap fillers' );
 
+// A premiere published later is still an original wall-clock boundary.
+$premiere = live_media( 13, $now ); $premiere['published_at'] = $now + 600;
+$premiere_pool = $all + array( $premiere['key'] => $premiere );
+$premiere_row = $future; $premiere_row['key'] = $premiere['key']; $premiere_row['resource'] = $premiere['resource']; $premiere_row['start'] = $now + 600; $premiere_row['end'] = $premiere_row['start'] + $premiere['duration'];
+$before_premiere = $gap; $before_premiere['plan'] = array( $premiere_row );
+$bounded = BSC_TV_Player_Recovery::ensure( $before_premiere, $premiere_pool, $normal, $now );
+live_check( $bounded['vod']['key'] !== $premiere['key'] && $bounded['vod']['end'] === $premiere_row['start'] && $bounded['plan'] === array( $premiere_row ), 'A published replacement stops at the future-publication anchor without moving or prematurely selecting it' );
+$before_premiere['vod'] = $premiere_row; $before_premiere['plan'] = array();
+$bounded = BSC_TV_Player_Recovery::ensure( $before_premiere, $premiere_pool, $normal, $now );
+live_check( $bounded['vod']['end'] === $premiere_row['start'] && $bounded['plan'] === array( $premiere_row ), 'A future current premiere is preserved as an anchor before selecting a gap replacement' );
+
 // Reproduce World: an old relay whose programmed deadline was many hours away.
 $old = $announcement; $old['expected_start'] = $now - 7200; $old['start'] = $old['expected_start'] - 120; $old['key'] = 'waiting:old';
 $legacy = $gap; $legacy['standby'] = $old + array( 'relay_start' => $now - 6000, 'relay_until' => $now + DAY_IN_SECONDS, 'relay_slots' => array( $orphan ) );

@@ -115,7 +115,23 @@ frBadge.open = true; frResponse = result('Émission française suivante'); await
 check(frTitle.textContent === 'Émission française suivante' && title.textContent === response.highlight.title && frBadge.open, 'A French transition preserves its dropdown and does not overwrite the World title');
 frResponse = result('À venir en France', 'upcoming'); await advance(10000);
 check(french.dataset.bscTvState === 'upcoming' && first.dataset.bscTvState !== 'upcoming', 'Each station keeps an independent LIVE status');
-const logo = new Element('logo'); logo.parent = first; badge.open = true; prevented = false;
+// New logo triggers reveal programmes only on click; old cached menus retain hover.
+frBadge.open = false; frBadge.dataset.bscTvOpen = 'click';
+const logo = new Element('logo'); logo.parent = frBadge.querySelector('.bsc-tv-badge__trigger'); prevented = false;
+await fire('pointerover', { pointerType: 'mouse', target: logo, relatedTarget: null }); await advance(300);
+check(!frBadge.open, 'Hovering a channel logo does not reveal its programme');
 await fire('click', { target: logo, pointerType: 'mouse', detail: 1, preventDefault() { prevented = true; } });
-check(!prevented, 'The logo beside the summary remains a normal navigation link');
+check(!prevented, 'Clicking the channel logo keeps the native summary toggle accessible');
+frBadge.open = true; await fire('toggle', { target: frBadge });
+await fire('pointerout', { pointerType: 'mouse', target: logo, relatedTarget: null }); await advance(600);
+check(frBadge.open, 'A programme opened by clicking its logo remains visible after moving the pointer away');
+const beforeRefresh = frBadge.querySelector('.bsc-tv-badge__trigger');
+frBadge.nodes.delete('.bsc-tv-badge__title'); frBadge.nodes.delete('.bsc-tv-badge__date'); frBadge.nodes.delete('.bsc-tv-badge__details');
+frResponse = result('Nouveau programme derrière le logo'); await fire('visibilitychange');
+check(frBadge.open && frBadge.querySelector('.bsc-tv-badge__trigger') === beforeRefresh && french.querySelector('.bsc-tv-programme').innerHTML === frResponse.html, 'AJAX refresh updates the programme without replacing the logo or closing its panel');
+await fire('click', { target: badge.querySelector('.bsc-tv-badge__trigger'), pointerType: 'mouse', detail: 1, preventDefault() {} });
+check(!frBadge.open, 'Opening the other station closes the previously displayed programme');
+frBadge.open = true;
+await fire('keydown', { key: 'Escape', defaultPrevented: false, target: logo, preventDefault() {} });
+check(!frBadge.open && document.activeElement === frBadge.querySelector('.bsc-tv-badge__trigger'), 'Escape closes the programme and returns focus to the channel logo');
 console.log(`OK ${checks} badge browser checks.`);
