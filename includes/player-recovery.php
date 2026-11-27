@@ -27,13 +27,14 @@ final class BSC_TV_Player_Recovery {
 	public static function ensure( $state, $pool, $settings, $now, $prefer_programme = false ) {
 		$vod = $state['vod'] ?? null;
 		if ( $vod && isset( $pool[ $vod['key'] ] ) && $vod['start'] <= $now && $vod['end'] > $now && ( ! $prefer_programme || empty( $vod['music'] ) ) ) { return $state; }
-		$programmes = array_filter( $pool, static function ( $media ) use ( $now ) { return empty( $media['music'] ) && $media['duration'] > 0 && $media['published_at'] <= $now; } );
+		$anchors = array_filter( $pool, static function ( $media ) { return empty( $media['music'] ) && $media['duration'] > 0; } );
+		$programmes = array_filter( $anchors, static function ( $media ) use ( $now ) { return $media['published_at'] <= $now; } );
 		if ( ! $programmes ) {
 			if ( 'no_programme' !== ( $state['recovery_notice']['reason'] ?? '' ) ) { $state['recovery_notice'] = array( 'at' => $now, 'reason' => 'no_programme' ); }
 			return $state;
 		}
 		// Keep a future current slot as an anchor when migrating an older clock.
-		if ( $vod && $vod['start'] > $now && empty( $vod['music'] ) && isset( $programmes[ $vod['key'] ] ) ) {
+		if ( $vod && $vod['start'] > $now && empty( $vod['music'] ) && isset( $anchors[ $vod['key'] ] ) ) {
 			$exists = array_filter( $state['plan'] ?? array(), static function ( $row ) use ( $vod ) { return $row['key'] === $vod['key'] && $row['start'] === $vod['start']; } );
 			if ( ! $exists ) { $vod['id'] = $vod['id'] ?? substr( hash( 'sha256', $vod['key'] . ':' . $vod['start'] ), 0, 24 ); $state['plan'][] = $vod; }
 		}
@@ -47,7 +48,7 @@ final class BSC_TV_Player_Recovery {
 		}
 		$until = PHP_INT_MAX;
 		foreach ( $state['plan'] ?? array() as $row ) {
-			if ( empty( $row['music'] ) && isset( $programmes[ $row['key'] ] ) && $row['start'] > $now ) { $until = min( $until, $row['start'] ); }
+			if ( empty( $row['music'] ) && isset( $anchors[ $row['key'] ] ) && $row['start'] > $now ) { $until = min( $until, $row['start'] ); }
 		}
 		$waiting = BSC_TV_Player_Live::upcoming( $state, $settings, $now );
 		if ( $waiting && $waiting['start'] > $now ) { $until = min( $until, $waiting['start'] ); }
