@@ -341,10 +341,11 @@ final class BSC_TV_Display {
 
 	public static function render( $settings ) {
 		if ( 'badge' === ( $settings['format'] ?? '' ) && 'both' === ( $settings['badge_stations'] ?? '' ) ) {
-			$html = '<div class="bsc-tv-stations" role="group" aria-label="Brewers Television World et France">';
+			$html = '<div class="bsc-tv bsc-tv-stations" role="group" aria-label="Brewers Television World et France" data-bsc-tv-pulse="' . esc_attr( $settings['pulse'] ?? 'yes' ) . '"><span class="bsc-tv-stations__live"><span class="bsc-tv-badge__dot" aria-hidden="true"></span><strong>LIVE</strong></span>';
 			foreach ( BSC_TV_Stations::choices() as $id => $label ) {
 				$child = $settings;
 				$child['badge_stations'] = 'single'; $child['station'] = $id;
+				$child['_logo_trigger'] = true;
 				$child['show_station_name'] = ''; $child['show_highlight_date'] = '';
 				$child['watch_url'] = $settings[ 'fr' === $id ? 'fr_watch_url' : 'world_watch_url' ] ?? BSC_TV_Stations::brand( $id )['url'];
 				$html .= self::render( $child );
@@ -399,11 +400,18 @@ final class BSC_TV_Display {
 		$show_title = ! isset( $settings['show_highlight_title'] ) || 'yes' === $settings['show_highlight_title'];
 		$show_date = ! isset( $settings['show_highlight_date'] ) || 'yes' === $settings['show_highlight_date'];
 		$inline = 'inline' === ( $settings['panel_mode'] ?? '' );
+		$logo_trigger = ! empty( $settings['_logo_trigger'] );
 		ob_start();
 		?>
 		<div class="bsc-tv bsc-tv--badge<?php echo $show_logo ? ' bsc-tv--station-badge' : ''; ?>" data-bsc-tv-station="<?php echo esc_attr( $station ); ?>" data-bsc-tv="<?php echo esc_url( $refresh_url ); ?>" data-live="<?php echo esc_attr( $programme['live'] ); ?>" data-bsc-tv-state="<?php echo esc_attr( $highlight['state'] ); ?>">
-			<?php if ( $show_logo ) : ?><a class="bsc-tv-badge__station-link" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>" aria-label="<?php echo esc_attr( 'Regarder ' . $brand['name'] ); ?>"><img class="bsc-tv-badge__station-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $brand['name'] ); ?>" width="80" height="80" decoding="async"></a><?php endif; ?>
-			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?>">
+			<?php if ( $show_logo && ! $logo_trigger ) : ?><a class="bsc-tv-badge__station-link" href="<?php echo esc_url( $watch_config['watch_url'] ); ?>" aria-label="<?php echo esc_attr( 'Regarder ' . $brand['name'] ); ?>"><img class="bsc-tv-badge__station-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $brand['name'] ); ?>" width="80" height="80" decoding="async"></a><?php endif; ?>
+			<details class="bsc-tv-badge<?php echo $inline ? ' bsc-tv-badge--inline' : ''; ?>"<?php echo $logo_trigger ? ' data-bsc-tv-open="click"' : ''; ?>>
+				<?php if ( $logo_trigger ) : ?>
+				<summary class="bsc-tv-badge__trigger bsc-tv-badge__trigger--logo" aria-label="<?php echo esc_attr( 'Afficher le programme de ' . $brand['name'] ); ?>">
+					<?php if ( $show_logo ) : ?><img class="bsc-tv-badge__station-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $brand['name'] ); ?>" width="80" height="80" decoding="sync"><?php endif; ?>
+					<span class="bsc-tv-badge__logo-fallback"<?php echo $show_logo ? ' hidden' : ''; ?>><?php echo esc_html( $station === 'fr' ? 'France' : 'World' ); ?></span>
+				</summary>
+				<?php else : ?>
 				<summary class="bsc-tv-badge__trigger<?php echo $show_name ? ' bsc-tv-badge__trigger--named' : ''; ?>">
 					<?php if ( $show_name ) : ?><span class="bsc-tv-badge__station-name"><?php echo esc_html( $brand['name'] ); ?></span><?php endif; ?>
 					<?php if ( $show_title || $show_date ) : ?>
@@ -414,6 +422,7 @@ final class BSC_TV_Display {
 					<?php endif; ?>
 					<span class="bsc-tv-badge__chevron" aria-hidden="true"></span>
 				</summary>
+				<?php endif; ?>
 				<div class="bsc-tv-badge__panel bsc-tv--menu">
 					<?php if ( $title ) : ?><p class="bsc-tv-heading"><?php echo esc_html( $title ); ?></p><?php endif; ?>
 					<?php self::programme_body( $programme, $agenda ); ?>

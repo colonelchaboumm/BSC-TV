@@ -9,6 +9,10 @@
 			if (image.classList.contains('bsc-tv-card__media')) {
 				image.closest('.bsc-tv-card')?.classList.remove('bsc-tv-card--image');
 			}
+			if (image.classList.contains('bsc-tv-badge__station-logo')) {
+				const fallback = image.closest('.bsc-tv-badge__trigger')?.querySelector('.bsc-tv-badge__logo-fallback');
+				if (fallback) fallback.hidden = false;
+			}
 			image.hidden = true;
 		}
 	};
@@ -51,7 +55,7 @@
 	document.addEventListener('pointerover', (event) => {
 		if (event.pointerType !== 'mouse') return;
 		const badge = event.target.closest?.(dropdownSelector);
-		if (!badge || badge.contains(event.relatedTarget)) return;
+		if (!badge || badge.dataset.bscTvOpen === 'click' || badge.contains(event.relatedTarget)) return;
 		clearTimeout(hoverTimers.get(badge));
 		if (badge.open || !event.target.closest('.bsc-tv-badge__trigger')) return;
 		hoverTimers.set(badge, setTimeout(() => {
@@ -64,7 +68,7 @@
 	document.addEventListener('pointerout', (event) => {
 		if (event.pointerType !== 'mouse') return;
 		const badge = event.target.closest?.(dropdownSelector);
-		if (!badge || badge.contains(event.relatedTarget)) return;
+		if (!badge || badge.dataset.bscTvOpen === 'click' || badge.contains(event.relatedTarget)) return;
 		clearTimeout(hoverTimers.get(badge));
 		if (!badge.open) return;
 		hoverTimers.set(badge, setTimeout(() => {

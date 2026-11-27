@@ -1,5 +1,7 @@
 # BSC TV
 
+**1.28.1 · Pastille LIVE et logos** : le mode World et France affiche uniquement le point rouge clignotant et **LIVE**, puis les deux logos côte à côte. Un clic sur un logo ouvre le programme de sa chaîne, avec l’émission en cours, les suivantes et le lien de lecture. Le survol ne l’ouvre pas. Couleurs, typographie, animation, tailles et espacements restent personnalisables dans Elementor. La reprise après live conserve aussi les horaires des programmes dont la publication est encore à venir.
+
 **1.28.0 · Reprise des émissions après les directs** : un live absent reçoit au plus un clip de transition, dans une limite de cinq minutes après les 20 minutes d’attente, puis une émission reprend. Les trous de grille sont comblés par des programmes éligibles sans décaler les émissions conservées. Un vrai direct toujours confirmé peut dépasser ; sa fin rejoint la grille initiale à l’heure courante. Une confirmation périmée depuis 40 minutes est abandonnée. Le lecteur possède aussi une émission de remplacement en cas d’erreur du lecteur officiel. [Fonctionnement et limites](LIVE_PLAYER.md#reprise-et-réparation-de-grille-1280).
 
 **1.27.3 · Ligne logo + programme** : le mode World et France affiche simplement `[logo World + programme] [logo France + programme]`. Les groupes suivent leur largeur naturelle, avec une taille de texte lisible. Les titres longs peuvent occuper plusieurs lignes dans leur groupe ; les horaires restent dans les déroulants.
